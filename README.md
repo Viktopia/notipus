@@ -1,1 +1,3 @@
-# shopify-to-slack
+# Notipus
+
+A simple webhook driven notifier.

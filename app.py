@@ -54,3 +54,55 @@ def shopify_webhook():
             return jsonify({'status': 'error', 'message': str(e)}), 500
     else:
         return jsonify({'status': 'error', 'message': 'Invalid data'}), 400
+
+@app.route('/webhook/chargify', methods=['POST'])
+def chargify_webhook():
+    if request.content_type != 'application/x-www-form-urlencoded':
+        return jsonify({'status': 'error', 'message': 'Unsupported Media Type'}), 415
+
+    data = request.form.to_dict()
+    if data:
+        try:
+            event_id = data.get('event_id')
+            event_type = data.get('type')
+            site = json.loads(data.get('site', '{}'))
+            subscription = json.loads(data.get('subscription', '{}'))
+            transaction = json.loads(data.get('transaction', '{}'))
+
+            # Extracting relevant information
+            subscription_id = subscription.get('id')
+            customer_name = f"{subscription.get('customer', {}).get('first_name', 'N/A')} {subscription.get('customer', {}).get('last_name', 'N/A')}"
+            amount = transaction.get('amount_in_cents', 0) / 100  # Amount in dollars
+            currency = transaction.get('currency', 'USD')
+            created_at = transaction.get('created_at')
+
+            message = (
+                f"New Chargify Event Received:\n"
+                f"Event ID: {event_id}\n"
+                f"Event Type: {event_type}\n"
+                f"Subscription ID: {subscription_id}\n"
+                f"Customer: {customer_name}\n"
+                f"Amount: {amount} {currency}\n"
+                f"Created At: {created_at}\n"
+            )
+
+            payload = {
+                'text': message
+            }
+
+            headers = {
+                'Content-Type': 'application/json'
+            }
+
+            response = requests.post(SLACK_WEBHOOK_URL, json=payload, headers=headers)
+
+            if response.status_code == 200:
+                return jsonify({'status': 'success'}), 200
+            else:
+                return jsonify({'status': 'error', 'message': 'Failed to send to Slack'}), 500
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    else:
+        return jsonify({'status': 'error', 'message': 'Invalid data'}), 400
+
+
