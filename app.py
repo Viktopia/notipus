@@ -55,35 +55,57 @@ def shopify_webhook():
     else:
         return jsonify({'status': 'error', 'message': 'Invalid data'}), 400
 
+
+
+def extract_nested_value(data, keys):
+    """
+    Utility function to extract nested values from the form data
+    """
+    for key in keys:
+        if isinstance(data, dict):
+            data = data.get(key)
+        else:
+            return None
+    return data
+
 @app.route('/webhook/chargify', methods=['POST'])
 def chargify_webhook():
     if request.content_type != 'application/x-www-form-urlencoded':
         return jsonify({'status': 'error', 'message': 'Unsupported Media Type'}), 415
 
     data = request.form.to_dict()
+    print(data)
     if data:
         try:
-            event_id = data.get('event_id')
-            event_type = data.get('type')
-            site = json.loads(data.get('site', '{}'))
-            subscription = json.loads(data.get('subscription', '{}'))
-            transaction = json.loads(data.get('transaction', '{}'))
+            event_id = data.get('id')
+            event_type = data.get('event')
+            site_id = data.get('payload[site][id]')
+            site_subdomain = data.get('payload[site][subdomain]')
+            subscription_id = data.get('payload[subscription][id]')
+            customer_first_name = data.get('payload[subscription][customer][first_name]')
+            customer_last_name = data.get('payload[subscription][customer][last_name]')
+            customer_email = data.get('payload[subscription][customer][email]')
+            transaction_amount_in_cents = data.get('payload[transaction][amount_in_cents]')
+            transaction_currency = data.get('payload[transaction][currency]')
+            transaction_created_at = data.get('payload[transaction][created_at]')
 
-            # Extracting relevant information
-            subscription_id = subscription.get('id')
-            customer_name = f"{subscription.get('customer', {}).get('first_name', 'N/A')} {subscription.get('customer', {}).get('last_name', 'N/A')}"
-            amount = transaction.get('amount_in_cents', 0) / 100  # Amount in dollars
-            currency = transaction.get('currency', 'USD')
-            created_at = transaction.get('created_at')
+            # Converting amount to dollars
+            if transaction_amount_in_cents:
+                amount = int(transaction_amount_in_cents) / 100
+            else:
+                amount = 0
 
             message = (
                 f"New Chargify Event Received:\n"
                 f"Event ID: {event_id}\n"
                 f"Event Type: {event_type}\n"
+                f"Site ID: {site_id}\n"
+                f"Site Subdomain: {site_subdomain}\n"
                 f"Subscription ID: {subscription_id}\n"
-                f"Customer: {customer_name}\n"
-                f"Amount: {amount} {currency}\n"
-                f"Created At: {created_at}\n"
+                f"Customer: {customer_first_name} {customer_last_name}\n"
+                f"Customer Email: {customer_email}\n"
+                f"Amount: {amount} {transaction_currency}\n"
+                f"Created At: {transaction_created_at}\n"
             )
 
             payload = {
@@ -104,5 +126,3 @@ def chargify_webhook():
             return jsonify({'status': 'error', 'message': str(e)}), 500
     else:
         return jsonify({'status': 'error', 'message': 'Invalid data'}), 400
-
-
