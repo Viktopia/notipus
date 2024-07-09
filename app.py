@@ -11,43 +11,59 @@ app = Flask(__name__)
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 
 shopify_order_messages = [
-    "💰 Shopify: A new order has come,\nFrom {name} ({email}), it brings joy,\nWorth {price},\nProcessed and fulfilled today.",
-    "💰 Shopify: Excitement is here,\n{name} ({email}) has made a purchase,\nFor {price},\nReady for delivery soon.",
-    "💰 Shopify: Order placed, we cheer,\n{name}'s ({email}) new purchase made,\nTotaling {price},\nAwaiting fulfillment.",
-    "💰 Shopify: Today’s a great day,\n{name} ({email}) orders,\nPrice is {price},\nOrder ready to ship.",
-    "💰 Shopify: From {name} ({email}),\nAn order valued at {price},\nConfirmed and fulfilled with care,\nBrings a smile to our faces.",
+    "💰 Shopify: Woohoo! We just got a new order from {name} ({email}). The total is {price}.",
+    "💰 Shopify: Great news! {name} ({email}) has placed an order worth {price}.",
+    "💰 Shopify: Guess what? {name} ({email}) just made a purchase for {price}.",
+    "💰 Shopify: Today just got better! {name} ({email}) ordered items worth {price}.",
+    "💰 Shopify: {name} ({email}) placed an order valued at {price}."
+]
+
+chargify_success_messages = [
+    "💸 Chargify: Woohoo! {name} ({email}) just paid {amount}.",
+    "💸 Chargify: Payment success! {name} ({email}) paid {amount}.",
+    "💸 Chargify: {name} ({email})’s payment of {amount} went through.",
+    "💸 Chargify: Good news! {name} ({email}) paid {amount}.",
+    "💸 Chargify: Success! {name} ({email}) paid {amount}."
 ]
 
 chargify_failure_messages = [
-    "⛔️ Chargify: A payment attempt failed,\n{name}'s ({email}) card declined,\nTransaction for {amount},\nChargify sends this news.",
-    "⛔️ Chargify: Failed payment received,\n{name}'s ({email}) transaction blocked,\nAmount was {amount},\nPlease check the details.",
-    "⛔️ Chargify: Notice of failure,\n{name}'s ({email}) card couldn’t clear,\n{amount} charged,\nAction needed soon.",
-    "⛔️ Chargify: {name}'s payment,\nFailed to process, we must fix,\n{amount} issue,\nLet’s resolve this now.",
-    "⛔️ Chargify: Payment did not pass,\nFor {name} ({email}) this time,\n{amount} blocked,\nReview is advised.",
+    "⛔️ Chargify: Oops! A payment attempt from {name} ({email}) failed. The transaction for {amount} was declined.",
+    "⛔️ Chargify: Uh-oh! {name}'s ({email}) payment for {amount} didn’t go through. Looks like the transaction was blocked.",
+    "⛔️ Chargify: Yikes! {name}'s ({email}) card couldn’t process a charge of {amount}.",
+    "⛔️ Chargify: {name}'s ({email}) payment of {amount} hit a snag.",
+    "⛔️ Chargify: Uh-oh! Payment for {name} ({email}) didn’t pass. The {amount} transaction was blocked."
 ]
 
 chargify_subscription_messages = [
-    "A subscription event,\nFrom {name}( {email}) just arrived,\nChargify notifies,\nAction may be required.",
-    "{name}'s ({email}) subscription,\nUpdated in our records,\nChargify event,\nWe are informed of changes.",
-    "Subscription news,\n{name}'s ({email}) account updated,\nChargify informs,\nDetails must be reviewed.",
-    "{name}'s ({email}) subscription,\nReceived a new status now,\nChargify sends word,\nKeep track of changes.",
-    "Update on {name} ({email}),\nSubscription status altered,\nChargify alert,\nReview and proceed.",
+    "📅 Chargify: Heads up! We’ve got a subscription event for {name} ({email}). Might need to take a look.",
+    "📅 Chargify: Update! {name}'s ({email}) subscription has been updated in our records. Changes incoming!",
+    "📅 Chargify: News flash! {name}'s ({email}) subscription account got an update. Check out the details.",
+    "📅 Chargify: Hey! {name}'s ({email}) subscription status just changed. Let’s see what’s new.",
+    "📅 Chargify: Alert! {name} ({email}) has a subscription update. Time to review and proceed."
 ]
 
 chargify_renewal_messages = [
-    "🔁 Renewal success,\n{name}'s ({email}) subscription renewed,\nChargify confirms,\nAll is well and good.",
-    "🔁 {name} ({email}) renewed,\nSubscription continues on,\nChargify informs,\nRenewal success.",
-    "🔁 Subscription renewed,\n{name}'s ({email}) plan continues on,\nChargify lets us know,\nSuccess in renewal.",
-    "🔁 {name} ({email}) stays with us,\nSubscription now renewed,\nChargify says yes,\nTo continued service.",
-    "🔁 Good news today,\n{name}'s ({email}) renewal complete,\nChargify updates,\nSubscription lives on.",
+    "🔁 Chargify: Hooray! {name}'s ({email}) subscription renewal was a success.",
+    "🔁 Chargify: {name} ({email}) just renewed their subscription. All set for another period.",
+    "🔁 Chargify: Good news! {name}'s ({email}) subscription has been renewed. ",
+    "🔁 Chargify: {name} ({email}) is staying with us. Subscription renewal complete!",
+    "🔁 Chargify: Great news! {name}'s ({email}) renewal is done. Subscription is active again."
+]
+
+chargify_renewal_failure_messages = [
+    "⛔️ Chargify: Uh-oh! Renewal for {name}'s ({email}) subscription failed. Let’s check what went wrong.",
+    "⛔️ Chargify: Bummer! {name}'s ({email}) renewal attempt didn’t go through. Needs attention.",
+    "⛔️ Chargify: Heads up! {name}'s ({email}) renewal didn’t succeed. Time to fix this.",
+    "⛔️ Chargify: {name}'s ({email}) renewal failed. Let’s sort this out.",
+    "⛔️ Chargify: Uh-oh! Renewal for {name} ({email}) was failed. Review needed."
 ]
 
 chargify_trial_end_messages = [
-    "🔔 Trial ends today,\n{name}'s ({email}) trial period,\nChargify notifies,\nDecision time is near.",
-    "🔔 End of trial,\n{name}'s ({email}) free period done,\nChargify informs,\nWhat will happen next?",
-    "🔔 {name}'s ({email}) trial ends,\nChargify sends notice,\nConsider next steps,\nSubscription awaits.",
-    "🔔 Trial period over,\n{name} ({email}) must now decide,\nChargify updates,\nChoose to stay or not.",
-    "🔔 End of trial,\n{name}'s ({email}) trial period,\nChargify sends word,\nTime to make a choice.",
+    "🔔 Chargify: {name}'s ({email}) trial ends today.",
+    "🔔 Chargify: {name}'s ({email}) free trial period is over.",
+    "🔔 Chargify: Reminder! {name}'s ({email}) trial is ending.",
+    "🔔 Chargify: {name} ({email}) must decide now as the trial period ends.",
+    "🔔 Chargify: Trial over! {name}'s ({email}) trial period has ended."
 ]
 
 
