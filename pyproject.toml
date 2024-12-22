@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "shopify-to-slack"
+name = "notipus"
 version = "0.1.0"
 description = "A webhook service that sends enriched Shopify and Chargify notifications to Slack"
-authors = ["Viktor <>"]
+authors = ["Viktopia Studio <info@viktopia.io>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]

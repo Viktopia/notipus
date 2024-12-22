@@ -14,12 +14,11 @@ repos:
       args: [--fix, --exit-non-zero-on-fix]
     - id: ruff-format
 
-# Temporarily disabled until test imports are fixed
-# - repo: local
-#   hooks:
-#     - id: pytest
-#       name: pytest
-#       entry: poetry run pytest
-#       language: system
-#       pass_filenames: false
-#       always_run: true
+- repo: local
+  hooks:
+    - id: pytest
+      name: pytest
+      entry: poetry run pytest
+      language: python
+      pass_filenames: false
+      always_run: true

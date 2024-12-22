@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-import pytest
 from app.event_processor import EventProcessor, CustomerContext, EventType, Priority
+
 
 def test_event_classification():
     """Test that events are properly classified with correct priority"""
@@ -12,8 +12,8 @@ def test_event_classification():
         "customer": {
             "lifetime_value": 50000,
             "subscription_tier": "enterprise",
-            "status": "active"
-        }
+            "status": "active",
+        },
     }
     event = processor.classify_event(high_value_failure)
     assert event.type == EventType.PAYMENT_FAILURE
@@ -26,8 +26,8 @@ def test_event_classification():
         "customer": {
             "trial_usage": "high",
             "last_active": datetime.now(),
-            "feature_adoption": 0.8
-        }
+            "feature_adoption": 0.8,
+        },
     }
     event = processor.classify_event(active_trial_end)
     assert event.type == EventType.TRIAL_END
@@ -37,15 +37,13 @@ def test_event_classification():
     # Subscription upgrade should be medium priority
     upgrade_event = {
         "event": "subscription_upgrade",
-        "customer": {
-            "previous_plan": "basic",
-            "new_plan": "pro"
-        }
+        "customer": {"previous_plan": "basic", "new_plan": "pro"},
     }
     event = processor.classify_event(upgrade_event)
     assert event.type == EventType.UPGRADE
     assert event.priority == Priority.MEDIUM
     assert event.response_sla == timedelta(days=2)
+
 
 def test_customer_context_enrichment():
     """Test that customer context is properly enriched with relevant data"""
@@ -56,7 +54,7 @@ def test_customer_context_enrichment():
             "id": "cust_123",
             "name": "Acme Corp",
             "subscription_start": "2023-01-01",
-            "current_plan": "pro"
+            "current_plan": "pro",
         }
     }
 
@@ -68,6 +66,7 @@ def test_customer_context_enrichment():
     assert context.feature_usage is not None
     assert context.payment_history is not None
 
+
 def test_action_item_generation():
     """Test that appropriate action items are generated based on event and context"""
     processor = EventProcessor()
@@ -77,8 +76,8 @@ def test_action_item_generation():
         "event": "payment_failure",
         "customer": {
             "payment_method": "card_expired",
-            "billing_contact": "john@example.com"
-        }
+            "billing_contact": "john@example.com",
+        },
     }
 
     actions = processor.generate_action_items(payment_failure_event)
@@ -90,10 +89,7 @@ def test_action_item_generation():
     # Trial end should generate conversion-focused actions
     trial_end_event = {
         "event": "trial_end",
-        "customer": {
-            "usage": "medium",
-            "feedback": "positive"
-        }
+        "customer": {"usage": "medium", "feedback": "positive"},
     }
 
     actions = processor.generate_action_items(trial_end_event)
@@ -102,6 +98,7 @@ def test_action_item_generation():
     assert any(a.type == "send_case_studies" for a in actions)
     assert all(a.due_date is not None for a in actions)
 
+
 def test_notification_formatting():
     """Test that notifications are properly formatted based on priority and content"""
     processor = EventProcessor()
@@ -109,10 +106,7 @@ def test_notification_formatting():
     urgent_event = {
         "type": EventType.PAYMENT_FAILURE,
         "priority": Priority.URGENT,
-        "customer": {
-            "name": "Acme Corp",
-            "tier": "enterprise"
-        }
+        "customer": {"name": "Acme Corp", "tier": "enterprise"},
     }
 
     notification = processor.format_notification(urgent_event)
@@ -125,9 +119,12 @@ def test_notification_formatting():
     assert notification.sections[0].text.startswith("*Customer:*")
 
     # Verify action items are properly formatted
-    action_section = next(s for s in notification.sections if "Actions Required" in s.text)
+    action_section = next(
+        s for s in notification.sections if "Actions Required" in s.text
+    )
     assert action_section is not None
     assert all(action.deadline for action in action_section.actions)
+
 
 def test_event_correlation():
     """Test that related events are properly correlated"""
@@ -137,18 +134,18 @@ def test_event_correlation():
         {
             "event": "payment_failure",
             "customer_id": "cust_123",
-            "timestamp": "2024-03-15T10:00:00Z"
+            "timestamp": "2024-03-15T10:00:00Z",
         },
         {
             "event": "subscription_updated",
             "customer_id": "cust_123",
-            "timestamp": "2024-03-15T10:05:00Z"
+            "timestamp": "2024-03-15T10:05:00Z",
         },
         {
             "event": "payment_success",
             "customer_id": "cust_123",
-            "timestamp": "2024-03-15T10:10:00Z"
-        }
+            "timestamp": "2024-03-15T10:10:00Z",
+        },
     ]
 
     correlated = processor.correlate_events(events)

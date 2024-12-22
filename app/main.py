@@ -1,242 +1,181 @@
-import json
 import os
-import random
-
+from typing import Dict, Any
+from flask import Flask, request, jsonify
 import requests
-from flask import Flask, jsonify, request
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+
+from .providers import (
+    ChargifyProvider,
+    ShopifyProvider,
+    WebhookValidationError,
+    InvalidDataError,
+)
+from .enrichment import NotificationEnricher
+from .messages import MessageGenerator
+
+# Initialize Sentry if DSN is provided
+sentry_dsn = os.environ.get("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        integrations=[FlaskIntegration()],
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=os.environ.get("ENVIRONMENT", "production"),
+    )
 
 app = Flask(__name__)
 
-# Slack webhook URL (replace with your actual Slack webhook URL)
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+# Initialize providers
+chargify_provider = ChargifyProvider(
+    api_key=os.environ["CHARGIFY_API_KEY"],
+    domain=os.environ["CHARGIFY_DOMAIN"],
+    webhook_secret=os.environ["CHARGIFY_WEBHOOK_SECRET"],
+)
 
-# Message templates for simple notifications
-shopify_order_messages = [
-    "💰 Shopify: Woohoo! We just got a new order from {name} ({email}). The total is {price}.",
-    "💰 Shopify: Great news! {name} ({email}) has placed an order worth {price}.",
-    "💰 Shopify: Guess what? {name} ({email}) just made a purchase for {price}.",
-    "💰 Shopify: Today just got better! {name} ({email}) ordered items worth {price}.",
-    "💰 Shopify: {name} ({email}) placed an order valued at {price}."
-]
+shopify_provider = ShopifyProvider(
+    shop_url=os.environ["SHOPIFY_SHOP_URL"],
+    access_token=os.environ["SHOPIFY_ACCESS_TOKEN"],
+    webhook_secret=os.environ["SHOPIFY_WEBHOOK_SECRET"],
+)
 
-chargify_success_messages = [
-    "💸 Chargify: Woohoo! {name} ({email}) just paid {amount}.",
-    "💸 Chargify: Payment success! {name} ({email}) paid {amount}.",
-    "💸 Chargify: {name} ({email})'s payment of {amount} went through.",
-    "💸 Chargify: Good news! {name} ({email}) paid {amount}.",
-    "💸 Chargify: Success! {name} ({email}) paid {amount}."
-]
+# Initialize message generator
+message_generator = MessageGenerator()
 
-chargify_failure_messages = [
-    "⛔️ Chargify: Oops! A payment attempt from {name} ({email}) failed. The transaction for {amount} was declined.",
-    "⛔️ Chargify: Uh-oh! {name}'s ({email}) payment for {amount} didn't go through. Looks like the transaction was blocked.",
-    "⛔️ Chargify: Yikes! {name}'s ({email}) card couldn't process a charge of {amount}.",
-    "⛔️ Chargify: {name}'s ({email}) payment of {amount} hit a snag.",
-    "⛔️ Chargify: Uh-oh! Payment for {name} ({email}) didn't pass. The {amount} transaction was blocked."
-]
 
-chargify_subscription_messages = [
-    "📅 Chargify: Heads up! We've got a subscription event for {name} ({email}). Might need to take a look.",
-    "📅 Chargify: Update! {name}'s ({email}) subscription has been updated in our records. Changes incoming!",
-    "📅 Chargify: News flash! {name}'s ({email}) subscription account got an update. Check out the details.",
-    "📅 Chargify: Hey! {name}'s ({email}) subscription status just changed. Let's see what's new.",
-    "📅 Chargify: Alert! {name} ({email}) has a subscription update. Time to review and proceed."
-]
+def send_slack_message(message: Dict[str, Any]) -> bool:
+    """Send a message to Slack"""
+    slack_webhook_url = os.environ["SLACK_WEBHOOK_URL"]
 
-chargify_renewal_messages = [
-    "🔁 Chargify: Hooray! {name}'s ({email}) subscription renewal was a success.",
-    "🔁 Chargify: {name} ({email}) just renewed their subscription. All set for another period.",
-    "🔁 Chargify: Good news! {name}'s ({email}) subscription has been renewed. ",
-    "🔁 Chargify: {name} ({email}) is staying with us. Subscription renewal complete!",
-    "🔁 Chargify: Great news! {name}'s ({email}) renewal is done. Subscription is active again."
-]
+    try:
+        response = requests.post(slack_webhook_url, json=message)
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        # Capture the error in Sentry with additional context
+        sentry_sdk.capture_exception(e)
+        print(f"Error sending Slack message: {str(e)}")
+        return False
 
-chargify_renewal_failure_messages = [
-    "⛔️ Chargify: Uh-oh! Renewal for {name}'s ({email}) subscription failed. Let's check what went wrong.",
-    "⛔️ Chargify: Bummer! {name}'s ({email}) renewal attempt didn't go through. Needs attention.",
-    "⛔️ Chargify: Heads up! {name}'s ({email}) renewal didn't succeed. Time to fix this.",
-    "⛔️ Chargify: {name}'s ({email}) renewal failed. Let's sort this out.",
-    "⛔️ Chargify: Uh-oh! Renewal for {name} ({email}) was failed. Review needed."
-]
 
-chargify_trial_end_messages = [
-    "🔔 Chargify: {name}'s ({email}) trial ends today.",
-    "🔔 Chargify: {name}'s ({email}) free trial period is over.",
-    "🔔 Chargify: Reminder! {name}'s ({email}) trial is ending.",
-    "🔔 Chargify: {name} ({email}) must decide now as the trial period ends.",
-    "🔔 Chargify: Trial over! {name}'s ({email}) trial period has ended."
-]
-
-def create_enriched_slack_message(event_type, data, message_text):
-    """
-    Creates rich Slack messages with proper formatting and context based on event type.
-    Combines the friendly message text with structured data.
-    """
-    blocks = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": message_text
-            }
-        }
-    ]
-
-    if event_type == "payment_failure":
-        # Add contextual information for payment failures
-        blocks.extend([
-            {
-                "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*Failed Amount:*\n${data['amount']} {data['currency']}"
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": "*Retry Count:*\n2/3"  # This would come from your system
-                    }
-                ]
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "🚨 *Immediate Actions Required*\n1. Contact customer within 24 hours\n2. Check for card expiration\n3. Review account history"
-                }
-            }
-        ])
-    elif event_type == "trial_end":
-        # Add contextual information for trial endings
-        blocks.extend([
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "👉 *Recommended Actions*\n• Send follow-up email\n• Schedule check-in call\n• Review usage metrics"
-                }
-            }
-        ])
-
-    # Add customer profile link for all messages
-    blocks.append({
-        "type": "actions",
-        "elements": [
-            {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "View Customer Profile",
-                    "emoji": True
-                },
-                "url": f"https://your-admin-panel/customers/{data.get('subscription_id', '')}"
-            }
-        ]
-    })
-
-    return {
-        "blocks": blocks
-    }
-
-@app.route("/webhook/shopify", methods=["POST"])
-def shopify_webhook():
-    data = request.json
-
-    if data:
-        try:
-            order_id = data.get("id")
-            customer = data.get("customer", {})
-            customer_name = f"{customer.get('first_name', 'N/A')} {customer.get('last_name', 'N/A')}"
-            customer_email = data.get("contact_email", "N/A")
-            total_price = f"{data.get('total_price', 'N/A')} {data.get('currency', 'N/A')}"
-
-            message = random.choice(shopify_order_messages).format(
-                name=customer_name, price=total_price, email=customer_email
-            )
-
-            # Create enriched message with both friendly text and structured data
-            payload = create_enriched_slack_message(
-                "order",
-                {
-                    "subscription_id": order_id,
-                    "amount": data.get('total_price'),
-                    "currency": data.get('currency')
-                },
-                message
-            )
-
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(SLACK_WEBHOOK_URL, json=payload, headers=headers)
-
-            if response.status_code == 200:
-                return jsonify({"status": "success"}), 200
-            else:
-                return jsonify({"status": "error", "message": "Failed to send to Slack"}), 500
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
-    else:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
-
-@app.route("/webhook/chargify", methods=["POST"])
+@app.route("/webhooks/chargify", methods=["POST"])
 def chargify_webhook():
-    if request.content_type != "application/x-www-form-urlencoded":
-        return jsonify({"status": "error", "message": "Unsupported Media Type"}), 415
-
-    data = request.form.to_dict()
-    if data:
-        try:
-            # Extract basic event data
-            processed_data = {
-                'event_id': data.get('id'),
-                'event_type': data.get('event'),
-                'subscription_id': data.get('payload[subscription][id]'),
-                'customer_first_name': data.get('payload[subscription][customer][first_name]'),
-                'customer_last_name': data.get('payload[subscription][customer][last_name]'),
-                'customer_email': data.get('payload[subscription][customer][email]'),
-                'amount': int(data.get('payload[transaction][amount_in_cents]', 0)) / 100,
-                'currency': data.get('payload[transaction][currency]'),
-                'created_at': data.get('payload[transaction][created_at]')
-            }
-
-            customer_name = f"{processed_data['customer_first_name']} {processed_data['customer_last_name']}"
-            amount = f"{processed_data['amount']} {processed_data['currency']}"
-
-            # Determine event type and select appropriate message template
-            event_type = data.get('event', '').lower()
-            if 'payment_failure' in event_type:
-                message = random.choice(chargify_failure_messages)
-                template_type = 'payment_failure'
-            elif 'renewal_success' in event_type:
-                message = random.choice(chargify_renewal_messages)
-                template_type = 'renewal'
-            elif 'trial_end' in event_type:
-                message = random.choice(chargify_trial_end_messages)
-                template_type = 'trial_end'
-            else:
-                message = random.choice(chargify_subscription_messages)
-                template_type = 'subscription'
-
-            # Format the message with customer data
-            message = message.format(
-                name=customer_name,
-                email=processed_data['customer_email'],
-                amount=amount
+    """Handle Chargify webhooks"""
+    try:
+        # Set Sentry context for this request
+        with sentry_sdk.configure_scope() as scope:
+            scope.set_tag("webhook_type", "chargify")
+            scope.set_context(
+                "webhook_data",
+                {"headers": dict(request.headers), "data": request.get_json()},
             )
 
-            # Create enriched message combining friendly text with structured data
-            payload = create_enriched_slack_message(template_type, processed_data, message)
+        # Validate webhook signature
+        signature = request.headers.get("X-Chargify-Webhook-Signature")
+        if not signature or not chargify_provider.validate_webhook(
+            request.get_json(), signature
+        ):
+            return jsonify({"error": "Invalid webhook signature"}), 401
 
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(SLACK_WEBHOOK_URL, json=payload, headers=headers)
+        # Parse webhook data
+        event = chargify_provider.parse_webhook(request.get_json())
 
-            if response.status_code == 200:
-                return jsonify({"status": "success"}), 200
-            else:
-                return jsonify({"status": "error", "message": "Failed to send to Slack"}), 500
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
-    else:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+        # Add event context to Sentry
+        sentry_sdk.set_context(
+            "event",
+            {
+                "id": event.id,
+                "type": event.type,
+                "customer_id": event.customer_id,
+                "amount": event.amount,
+                "currency": event.currency,
+            },
+        )
+
+        # Enrich notification
+        enricher = NotificationEnricher(chargify_provider)
+        notification = enricher.enrich_notification(event)
+
+        # Generate Slack message
+        message = message_generator.generate_message(notification)
+
+        # Send to Slack
+        if not send_slack_message(message):
+            return jsonify({"error": "Failed to send Slack message"}), 500
+
+        return jsonify({"status": "success"}), 200
+
+    except WebhookValidationError as e:
+        sentry_sdk.capture_exception(e)
+        return jsonify({"error": str(e)}), 401
+    except InvalidDataError as e:
+        sentry_sdk.capture_exception(e)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        print(f"Error processing Chargify webhook: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/webhooks/shopify", methods=["POST"])
+def shopify_webhook():
+    """Handle Shopify webhooks"""
+    try:
+        # Set Sentry context for this request
+        with sentry_sdk.configure_scope() as scope:
+            scope.set_tag("webhook_type", "shopify")
+            scope.set_context(
+                "webhook_data",
+                {"headers": dict(request.headers), "data": request.get_json()},
+            )
+
+        # Validate webhook signature
+        signature = request.headers.get("X-Shopify-Hmac-Sha256")
+        if not signature or not shopify_provider.validate_webhook(
+            request.get_json(), signature
+        ):
+            return jsonify({"error": "Invalid webhook signature"}), 401
+
+        # Parse webhook data
+        event = shopify_provider.parse_webhook(request.get_json())
+
+        # Add event context to Sentry
+        sentry_sdk.set_context(
+            "event",
+            {
+                "id": event.id,
+                "type": event.type,
+                "customer_id": event.customer_id,
+                "amount": event.amount,
+                "currency": event.currency,
+            },
+        )
+
+        # Enrich notification
+        enricher = NotificationEnricher(shopify_provider)
+        notification = enricher.enrich_notification(event)
+
+        # Generate Slack message
+        message = message_generator.generate_message(notification)
+
+        # Send to Slack
+        if not send_slack_message(message):
+            return jsonify({"error": "Failed to send Slack message"}), 500
+
+        return jsonify({"status": "success"}), 200
+
+    except WebhookValidationError as e:
+        sentry_sdk.capture_exception(e)
+        return jsonify({"error": str(e)}), 401
+    except InvalidDataError as e:
+        sentry_sdk.capture_exception(e)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        print(f"Error processing Shopify webhook: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from enum import Enum, auto
 from typing import List, Optional, Dict, Any
 
+
 class EventType(Enum):
     PAYMENT_FAILURE = auto()
     PAYMENT_SUCCESS = auto()
@@ -14,11 +15,15 @@ class EventType(Enum):
     SUBSCRIPTION_CREATED = auto()
     UNKNOWN = auto()
 
+
 class Priority(Enum):
-    URGENT = auto()
-    HIGH = auto()
-    MEDIUM = auto()
-    LOW = auto()
+    """Event priority levels"""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
 
 @dataclass
 class CustomerContext:
@@ -38,6 +43,7 @@ class CustomerContext:
     last_interaction: Optional[datetime] = None
     account_stage: Optional[str] = None
 
+
 @dataclass
 class ActionItem:
     type: str
@@ -53,10 +59,12 @@ class ActionItem:
     completed: bool = False
     deadline: Optional[datetime] = None
 
+
 @dataclass
 class NotificationSection:
     text: str
     actions: Optional[List[ActionItem]] = None
+
 
 @dataclass
 class Notification:
@@ -68,6 +76,7 @@ class Notification:
     priority: Priority
     timestamp: datetime = field(default_factory=datetime.now)
 
+
 @dataclass
 class Event:
     type: EventType
@@ -76,7 +85,8 @@ class Event:
     data: Dict[str, Any]
     timestamp: datetime
     response_sla: timedelta
-    correlated_events: Optional[List['Event']] = None
+    correlated_events: Optional[List["Event"]] = None
+
 
 @dataclass
 class EventCorrelation:
