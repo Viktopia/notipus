@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "shopify-to-slack"
+version = "0.1.0"
+description = "A webhook service that sends enriched Shopify and Chargify notifications to Slack"
+authors = ["Viktor <>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+flask = "^3.1.0"
+requests = "^2.32.3"
+shopifyapi = "^12.7.0"
+python-dotenv = "^1.0.1"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-cov = "^6.0.0"
+black = "^24.10.0"
+isort = "^5.13.2"
+ruff = "^0.8.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

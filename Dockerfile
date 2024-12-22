@@ -1,18 +1,25 @@
 # syntax=docker/dockerfile:1
 
-ARG PYTHON_VERSION=3.9.19
-
-FROM python:${PYTHON_VERSION}-slim
+FROM python:3.9-slim
 
 LABEL fly_launch_runtime="flask"
 
+# Install Poetry
+ENV POETRY_HOME="/opt/poetry" \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false
+
+RUN pip install poetry
+
 WORKDIR /code
 
-COPY requirements.txt requirements.txt
-RUN pip3 install -r requirements.txt
+# Copy only dependencies first to leverage Docker cache
+COPY pyproject.toml poetry.lock ./
+RUN poetry install --no-dev --no-root
 
+# Copy the rest of the application
 COPY . .
 
 EXPOSE 8080
 
-CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=8080"]
+CMD ["poetry", "run", "flask", "run", "--host=0.0.0.0", "--port=8080"]
