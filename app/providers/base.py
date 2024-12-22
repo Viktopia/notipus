@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from flask import Request
 
 
 class WebhookValidationError(Exception):
@@ -68,14 +69,19 @@ class PaymentEvent:
 
 
 class PaymentProvider(ABC):
+    """Base class for payment providers"""
+
+    def __init__(self, webhook_secret: str):
+        self.webhook_secret = webhook_secret
+
     @abstractmethod
-    def validate_webhook(self, headers: dict, body: bytes) -> bool:
-        """Validate the webhook signature and authenticity"""
+    def validate_webhook(self, request: Request) -> bool:
+        """Validate webhook signature"""
         pass
 
     @abstractmethod
-    def parse_webhook(self, data: dict) -> PaymentEvent:
-        """Parse webhook data into a standardized PaymentEvent"""
+    def parse_webhook(self, request: Request, **kwargs) -> Optional[Dict[str, Any]]:
+        """Parse webhook data"""
         pass
 
     def get_payment_history(self, customer_id: str) -> List[Dict[str, Any]]:

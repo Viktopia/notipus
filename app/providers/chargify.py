@@ -1,117 +1,97 @@
-import hashlib
+from typing import Dict, Any, Optional
+from flask import Request
 import hmac
-from datetime import datetime
-from typing import Set
+import hashlib
 
-from .base import (
-    PaymentProvider,
-    PaymentEvent,
-    WebhookValidationError,
-    InvalidDataError,
-)
-
-SUPPORTED_EVENTS = {
-    "payment_success",
-    "payment_failure",
-    "subscription_state_change",
-    "subscription_product_change",
-    "subscription_billing_date_change",
-    "payment_success_recurring",
-    "payment_failure_recurring",
-    "renewal_success",
-    "renewal_failure",
-    "trial_end",
-    "trial_end_notice",
-    "dunning_step_reached",
-    "billing_date_change",
-    "subscription_canceled",
-}
+from .base import PaymentProvider, InvalidDataError
 
 
 class ChargifyProvider(PaymentProvider):
-    def __init__(self, webhook_secret: str):
-        self.webhook_secret = webhook_secret
-        self._processed_webhook_ids: Set[str] = set()
+    """Chargify payment provider implementation"""
 
-    def validate_webhook(self, headers: dict, body: bytes) -> bool:
-        """Validate the webhook signature and authenticity."""
-        if "X-Chargify-Webhook-Signature-Hmac-Sha-256" not in headers:
-            raise WebhookValidationError("Missing Chargify webhook signature")
-
-        if "X-Chargify-Webhook-Id" not in headers:
-            raise WebhookValidationError("Missing Chargify webhook ID")
-
-        # Prevent replay attacks by checking webhook ID
-        webhook_id = headers["X-Chargify-Webhook-Id"]
-        if webhook_id in self._processed_webhook_ids:
-            raise WebhookValidationError("Duplicate webhook ID detected")
-        self._processed_webhook_ids.add(webhook_id)
-
-        # Keep the set size manageable
-        if len(self._processed_webhook_ids) > 1000:
-            self._processed_webhook_ids.clear()
-
-        # Validate the HMAC signature
-        expected_signature = headers["X-Chargify-Webhook-Signature-Hmac-Sha-256"]
-        computed_signature = hmac.new(
-            self.webhook_secret.encode(), body, hashlib.sha256
-        ).hexdigest()
-
-        return hmac.compare_digest(computed_signature, expected_signature)
-
-    def parse_webhook(self, data: dict) -> PaymentEvent:
-        """Parse webhook data into a standardized PaymentEvent."""
+    def validate_webhook(self, request: Request) -> bool:
+        """Validate webhook signature"""
         try:
+            signature = request.headers.get("X-Chargify-Webhook-Signature-Hmac-Sha-256")
+            webhook_id = request.headers.get("X-Chargify-Webhook-Id")
+
+            if not signature or not webhook_id:
+                return False
+
+            body = request.get_data()
+            expected_signature = hmac.new(
+                self.webhook_secret.encode(),
+                body,
+                hashlib.sha256,
+            ).hexdigest()
+
+            return hmac.compare_digest(signature, expected_signature)
+        except Exception as e:
+            print(f"Error validating Chargify webhook: {e}")
+            return False
+
+    def parse_webhook(self, request: Request) -> Optional[Dict[str, Any]]:
+        """Parse webhook data based on event type"""
+        # Handle form-encoded data only
+        if request.content_type != "application/x-www-form-urlencoded":
+            raise InvalidDataError("Invalid content type")
+
+        try:
+            data = request.form.to_dict()
             if not data:
                 raise InvalidDataError("Empty webhook data")
 
-            event_id = data.get("id")
             event_type = data.get("event")
-            if event_type not in SUPPORTED_EVENTS:
-                raise InvalidDataError(f"Unsupported event type: {event_type}")
+            if not event_type:
+                raise InvalidDataError("Missing event type")
 
-            # Extract customer data from the payload
+            # Extract customer data from form fields
             customer_id = data.get("payload[subscription][customer][id]")
             if not customer_id:
-                customer_id = data.get("payload[customer][id]")
+                raise InvalidDataError("Missing customer ID")
 
-            if not all([event_id, event_type, customer_id]):
-                raise InvalidDataError(
-                    "Missing required fields: id, event, or customer_id"
-                )
+            # Extract and validate amount
+            amount_in_cents = data.get("payload[transaction][amount_in_cents]", "0")
+            try:
+                amount = float(amount_in_cents) / 100 if amount_in_cents else 0.0
+                if amount < 0:
+                    raise InvalidDataError("Amount cannot be negative")
+            except ValueError:
+                raise InvalidDataError("Invalid amount format")
 
-            # Extract amount and currency
-            amount_cents = data.get("payload[transaction][amount_in_cents]", "0")
-            amount = float(amount_cents) / 100 if amount_cents.isdigit() else 0
-            currency = data.get("payload[transaction][currency]", "USD")
-
-            # Extract subscription data
+            # Extract customer info
             subscription_id = data.get("payload[subscription][id]")
-            created_at = data.get("created_at")
-            if not created_at:
-                raise InvalidDataError("Missing created_at timestamp")
+            customer_email = data.get("payload[subscription][customer][email]")
+            customer_name = f"{data.get('payload[subscription][customer][first_name]', '')} {data.get('payload[subscription][customer][last_name]', '')}".strip()
+            organization = data.get("payload[subscription][customer][organization]")
+            plan_name = data.get("payload[subscription][product][name]")
 
-            timestamp = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            return {
+                "id": f"evt_{customer_id}",
+                "type": event_type,
+                "customer_id": str(customer_id),
+                "amount": amount,
+                "currency": "USD",  # Chargify always uses USD
+                "status": "success" if "success" in event_type else "failed",
+                "timestamp": data.get("created_at"),
+                "metadata": {
+                    "source": "chargify",
+                    "subscription_id": subscription_id,
+                    "customer_email": customer_email,
+                    "customer_name": customer_name,
+                },
+                "customer_data": {
+                    "company_name": organization or "Unknown",
+                    "team_size": 0,  # Not provided in webhook
+                    "plan_name": plan_name or "Unknown",
+                    "created_at": data.get(
+                        "payload[subscription][customer][created_at]"
+                    ),
+                },
+            }
 
-            # Extract status and error information
-            success = (
-                data.get("payload[transaction][success]", "false").lower() == "true"
-            )
-            status = "success" if success else "failed"
-            error_message = data.get("payload[transaction][message]")
-            retry_count = int(data.get("retry_count", 0))
-
-            return PaymentEvent(
-                id=event_id,
-                event_type=event_type,
-                customer_id=customer_id,
-                amount=amount,
-                currency=currency,
-                status=status,
-                timestamp=timestamp,
-                subscription_id=subscription_id,
-                error_message=error_message,
-                retry_count=retry_count,
-            )
-        except (KeyError, ValueError) as e:
-            raise InvalidDataError(f"Failed to parse Chargify webhook: {str(e)}")
+        except InvalidDataError:
+            raise
+        except Exception as e:
+            print(f"Error parsing Chargify webhook: {e}")
+            return None

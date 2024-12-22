@@ -1,154 +1,192 @@
-from datetime import datetime, timedelta
-from app.event_processor import EventProcessor, CustomerContext, EventType, Priority
-
-
-def test_event_classification():
-    """Test that events are properly classified with correct priority"""
-    processor = EventProcessor()
-
-    # Payment failure for high-value customer should be highest priority
-    high_value_failure = {
-        "event": "payment_failure",
-        "customer": {
-            "lifetime_value": 50000,
-            "subscription_tier": "enterprise",
-            "status": "active",
-        },
-    }
-    event = processor.classify_event(high_value_failure)
-    assert event.type == EventType.PAYMENT_FAILURE
-    assert event.priority == Priority.URGENT
-    assert event.response_sla == timedelta(hours=2)
-
-    # Trial ending for active user should be high priority
-    active_trial_end = {
-        "event": "trial_end",
-        "customer": {
-            "trial_usage": "high",
-            "last_active": datetime.now(),
-            "feature_adoption": 0.8,
-        },
-    }
-    event = processor.classify_event(active_trial_end)
-    assert event.type == EventType.TRIAL_END
-    assert event.priority == Priority.HIGH
-    assert event.response_sla == timedelta(hours=24)
-
-    # Subscription upgrade should be medium priority
-    upgrade_event = {
-        "event": "subscription_upgrade",
-        "customer": {"previous_plan": "basic", "new_plan": "pro"},
-    }
-    event = processor.classify_event(upgrade_event)
-    assert event.type == EventType.UPGRADE
-    assert event.priority == Priority.MEDIUM
-    assert event.response_sla == timedelta(days=2)
-
-
-def test_customer_context_enrichment():
-    """Test that customer context is properly enriched with relevant data"""
-    processor = EventProcessor()
-
-    customer_data = {
-        "customer": {
-            "id": "cust_123",
-            "name": "Acme Corp",
-            "subscription_start": "2023-01-01",
-            "current_plan": "pro",
-        }
-    }
-
-    context = processor.enrich_customer_context(customer_data)
-    assert isinstance(context, CustomerContext)
-    assert context.customer_health_score > 0
-    assert context.churn_risk_score > 0
-    assert len(context.recent_interactions) > 0
-    assert context.feature_usage is not None
-    assert context.payment_history is not None
-
-
-def test_action_item_generation():
-    """Test that appropriate action items are generated based on event and context"""
-    processor = EventProcessor()
-
-    # Payment failure should generate urgent payment-related actions
-    payment_failure_event = {
-        "event": "payment_failure",
-        "customer": {
-            "payment_method": "card_expired",
-            "billing_contact": "john@example.com",
-        },
-    }
-
-    actions = processor.generate_action_items(payment_failure_event)
-    assert len(actions) >= 3
-    assert any(a.type == "contact_customer" for a in actions)
-    assert any(a.type == "update_payment_method" for a in actions)
-    assert all(a.link is not None for a in actions)
-
-    # Trial end should generate conversion-focused actions
-    trial_end_event = {
-        "event": "trial_end",
-        "customer": {"usage": "medium", "feedback": "positive"},
-    }
-
-    actions = processor.generate_action_items(trial_end_event)
-    assert len(actions) >= 2
-    assert any(a.type == "schedule_call" for a in actions)
-    assert any(a.type == "send_case_studies" for a in actions)
-    assert all(a.due_date is not None for a in actions)
+from datetime import datetime
+from app.event_processor import EventProcessor
+from app.models import PaymentEvent
+import pytest
 
 
 def test_notification_formatting():
-    """Test that notifications are properly formatted based on priority and content"""
+    """Test that notifications are properly formatted"""
     processor = EventProcessor()
 
-    urgent_event = {
-        "type": EventType.PAYMENT_FAILURE,
-        "priority": Priority.URGENT,
-        "customer": {"name": "Acme Corp", "tier": "enterprise"},
+    # Test payment failure notification
+    payment_event = PaymentEvent(
+        id="evt_123",
+        event_type="payment_failure",
+        customer_id="cust_123",
+        amount=49.99,
+        currency="USD",
+        status="failed",
+        timestamp=datetime.now(),
+        metadata={
+            "failure_reason": "card_declined",
+            "retry_count": 2,
+        },
+    )
+
+    customer_data = {
+        "company_name": "Acme Corp",
+        "team_size": 50,
+        "plan_name": "enterprise",
     }
 
-    notification = processor.format_notification(urgent_event)
-    assert "🚨" in notification.header  # Urgent events should have alert emoji
-    assert notification.color == "#FF0000"  # Urgent should be red
-    assert len(notification.action_buttons) > 0
-    assert notification.customer_context is not None
+    notification = processor.format_notification(payment_event, customer_data)
+    message = notification.to_slack_message()
 
-    # Check that customer context is prominently displayed
-    assert notification.sections[0].text.startswith("*Customer:*")
+    # Check header formatting
+    assert "🚨" in message["blocks"][0]["text"]["text"]
+    assert "Payment Failed" in message["blocks"][0]["text"]["text"]
+    assert "$49.99" in message["blocks"][0]["text"]["text"]
 
-    # Verify action items are properly formatted
-    action_section = next(
-        s for s in notification.sections if "Actions Required" in s.text
+    # Check color
+    assert message["color"] == "#dc3545"  # Red for failures
+
+    # Check sections
+    assert len(message["blocks"]) >= 3
+    assert any(
+        "Failed to process payment" in b["text"]["text"]
+        for b in message["blocks"]
+        if b["type"] == "section"
     )
-    assert action_section is not None
-    assert all(action.deadline for action in action_section.actions)
+    assert any(
+        "Customer Details" in b["text"]["text"]
+        for b in message["blocks"]
+        if b["type"] == "section"
+    )
+
+    # Check action buttons
+    actions = next(b for b in message["blocks"] if b["type"] == "actions")
+    assert len(actions["elements"]) == 3
+    assert actions["elements"][0]["text"]["text"] == "Update Payment Method"
+    assert actions["elements"][1]["text"]["text"] == "Contact Support"
+    assert actions["elements"][2]["text"]["text"] == "View Recommendations"
+
+    # Test trial end notification
+    trial_event = PaymentEvent(
+        id="evt_456",
+        event_type="trial_end",
+        customer_id="cust_123",
+        amount=0,
+        currency="USD",
+        status="active",
+        timestamp=datetime.now(),
+        metadata={
+            "days_remaining": 7,
+        },
+    )
+
+    notification = processor.format_notification(trial_event, customer_data)
+    message = notification.to_slack_message()
+
+    # Check header formatting
+    assert "📢" in message["blocks"][0]["text"]["text"]
+    assert "Trial Ending" in message["blocks"][0]["text"]["text"]
+    assert "7 Days" in message["blocks"][0]["text"]["text"]
+
+    # Check color
+    assert message["color"] == "#ffc107"  # Yellow for trial end
+
+    # Check sections
+    assert len(message["blocks"]) >= 3
+    assert any(
+        "Trial period ending" in b["text"]["text"]
+        for b in message["blocks"]
+        if b["type"] == "section"
+    )
+    assert any(
+        "Customer Details" in b["text"]["text"]
+        for b in message["blocks"]
+        if b["type"] == "section"
+    )
+
+    # Check action buttons
+    actions = next(b for b in message["blocks"] if b["type"] == "actions")
+    assert len(actions["elements"]) == 3
+    assert actions["elements"][0]["text"]["text"] == "Upgrade Now"
+    assert actions["elements"][1]["text"]["text"] == "Schedule Demo"
+    assert actions["elements"][2]["text"]["text"] == "View Recommendations"
 
 
-def test_event_correlation():
-    """Test that related events are properly correlated"""
+def test_invalid_event_type():
+    """Test handling of invalid event types"""
     processor = EventProcessor()
 
-    events = [
-        {
-            "event": "payment_failure",
-            "customer_id": "cust_123",
-            "timestamp": "2024-03-15T10:00:00Z",
-        },
-        {
-            "event": "subscription_updated",
-            "customer_id": "cust_123",
-            "timestamp": "2024-03-15T10:05:00Z",
-        },
-        {
-            "event": "payment_success",
-            "customer_id": "cust_123",
-            "timestamp": "2024-03-15T10:10:00Z",
-        },
-    ]
+    with pytest.raises(ValueError, match="Invalid event type"):
+        payment_event = PaymentEvent(
+            id="evt_123",
+            event_type="invalid_type",
+            customer_id="cust_123",
+            amount=49.99,
+            currency="USD",
+            status="unknown",
+            timestamp=datetime.now(),
+            metadata={},
+        )
+        processor.format_notification(payment_event, {})
 
-    correlated = processor.correlate_events(events)
-    assert len(correlated.event_chain) == 3
-    assert correlated.resolution == "payment_success"
-    assert correlated.duration == timedelta(minutes=10)
+
+def test_missing_required_customer_data():
+    """Test handling of missing required customer data"""
+    processor = EventProcessor()
+    payment_event = PaymentEvent(
+        id="evt_123",
+        event_type="payment_failure",
+        customer_id="cust_123",
+        amount=49.99,
+        currency="USD",
+        status="failed",
+        timestamp=datetime.now(),
+        metadata={
+            "failure_reason": "card_declined",
+            "retry_count": 1,
+        },
+    )
+
+    # Test with empty customer data
+    with pytest.raises(ValueError, match="Missing required customer data"):
+        processor.format_notification(payment_event, {})
+
+    # Test with partial customer data
+    with pytest.raises(ValueError, match="Missing required customer data"):
+        processor.format_notification(payment_event, {"company_name": "Acme Corp"})
+
+
+def test_invalid_currency():
+    """Test handling of invalid currency"""
+    processor = EventProcessor()
+
+    with pytest.raises(ValueError, match="Invalid currency"):
+        payment_event = PaymentEvent(
+            id="evt_123",
+            event_type="payment_success",
+            customer_id="cust_123",
+            amount=49.99,
+            currency="INVALID",
+            status="success",
+            timestamp=datetime.now(),
+            metadata={},
+        )
+        processor.format_notification(
+            payment_event,
+            {"company_name": "Acme Corp", "team_size": 50, "plan_name": "enterprise"},
+        )
+
+
+def test_invalid_amount():
+    """Test handling of invalid amount"""
+    processor = EventProcessor()
+
+    with pytest.raises(ValueError, match="Amount cannot be negative"):
+        payment_event = PaymentEvent(
+            id="evt_123",
+            event_type="payment_success",
+            customer_id="cust_123",
+            amount=-49.99,  # Negative amount
+            currency="USD",
+            status="success",
+            timestamp=datetime.now(),
+            metadata={},
+        )
+        processor.format_notification(
+            payment_event,
+            {"company_name": "Acme Corp", "team_size": 50, "plan_name": "enterprise"},
+        )

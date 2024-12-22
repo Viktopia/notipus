@@ -1,288 +1,221 @@
-from datetime import datetime, timedelta
-from enum import Enum
-from typing import List, Optional
+from typing import Dict, Any, List
 
-
-class EventType(Enum):
-    PAYMENT_FAILURE = "payment_failure"
-    TRIAL_END = "trial_end"
-    UPGRADE = "upgrade"
-
-
-class Priority(Enum):
-    URGENT = "urgent"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-
-
-class Action:
-    def __init__(
-        self, type: str, link: Optional[str] = None, due_date: Optional[datetime] = None
-    ):
-        self.type = type
-        self.link = link
-        self.due_date = due_date
-        self.deadline = due_date  # For compatibility with tests
-
-
-class CustomerContext:
-    def __init__(self):
-        self.customer_health_score = 0.0
-        self.churn_risk_score = 0.0
-        self.recent_interactions = []
-        self.feature_usage = {}
-        self.payment_history = []
-
-    def calculate_health_score(self, customer_data: dict) -> float:
-        # TODO: Implement actual health score calculation
-        return 0.75
-
-    def calculate_churn_risk(self, customer_data: dict) -> float:
-        # TODO: Implement actual churn risk calculation
-        return 0.25
-
-
-class Event:
-    def __init__(self, type: EventType, priority: Priority, response_sla: timedelta):
-        self.type = type
-        self.priority = priority
-        self.response_sla = response_sla
-
-
-class CorrelatedEvents:
-    def __init__(self, event_chain: List[dict], resolution: str, duration: timedelta):
-        self.event_chain = event_chain
-        self.resolution = resolution
-        self.duration = duration
-
-
-class NotificationSection:
-    def __init__(self, text: str, actions: Optional[List[Action]] = None):
-        self.text = text
-        self.actions = actions or []
-
-
-class Notification:
-    def __init__(
-        self,
-        header: str,
-        color: str,
-        sections: List[NotificationSection],
-        action_buttons: List[dict],
-        customer_context: CustomerContext,
-    ):
-        self.header = header
-        self.color = color
-        self.sections = sections
-        self.action_buttons = action_buttons
-        self.customer_context = customer_context
-
-    def to_slack_message(self) -> dict:
-        """Convert the notification to a Slack message format."""
-        blocks = []
-
-        # Add header block
-        blocks.append(
-            {"type": "header", "text": {"type": "plain_text", "text": self.header}}
-        )
-
-        # Add sections
-        for section in self.sections:
-            blocks.append(
-                {"type": "section", "text": {"type": "mrkdwn", "text": section.text}}
-            )
-            if section.actions:
-                blocks.append(
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "text": {"type": "plain_text", "text": action.type},
-                                "url": action.link,
-                            }
-                            for action in section.actions
-                            if action.link
-                        ],
-                    }
-                )
-
-        # Add action buttons
-        if self.action_buttons:
-            blocks.append({"type": "actions", "elements": self.action_buttons})
-
-        return {"blocks": blocks, "color": self.color}
+from .insights import CustomerInsightAnalyzer
+from .models import Notification, PaymentEvent, NotificationSection
 
 
 class EventProcessor:
-    def classify_event(self, event_data: dict) -> Event:
-        event_type = event_data.get("event")
-        customer = event_data.get("customer", {})
+    """Processes payment events and generates enriched notifications"""
 
-        if event_type == "payment_failure":
-            if (
-                customer.get("lifetime_value", 0) > 10000
-                or customer.get("subscription_tier") == "enterprise"
-            ):
-                return Event(
-                    EventType.PAYMENT_FAILURE, Priority.URGENT, timedelta(hours=2)
-                )
-            return Event(EventType.PAYMENT_FAILURE, Priority.HIGH, timedelta(hours=4))
+    VALID_EVENT_TYPES = {
+        "payment_success",
+        "payment_failure",
+        "trial_end",
+        "subscription_update",
+    }
 
-        elif event_type == "trial_end":
-            if (
-                customer.get("trial_usage") == "high"
-                and customer.get("feature_adoption", 0) > 0.7
-            ):
-                return Event(EventType.TRIAL_END, Priority.HIGH, timedelta(hours=24))
-            return Event(EventType.TRIAL_END, Priority.MEDIUM, timedelta(days=2))
+    def __init__(self):
+        self.insight_analyzer = CustomerInsightAnalyzer()
 
-        elif event_type == "subscription_upgrade":
-            return Event(EventType.UPGRADE, Priority.MEDIUM, timedelta(days=2))
+    def format_notification(
+        self, event: PaymentEvent, customer_data: Dict[str, Any]
+    ) -> Notification:
+        """Format a payment event into an enriched notification"""
+        # Validate event type
+        if event.event_type not in self.VALID_EVENT_TYPES:
+            raise ValueError(f"Invalid event type: {event.event_type}")
 
-        return Event(EventType.PAYMENT_FAILURE, Priority.LOW, timedelta(days=7))
-
-    def enrich_customer_context(self, customer_data: dict) -> CustomerContext:
-        context = CustomerContext()
-        context.customer_health_score = context.calculate_health_score(customer_data)
-        context.churn_risk_score = context.calculate_churn_risk(customer_data)
-        context.recent_interactions = [
-            "Support ticket #123",
-            "Sales call on 2024-03-01",
+        # Validate customer data
+        required_fields = ["company_name", "team_size", "plan_name"]
+        missing_fields = [
+            field for field in required_fields if field not in customer_data
         ]
-        context.feature_usage = {"feature1": 0.8, "feature2": 0.6}
-        context.payment_history = ["2024-02-01: Success", "2024-01-01: Success"]
-        return context
+        if missing_fields:
+            raise ValueError(
+                f"Missing required customer data: {', '.join(missing_fields)}"
+            )
 
-    def generate_action_items(self, event_data: dict) -> List[Action]:
-        event_type = event_data.get("event")
-        customer = event_data.get("customer", {})
-        actions = []
+        # Create notification sections
+        sections = self._create_notification_sections(event, customer_data)
 
-        if event_type == "payment_failure":
-            actions = [
-                Action(
-                    "contact_customer",
-                    "mailto:" + customer.get("billing_contact", ""),
-                    datetime.now() + timedelta(hours=2),
-                ),
-                Action(
-                    "update_payment_method",
-                    "https://billing.example.com",
-                    datetime.now() + timedelta(hours=4),
-                ),
-                Action(
-                    "review_account",
-                    "https://crm.example.com",
-                    datetime.now() + timedelta(days=1),
-                ),
-            ]
-        elif event_type == "trial_end":
-            actions = [
-                Action(
-                    "schedule_call",
-                    "https://calendar.example.com",
-                    datetime.now() + timedelta(days=1),
-                ),
-                Action(
-                    "send_case_studies",
-                    "https://crm.example.com/templates",
-                    datetime.now() + timedelta(days=2),
-                ),
-            ]
-
-        return actions
-
-    def format_notification(self, event_data: dict) -> Notification:
-        event_type = event_data.get("type")
-        priority = event_data.get("priority")
-        customer = event_data.get("customer", {})
-
-        header = (
-            "🚨 Urgent Notification"
-            if priority == Priority.URGENT
-            else "📢 Notification"
+        # Create action buttons based on event type and insights
+        action_buttons = self._create_action_buttons(
+            event, self.insight_analyzer.analyze_customer(event, customer_data)
         )
-        color = "#FF0000" if priority == Priority.URGENT else "#FFA500"
-
-        sections = [
-            NotificationSection(
-                f"*Customer:* {customer.get('name')}\n*Tier:* {customer.get('tier')}"
-            )
-        ]
-
-        # Always include an Actions Required section
-        actions = self.generate_action_items(
-            {"event": event_type, "customer": customer}
-        )
-        sections.append(
-            NotificationSection(
-                "*Actions Required:*\n"
-                + (
-                    "\n".join(f"• {a.type} (Due: {a.deadline})" for a in actions)
-                    if actions
-                    else "• No immediate actions required"
-                ),
-                actions,
-            )
-        )
-
-        # Always include action buttons
-        action_buttons = [
-            {
-                "type": "button",
-                "text": {"type": "plain_text", "text": "View Customer"},
-                "url": f"https://crm.example.com/customers/{customer.get('id', '')}",
-            },
-            {
-                "type": "button",
-                "text": {"type": "plain_text", "text": "Contact Support"},
-                "url": "https://support.example.com",
-            },
-        ]
-
-        # Add event-specific buttons
-        if event_type == EventType.PAYMENT_FAILURE:
-            action_buttons.append(
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Update Payment"},
-                    "url": f"https://billing.example.com/customers/{customer.get('id', '')}/payment",
-                }
-            )
-        elif event_type == EventType.TRIAL_END:
-            action_buttons.append(
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Schedule Demo"},
-                    "url": "https://calendly.com/demo",
-                }
-            )
 
         return Notification(
-            header=header,
-            color=color,
+            id=event.id,
+            status=event.status,
+            event=event,
             sections=sections,
             action_buttons=action_buttons,
-            customer_context=self.enrich_customer_context({"customer": customer}),
         )
 
-    def correlate_events(self, events: List[dict]) -> CorrelatedEvents:
-        if not events:
-            return CorrelatedEvents([], "", timedelta())
+    def _get_notification_properties(
+        self, event: PaymentEvent
+    ) -> tuple[str, str, str, str]:
+        """Get notification properties based on event type"""
+        amount_str = f"${event.amount:,.2f}" if event.amount else ""
 
-        sorted_events = sorted(events, key=lambda e: e["timestamp"])
-        first_event = datetime.fromisoformat(
-            sorted_events[0]["timestamp"].replace("Z", "+00:00")
-        )
-        last_event = datetime.fromisoformat(
-            sorted_events[-1]["timestamp"].replace("Z", "+00:00")
-        )
-        duration = last_event - first_event
+        if event.event_type == "payment_success":
+            return (
+                f"🎉 Payment Received: {amount_str}",
+                "#36a64f",  # Green
+                "low",
+                "payment",
+            )
+        elif event.event_type == "payment_failure":
+            return (
+                f"🚨 Payment Failed: {amount_str}",
+                "#dc3545",  # Red
+                "high",
+                "payment",
+            )
+        elif event.event_type == "trial_end":
+            days_left = event.metadata.get("days_remaining", "few")
+            return (
+                f"📢 Trial Ending in {days_left} Days",
+                "#ffc107",  # Yellow
+                "medium",
+                "trial",
+            )
+        elif event.event_type == "subscription_update":
+            old_plan = event.metadata.get("old_plan", "")
+            new_plan = event.metadata.get("new_plan", "")
+            if old_plan and new_plan:
+                return (
+                    f"📈 Plan Change: {old_plan} → {new_plan}",
+                    "#17a2b8",  # Blue
+                    "low",
+                    "subscription",
+                )
+            return (
+                "ℹ️ Subscription Updated",
+                "#17a2b8",  # Blue
+                "low",
+                "subscription",
+            )
+        else:
+            return (
+                "ℹ️ Account Update",
+                "#17a2b8",  # Blue
+                "low",
+                "general",
+            )
 
-        return CorrelatedEvents(
-            event_chain=sorted_events,
-            resolution=sorted_events[-1]["event"],
-            duration=duration,
+    def _create_notification_sections(
+        self, event: PaymentEvent, customer_data: Dict[str, Any]
+    ) -> List[NotificationSection]:
+        """Create notification sections based on event type"""
+        sections = []
+
+        # Add event details section
+        if event.event_type == "payment_success":
+            sections.append(
+                NotificationSection(
+                    text=(
+                        f"Successfully processed payment of "
+                        f"{event.amount} {event.currency}"
+                    )
+                )
+            )
+        elif event.event_type == "payment_failure":
+            sections.append(
+                NotificationSection(
+                    text=(
+                        f"Failed to process payment of "
+                        f"{event.amount} {event.currency}\n"
+                        f"Reason: {event.metadata.get('failure_reason', 'Unknown')}"
+                    )
+                )
+            )
+        elif event.event_type == "trial_end":
+            trial_days = event.metadata.get("trial_days_remaining", 0)
+            sections.append(
+                NotificationSection(
+                    text=(
+                        f"Trial period ending in {trial_days} days\n"
+                        f"Plan: {customer_data.get('plan_name', 'Unknown')}"
+                    )
+                )
+            )
+
+        # Add customer details section
+        sections.append(
+            NotificationSection(
+                text=(
+                    f"*Customer Details:*\n"
+                    f"• Company: {customer_data.get('company_name', 'N/A')}\n"
+                    f"• Team Size: {customer_data.get('team_size', 0)}\n"
+                    f"• Plan: {customer_data.get('plan_name', 'N/A')}"
+                )
+            )
         )
+
+        return sections
+
+    def _create_action_buttons(
+        self, event: PaymentEvent, customer_insights: Any
+    ) -> List[Dict[str, Any]]:
+        """Create action buttons based on event type and insights"""
+        buttons = []
+
+        if event.event_type == "payment_failure":
+            buttons.extend(
+                [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Update Payment Method",
+                        },
+                        "style": "primary",
+                        "url": f"/update-payment/{event.customer_id}",
+                    },
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Contact Support",
+                        },
+                        "url": f"/support/{event.customer_id}",
+                    },
+                ]
+            )
+        elif event.event_type == "trial_end":
+            buttons.extend(
+                [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Upgrade Now",
+                        },
+                        "style": "primary",
+                        "url": f"/upgrade/{event.customer_id}",
+                    },
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Schedule Demo",
+                        },
+                        "url": f"/schedule-demo/{event.customer_id}",
+                    },
+                ]
+            )
+
+        # Add general action buttons based on insights
+        if customer_insights.recommendations:
+            buttons.append(
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "View Recommendations",
+                    },
+                    "url": f"/recommendations/{event.customer_id}",
+                }
+            )
+
+        return buttons

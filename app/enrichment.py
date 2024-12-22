@@ -38,10 +38,9 @@ class NotificationEnricher:
                 payment_history = self.provider.get_payment_history(event.customer_id)
                 customer_data["payment_history"] = payment_history
 
-            # Get usage metrics for trial end
-            if event.event_type == "trial_end":
-                usage_metrics = self.provider.get_usage_metrics(event.customer_id)
-                customer_data["usage_metrics"] = usage_metrics
+            # Get usage metrics for trial end or always
+            usage_metrics = self.provider.get_usage_metrics(event.customer_id)
+            customer_data["usage_metrics"] = usage_metrics
 
             # Generate insights
             insights = self._generate_insights(event, customer_data)
@@ -136,20 +135,62 @@ class NotificationEnricher:
         customer_data: Dict[str, Any],
         action_items: List[Dict[str, Any]],
     ) -> List[NotificationSection]:
-        """Create message sections"""
+        """Create notification sections"""
         sections = []
+
+        # Add customer section
+        company_name = customer_data.get("company_name", "Unknown")
+        team_size = customer_data.get("team_size", 0)
+        plan_name = customer_data.get("plan_name", "Unknown")
+
         sections.append(
             NotificationSection(
-                text=f"*Customer:* {customer_data.get('name', 'Unknown')}"
+                text=f"*Customer:*\n"
+                f"• Company: {company_name}\n"
+                f"• Team Size: {team_size}\n"
+                f"• Plan: {plan_name}"
             )
         )
-        if action_items:
+
+        # Add metrics section
+        metrics = customer_data.get("usage_metrics", {})
+        sections.append(
+            NotificationSection(
+                text=f"*Metrics:*\n"
+                f"• API Calls (30d): {metrics.get('api_calls_last_30d', 0):,}\n"
+                f"• Active Users: {metrics.get('active_users', 0)}\n"
+                f"• Features Used: {', '.join(metrics.get('features_used', []))}"
+            )
+        )
+
+        # Add payment history if available
+        if "payment_history" in customer_data:
+            history = customer_data["payment_history"]
+            history_text = "*Payment History:*\n"
+            for payment in history:
+                status = payment.get("status", "unknown")
+                amount = payment.get("amount", 0)
+                date = payment.get("created_at", "")
+                history_text += f"• {status.title()}: ${amount:,.2f} ({date})\n"
+            sections.append(NotificationSection(text=history_text))
+
+        # Add insights section
+        if customer_data.get("health_score"):
             sections.append(
                 NotificationSection(
-                    text="*Actions Required:*\n"
-                    + "\n".join(f"• {item['type']}" for item in action_items)
+                    text=f"*Insights:*\n"
+                    f"• Health Score: {customer_data['health_score']:.1f}\n"
+                    f"• Lifetime Value: ${customer_data.get('lifetime_value', 0):,.2f}"
                 )
             )
+
+        # Add action items if any
+        if action_items:
+            action_text = "*Actions Required:*\n"
+            for item in action_items:
+                action_text += f"• {item['type']}: {item['description']}\n"
+            sections.append(NotificationSection(text=action_text))
+
         return sections
 
     def _create_customer_context(

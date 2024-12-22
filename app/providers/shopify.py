@@ -1,103 +1,107 @@
-import hashlib
+from typing import Dict, Any, Optional
+from flask import Request
 import hmac
-from datetime import datetime
-from typing import Optional
+import hashlib
 
-from .base import (
-    PaymentProvider,
-    PaymentEvent,
-    WebhookValidationError,
-    InvalidDataError,
-)
-
-SUPPORTED_TOPICS = {
-    "orders/create": "order_created",
-    "orders/paid": "payment_success",
-    "orders/cancelled": "order_cancelled",
-    "subscriptions/create": "subscription_created",
-    "subscriptions/update": "subscription_updated",
-    "subscriptions/cancel": "subscription_cancelled",
-}
+from .base import PaymentProvider, InvalidDataError
 
 
 class ShopifyProvider(PaymentProvider):
-    def __init__(self, webhook_secret: str):
-        self.webhook_secret = webhook_secret
-        self._shop_domain: Optional[str] = None
+    """Shopify payment provider implementation"""
 
-    @property
-    def shop_domain(self) -> Optional[str]:
-        """Get the Shopify shop domain from the last webhook."""
-        return self._shop_domain
-
-    def validate_webhook(self, headers: dict, body: bytes) -> bool:
-        """Validate the webhook signature and authenticity."""
-        if "X-Shopify-Hmac-SHA256" not in headers:
-            raise WebhookValidationError("Missing Shopify webhook signature")
-
-        if "X-Shopify-Topic" not in headers:
-            raise WebhookValidationError("Missing Shopify webhook topic")
-
-        if "X-Shopify-Shop-Domain" not in headers:
-            raise WebhookValidationError("Missing Shopify shop domain")
-
-        # Store the shop domain for later use
-        self._shop_domain = headers["X-Shopify-Shop-Domain"]
-
-        # Verify the topic is supported
-        topic = headers["X-Shopify-Topic"]
-        if topic not in SUPPORTED_TOPICS:
-            raise WebhookValidationError(f"Unsupported webhook topic: {topic}")
-
-        # Validate the HMAC signature
-        expected_signature = headers["X-Shopify-Hmac-SHA256"]
-        computed_signature = hmac.new(
-            self.webhook_secret.encode(), body, hashlib.sha256
-        ).hexdigest()
-
-        return hmac.compare_digest(computed_signature, expected_signature)
-
-    def parse_webhook(self, data: dict, topic: Optional[str] = None) -> PaymentEvent:
-        """Parse webhook data into a standardized PaymentEvent."""
+    def validate_webhook(self, request: Request) -> bool:
+        """Validate webhook signature"""
         try:
+            signature = request.headers.get("X-Shopify-Hmac-SHA256")
+            topic = request.headers.get("X-Shopify-Topic")
+            shop_domain = request.headers.get("X-Shopify-Shop-Domain")
+
+            if not signature or not topic or not shop_domain:
+                return False
+
+            body = request.get_data()
+            expected_signature = hmac.new(
+                self.webhook_secret.encode(),
+                body,
+                hashlib.sha256,
+            ).hexdigest()
+
+            return hmac.compare_digest(signature, expected_signature)
+        except Exception as e:
+            print(f"Error validating Shopify webhook: {e}")
+            return False
+
+    def parse_webhook(self, request: Request, **kwargs) -> Optional[Dict[str, Any]]:
+        """Parse webhook data based on topic"""
+        try:
+            # Get topic from request headers if not provided
+            webhook_topic = request.headers.get("X-Shopify-Topic", "")
+            if not webhook_topic:
+                raise InvalidDataError("Missing webhook topic")
+
+            # Get shop domain from headers
+            shop_domain = request.headers.get("X-Shopify-Shop-Domain", "")
+            if not shop_domain:
+                raise InvalidDataError("Missing shop domain")
+
+            # Get and validate data
+            data = request.get_json()
             if not data:
                 raise InvalidDataError("Empty webhook data")
 
-            if not topic:
-                raise InvalidDataError("Missing webhook topic")
+            # Map topic to event type
+            event_type = webhook_topic.replace("/", "_")
+            customer = data.get("customer", {})
+            if not customer:
+                raise InvalidDataError("Missing customer data")
 
-            order = data
-            customer = order.get("customer", {})
-            customer_id = str(customer.get("id", ""))
-            amount = float(order.get("total_price", "0"))
-            currency = order.get("currency", "USD")
-            created_at = order.get("created_at")
-            financial_status = order.get("financial_status")
+            customer_id = customer.get("id")
+            if not customer_id:
+                raise InvalidDataError("Missing customer ID")
 
-            if not all([customer_id, created_at]):
-                raise InvalidDataError(
-                    "Missing required fields: customer_id or created_at"
-                )
+            # Extract amount and validate
+            amount = 0.0
+            if webhook_topic in ["orders/create", "orders/paid"]:
+                try:
+                    amount = float(data.get("total_price", "0"))
+                    if amount < 0:
+                        raise InvalidDataError("Amount cannot be negative")
+                except ValueError:
+                    raise InvalidDataError("Invalid amount format")
 
-            timestamp = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            # Validate currency
+            currency = data.get("currency", "USD")
+            if not currency or len(currency) != 3:
+                raise InvalidDataError("Invalid currency code")
 
-            # Map the webhook topic to our internal event type
-            event_type = SUPPORTED_TOPICS.get(topic, "unknown")
+            return {
+                "id": str(data.get("id", "")),
+                "type": event_type,
+                "customer_id": str(customer_id),
+                "amount": amount,
+                "currency": currency,
+                "status": "success"
+                if data.get("financial_status") == "paid"
+                else "failed",
+                "timestamp": data.get("created_at"),
+                "metadata": {
+                    "source": "shopify",
+                    "order_id": data.get("id"),
+                    "shop_domain": shop_domain,
+                    "customer_email": customer.get("email"),
+                    "customer_name": f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip(),
+                },
+                "customer_data": {
+                    "company_name": customer.get("company", "Unknown"),
+                    "team_size": int(customer.get("team_size", 0)),
+                    "plan_name": data.get("plan_name", "Unknown"),
+                    "created_at": customer.get("created_at"),
+                },
+            }
 
-            # Determine status based on financial_status
-            status = "success" if financial_status == "paid" else "pending"
-
-            return PaymentEvent(
-                id=str(order.get("id", "")),
-                event_type=event_type,
-                customer_id=customer_id,
-                amount=amount,
-                currency=currency,
-                status=status,
-                timestamp=timestamp,
-                subscription_id=order.get("subscription_contract_id"),
-                error_message=None,
-                retry_count=0,
-            )
-        except (KeyError, ValueError) as e:
-            raise InvalidDataError(f"Failed to parse Shopify webhook: {str(e)}")
+        except (InvalidDataError, ValueError) as e:
+            print(f"Error parsing Shopify webhook: {e}")
+            raise
+        except Exception as e:
+            print(f"Error parsing Shopify webhook: {e}")
+            return None

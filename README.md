@@ -1,4 +1,4 @@
-# Shopify & Chargify to Slack Notifier
+# Notipus - Webhook to Slack Notifier
 
 A webhook-driven notification service that sends enriched payment and subscription events from Shopify and Chargify to Slack. The service provides meaningful, actionable insights for customer success teams with a fun and engaging tone.
 
@@ -8,8 +8,8 @@ A webhook-driven notification service that sends enriched payment and subscripti
 - 💡 **Rich Context**: Enriches notifications with customer history, metrics, and actionable insights
 - 🎨 **Engaging Messages**: Uses whimsical language and emojis to make notifications fun and memorable
 - 📊 **Business Metrics**: Includes relevant business metrics like lifetime value and payment history
-- 🔄 **Event Correlation**: Groups related events to tell a complete customer story
-- ⚡ **Multiple Payment Providers**: Supports both Shopify and Chargify, with an extensible architecture for more providers
+- 🔄 **Event Analysis**: Analyzes events to provide actionable recommendations
+- ⚡ **Multiple Payment Providers**: Supports both Shopify and Chargify webhooks
 
 ## Installation
 
@@ -17,13 +17,13 @@ A webhook-driven notification service that sends enriched payment and subscripti
 
 1. Clone the repository:
 ```bash
-git clone git@github.com:Viktopia/shopify-to-slack.git
-cd shopify-to-slack
+git clone git@github.com:Viktopia/notipus.git
+cd notipus
 ```
 
 2. Build the Docker image:
 ```bash
-docker build -t shopify-to-slack .
+docker build -t notipus .
 ```
 
 3. Run the container with your environment variables:
@@ -31,21 +31,17 @@ docker build -t shopify-to-slack .
 docker run -d \
   -p 8080:8080 \
   -e SLACK_WEBHOOK_URL=your_slack_webhook_url \
-  -e CHARGIFY_API_KEY=your_chargify_api_key \
-  -e CHARGIFY_DOMAIN=your_chargify_domain \
   -e CHARGIFY_WEBHOOK_SECRET=your_chargify_webhook_secret \
-  -e SHOPIFY_SHOP_URL=your_shop_url \
-  -e SHOPIFY_ACCESS_TOKEN=your_access_token \
   -e SHOPIFY_WEBHOOK_SECRET=your_webhook_secret \
-  shopify-to-slack
+  notipus
 ```
 
 ### Local Development
 
 1. Clone the repository:
 ```bash
-git clone git@github.com:Viktopia/shopify-to-slack.git
-cd shopify-to-slack
+git clone git@github.com:Viktopia/notipus.git
+cd notipus
 ```
 
 2. Set up Poetry for dependency management:
@@ -56,11 +52,7 @@ poetry install
 3. Set required environment variables:
 ```bash
 export SLACK_WEBHOOK_URL=your_slack_webhook_url
-export CHARGIFY_API_KEY=your_chargify_api_key
-export CHARGIFY_DOMAIN=your_chargify_domain
 export CHARGIFY_WEBHOOK_SECRET=your_chargify_webhook_secret
-export SHOPIFY_SHOP_URL=your_shop_url
-export SHOPIFY_ACCESS_TOKEN=your_access_token
 export SHOPIFY_WEBHOOK_SECRET=your_webhook_secret
 ```
 
@@ -70,7 +62,7 @@ export SHOPIFY_WEBHOOK_SECRET=your_webhook_secret
 
 Using Docker:
 ```bash
-docker run -d -p 8080:8080 shopify-to-slack
+docker run -d -p 8080:8080 notipus
 ```
 
 Local development:
@@ -109,11 +101,11 @@ poetry run ruff check .
 
 The service is built with a modular architecture that separates concerns and makes it easy to extend:
 
-- `app/providers/`: Payment provider implementations (Shopify, Chargify)
-- `app/enrichment.py`: Notification enrichment with context and insights
-- `app/messages.py`: Message generation with whimsical templates
+- `app/providers/`: Payment provider webhook handlers (Shopify, Chargify)
+- `app/insights.py`: Customer insights and recommendations
+- `app/event_processor.py`: Event processing and notification formatting
 - `app/models.py`: Common data models and enums
-- `app/main.py`: Flask application and webhook handlers
+- `app/__init__.py`: Flask application and webhook handlers
 
 ## Docker Deployment
 
