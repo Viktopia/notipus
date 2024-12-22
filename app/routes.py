@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app, redirect, url_for
 import requests
+import sentry_sdk
 from app.providers.base import InvalidDataError
 
 bp = Blueprint("webhooks", __name__)
@@ -44,10 +45,22 @@ def shopify_webhook():
         return jsonify({"status": "success"}), 200
 
     except InvalidDataError as e:
+        # Don't report validation errors to Sentry
         return jsonify({"error": str(e)}), 400
     except requests.exceptions.RequestException as e:
+        # Report Slack API errors to Sentry
+        sentry_sdk.capture_exception(e)
         return jsonify({"error": f"Failed to send notification: {str(e)}"}), 500
     except Exception as e:
+        # Report unexpected errors to Sentry with context
+        sentry_sdk.set_context(
+            "webhook_data",
+            {
+                "headers": dict(request.headers),
+                "content_type": request.content_type,
+            },
+        )
+        sentry_sdk.capture_exception(e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -90,10 +103,22 @@ def chargify_webhook():
         return jsonify({"status": "success"}), 200
 
     except InvalidDataError as e:
+        # Don't report validation errors to Sentry
         return jsonify({"error": str(e)}), 400
     except requests.exceptions.RequestException as e:
+        # Report Slack API errors to Sentry
+        sentry_sdk.capture_exception(e)
         return jsonify({"error": f"Failed to send notification: {str(e)}"}), 500
     except Exception as e:
+        # Report unexpected errors to Sentry with context
+        sentry_sdk.set_context(
+            "webhook_data",
+            {
+                "headers": dict(request.headers),
+                "content_type": request.content_type,
+            },
+        )
+        sentry_sdk.capture_exception(e)
         return jsonify({"error": str(e)}), 500
 
 
