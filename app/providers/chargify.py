@@ -1,9 +1,12 @@
 from typing import Dict, Any, Optional
-from flask import Request
+from flask import Request, current_app
 import hmac
 import hashlib
+import logging
 
 from .base import PaymentProvider, InvalidDataError
+
+logger = logging.getLogger(__name__)
 
 
 class ChargifyProvider(PaymentProvider):
@@ -15,7 +18,24 @@ class ChargifyProvider(PaymentProvider):
             signature = request.headers.get("X-Chargify-Webhook-Signature-Hmac-Sha-256")
             webhook_id = request.headers.get("X-Chargify-Webhook-Id")
 
+            logger.info(
+                "Validating Chargify webhook",
+                extra={
+                    "webhook_id": webhook_id,
+                    "has_signature": bool(signature),
+                    "content_type": request.content_type,
+                    "headers": dict(request.headers),
+                },
+            )
+
             if not signature or not webhook_id:
+                logger.warning(
+                    "Missing required headers",
+                    extra={
+                        "webhook_id": webhook_id,
+                        "has_signature": bool(signature),
+                    },
+                )
                 return False
 
             body = request.get_data()
@@ -25,9 +45,28 @@ class ChargifyProvider(PaymentProvider):
                 hashlib.sha256,
             ).hexdigest()
 
-            return hmac.compare_digest(signature, expected_signature)
+            is_valid = hmac.compare_digest(signature, expected_signature)
+            if not is_valid:
+                logger.warning(
+                    "Invalid webhook signature",
+                    extra={
+                        "webhook_id": webhook_id,
+                        "expected_signature": expected_signature,
+                        "received_signature": signature,
+                    },
+                )
+
+            return is_valid
+
         except Exception as e:
-            print(f"Error validating Chargify webhook: {e}")
+            logger.error(
+                "Error validating Chargify webhook",
+                extra={
+                    "error": str(e),
+                    "webhook_id": request.headers.get("X-Chargify-Webhook-Id"),
+                },
+                exc_info=True,
+            )
             return False
 
     def parse_webhook(self, request: Request) -> Optional[Dict[str, Any]]:
@@ -84,14 +123,15 @@ class ChargifyProvider(PaymentProvider):
                     "company_name": organization or "Unknown",
                     "team_size": 0,  # Not provided in webhook
                     "plan_name": plan_name or "Unknown",
-                    "created_at": data.get(
-                        "payload[subscription][customer][created_at]"
-                    ),
                 },
             }
 
         except InvalidDataError:
             raise
         except Exception as e:
-            print(f"Error parsing Chargify webhook: {e}")
-            return None
+            logger.error(
+                "Error parsing Chargify webhook",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+            raise InvalidDataError(f"Failed to parse webhook data: {str(e)}")

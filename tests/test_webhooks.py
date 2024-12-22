@@ -1,10 +1,11 @@
 import json
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 import pytest
 from app import create_app
 import requests
-from app.models import Notification, NotificationSection
+from app.models import Notification, NotificationSection, PaymentEvent
 from app.providers.base import InvalidDataError
 
 
@@ -68,12 +69,32 @@ def mock_webhook_validation(monkeypatch):
 
     def mock_format_notification(*args, **kwargs):
         """Mock notification formatting"""
-        # Extract event from either positional or keyword args
-        event = kwargs.get("event") if "event" in kwargs else args[0]
+        # Extract event data from either positional or keyword args
+        event_data = kwargs.get("event") if "event" in kwargs else args[0]
+
+        # Create PaymentEvent object
+        try:
+            timestamp = datetime.fromisoformat(
+                event_data["timestamp"].replace("Z", "+00:00")
+            )
+        except (ValueError, TypeError, KeyError):
+            timestamp = datetime.now()
+
+        payment_event = PaymentEvent(
+            id=event_data["id"],
+            event_type=event_data["type"],
+            customer_id=event_data["customer_id"],
+            amount=event_data["amount"],
+            currency=event_data["currency"],
+            status=event_data["status"],
+            timestamp=timestamp,
+            metadata=event_data["metadata"],
+        )
+
         return Notification(
-            id=event.id,
-            status=event.status,
-            event=event,
+            id=payment_event.id,
+            status=payment_event.status,
+            event=payment_event,
             sections=[NotificationSection(text="Test notification")],
             action_buttons=[],
         )
