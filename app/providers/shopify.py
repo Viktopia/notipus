@@ -119,18 +119,23 @@ class ShopifyProvider(PaymentProvider):
                 },
             )
 
-            if not data:
+            if data is None or not isinstance(data, dict):
                 logger.error("Empty webhook data")
                 raise InvalidDataError("Empty webhook data")
 
+            if not data:  # Empty dict
+                logger.error("Missing required fields")
+                raise InvalidDataError("Missing required fields")
+
             # Extract required fields
-            customer_id = str(data.get("customer", {}).get("id") or data.get("id"))
+            customer_id = data.get("customer", {}).get("id") or data.get("id")
             if not customer_id:
                 logger.error(
                     "Missing required fields",
                     extra={"available_fields": list(data.keys())},
                 )
                 raise InvalidDataError("Missing required fields")
+            customer_id = str(customer_id)
 
             # Get webhook topic from header
             topic = request.headers.get("X-Shopify-Topic", "unknown")
@@ -149,11 +154,11 @@ class ShopifyProvider(PaymentProvider):
 
             # Get customer info
             customer = data.get("customer", {})
-            company = customer.get("company")
+            company = customer.get("company") or data.get("company")
             team_size = 0
 
             # Try to get team size from metafields
-            metafields = customer.get("metafields", [])
+            metafields = customer.get("metafields", []) or data.get("metafields", [])
             for field in metafields:
                 if field.get("key") == "team_size":
                     try:
@@ -163,6 +168,22 @@ class ShopifyProvider(PaymentProvider):
                             "Invalid team size",
                             extra={"value": field.get("value")},
                         )
+
+            # Try to get team size from line item properties if not found in metafields
+            if team_size == 0 and "line_items" in data:
+                for item in data["line_items"]:
+                    for prop in item.get("properties", []):
+                        if prop.get("name") == "team_size":
+                            try:
+                                team_size = int(prop["value"])
+                                break
+                            except (ValueError, TypeError):
+                                logger.warning(
+                                    "Invalid team size in line item",
+                                    extra={"value": prop.get("value")},
+                                )
+                    if team_size > 0:
+                        break
 
             # Get plan info from line items
             plan_name = None

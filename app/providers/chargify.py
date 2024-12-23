@@ -3,8 +3,8 @@ from flask import Request
 import hmac
 import hashlib
 import logging
-from datetime import datetime
 from collections import OrderedDict
+import time
 
 from .base import PaymentProvider, InvalidDataError
 
@@ -23,35 +23,26 @@ class ChargifyProvider(PaymentProvider):
         """Initialize provider with webhook secret"""
         super().__init__(webhook_secret)
 
-    def _check_webhook_duplicate(self, webhook_id: str, data: Dict[str, Any]) -> bool:
-        """Check if webhook has been processed recently"""
-        now = datetime.utcnow()
+    def _check_webhook_duplicate(self, customer_id: str) -> bool:
+        """Check if a webhook for this customer has been processed recently"""
+        now = time.time()
 
-        # Clean old entries from cache
-        for cached_id, entry in list(self._webhook_cache.items()):
-            if (now - entry["timestamp"]).total_seconds() > self._DEDUP_WINDOW_SECONDS:
-                self._webhook_cache.pop(cached_id)
+        # Clean up old entries
+        cutoff = now - self._DEDUP_WINDOW_SECONDS
+        self._webhook_cache = OrderedDict(
+            (k, v) for k, v in self._webhook_cache.items()
+            if v > cutoff
+        )
 
-        # Check webhook ID - this is guaranteed unique by Chargify
-        if webhook_id in self._webhook_cache:
-            logger.info(
-                "Duplicate webhook ID",
-                extra={
-                    "webhook_id": webhook_id,
-                    "event_type": data.get("type"),
-                    "subscription_id": data.get("metadata", {}).get("subscription_id"),
-                },
-            )
+        # Check if customer has recent webhook
+        if customer_id in self._webhook_cache:
             return True
 
-        # Add to cache, remove oldest if at max size
-        self._webhook_cache[webhook_id] = {
-            "timestamp": now,
-            "event_type": data.get("type"),
-            "subscription_id": data.get("metadata", {}).get("subscription_id"),
-        }
+        # Add to cache
+        self._webhook_cache[customer_id] = now
         if len(self._webhook_cache) > self._CACHE_MAX_SIZE:
-            self._webhook_cache.popitem(last=False)
+            self._webhook_cache.popitem(last=False)  # Remove oldest
+
         return False
 
     def validate_webhook(self, request: Request) -> bool:
@@ -148,7 +139,6 @@ class ChargifyProvider(PaymentProvider):
 
     def parse_webhook(self, request: Request) -> Optional[Dict[str, Any]]:
         """Parse webhook data based on event type"""
-        # Handle form-encoded data only
         if request.content_type != "application/x-www-form-urlencoded":
             logger.error(
                 "Invalid content type",
@@ -174,15 +164,79 @@ class ChargifyProvider(PaymentProvider):
                 logger.error("Empty webhook data")
                 raise InvalidDataError("Empty webhook data")
 
-            # Parse the webhook data first
-            parsed_data = self._parse_webhook_data(data, request.headers)
+            event_type = data.get("event")
+            if not event_type:
+                logger.error("Missing required fields")
+                raise InvalidDataError("Missing required fields")
 
-            # Check for duplicate webhook after parsing
-            webhook_id = request.headers.get("X-Chargify-Webhook-Id")
-            if webhook_id and self._check_webhook_duplicate(webhook_id, parsed_data):
-                raise InvalidDataError("Duplicate webhook")
+            customer_id = data.get("payload[subscription][customer][id]")
+            if not customer_id:
+                logger.error("Missing required fields")
+                raise InvalidDataError("Missing required fields")
 
-            return parsed_data
+            # Check for duplicate webhook for this customer
+            if self._check_webhook_duplicate(customer_id):
+                logger.warning(
+                    "Duplicate webhook for customer",
+                    extra={
+                        "customer_id": customer_id,
+                        "event_type": event_type,
+                    },
+                )
+                raise InvalidDataError("Duplicate webhook for customer")
+
+            status = "success"
+
+            if "failure" in event_type:
+                status = "failed"
+            elif event_type == "subscription_state_change":
+                status = data.get("payload[subscription][state]", "unknown")
+
+            # Build metadata
+            metadata = {
+                "source": "chargify",
+                "subscription_id": data.get("payload[subscription][id]"),
+                "customer_email": data.get("payload[subscription][customer][email]", ""),
+                "customer_name": (
+                    f"{data.get('payload[subscription][customer][first_name]', '')} "
+                    f"{data.get('payload[subscription][customer][last_name]', '')}"
+                ).strip(),
+            }
+
+            # Add failure reason if available
+            if status == "failed":
+                failure_reason = (
+                    data.get("payload[transaction][failure_message]")
+                    or data.get("payload[transaction][memo]")
+                    or "Unknown error"
+                )
+                metadata["failure_reason"] = failure_reason
+
+            # Add subscription state change metadata
+            if event_type == "subscription_state_change":
+                metadata["cancel_at_period_end"] = (
+                    data.get("payload[subscription][cancel_at_end_of_period]") == "true"
+                )
+
+            return {
+                "id": f"evt_{customer_id}_{data.get('id', '')}",
+                "type": event_type,
+                "customer_id": str(customer_id),
+                "amount": float(data.get("payload[transaction][amount_in_cents]", 0)) / 100,
+                "currency": "USD",
+                "status": status,
+                "timestamp": data.get("created_at"),
+                "metadata": metadata,
+                "customer_data": {
+                    "company_name": data.get(
+                        "payload[subscription][customer][organization]", "Unknown"
+                    ),
+                    "team_size": 0,
+                    "plan_name": data.get(
+                        "payload[subscription][product][name]", "Unknown"
+                    ),
+                },
+            }
 
         except InvalidDataError:
             raise
@@ -193,137 +247,3 @@ class ChargifyProvider(PaymentProvider):
                 exc_info=True,
             )
             raise InvalidDataError(f"Failed to parse webhook data: {str(e)}")
-
-    def _parse_webhook_data(
-        self, data: Dict[str, Any], headers: Dict[str, str]
-    ) -> Dict[str, Any]:
-        """Parse webhook data into standardized format"""
-        # Only event type is mandatory
-        event_type = data.get("event")
-        if not event_type:
-            logger.error(
-                "Missing event type",
-                extra={"available_fields": list(data.keys())},
-            )
-            raise InvalidDataError("Missing event type")
-
-        # Handle test webhooks
-        if event_type == "test":
-            return {
-                "id": f"evt_test_{data.get('id', '')}",
-                "type": "test",
-                "customer_id": "test",
-                "amount": 0.0,
-                "currency": "USD",
-                "status": "test",
-                "timestamp": datetime.utcnow().isoformat(),
-                "metadata": {
-                    "source": "chargify",
-                    "webhook_id": headers.get("X-Chargify-Webhook-Id"),
-                    "is_test": True,
-                },
-                "customer_data": {
-                    "company_name": "Test Company",
-                    "team_size": 0,
-                    "plan_name": "Test Plan",
-                },
-            }
-
-        # Extract customer ID from various possible locations
-        customer_id = (
-            data.get("payload[subscription][customer][id]")
-            or data.get("payload[customer][id]")
-            or data.get("id", "unknown")
-        )
-
-        # Extract amount if available (not all events have amounts)
-        amount = 0.0
-        amount_in_cents = data.get("payload[transaction][amount_in_cents]")
-        if amount_in_cents:
-            try:
-                amount = float(amount_in_cents) / 100
-                if amount < 0:
-                    logger.warning(
-                        "Negative amount received",
-                        extra={"amount_in_cents": amount_in_cents},
-                    )
-            except ValueError:
-                logger.warning(
-                    "Invalid amount format",
-                    extra={"amount_in_cents": amount_in_cents},
-                )
-
-        # Extract customer info (might not be available in all webhooks)
-        subscription_id = data.get("payload[subscription][id]")
-        customer_email = data.get("payload[subscription][customer][email]") or data.get(
-            "payload[customer][email]"
-        )
-        customer_name = (
-            f"{data.get('payload[subscription][customer][first_name]', '')} "
-            f"{data.get('payload[subscription][customer][last_name]', '')}"
-        ).strip() or (
-            f"{data.get('payload[customer][first_name]', '')} "
-            f"{data.get('payload[customer][last_name]', '')}"
-        ).strip()
-
-        organization = data.get(
-            "payload[subscription][customer][organization]"
-        ) or data.get("payload[customer][organization]")
-        plan_name = data.get("payload[subscription][product][name]") or data.get(
-            "payload[product][name]"
-        )
-
-        # Get timestamp from various possible fields
-        timestamp = (
-            data.get("created_at")
-            or data.get("timestamp")
-            or data.get("occurred_at")
-            or datetime.utcnow().isoformat()
-        )
-
-        # Determine status based on event type and data
-        status = "success"
-        if "failure" in event_type:
-            status = "failed"
-        elif event_type == "subscription_state_change":
-            status = data.get("payload[subscription][state]", "unknown")
-
-        # Build metadata
-        metadata = {
-            "source": "chargify",
-            "subscription_id": subscription_id,
-            "customer_email": customer_email,
-            "customer_name": customer_name,
-            "webhook_id": headers.get("X-Chargify-Webhook-Id"),
-        }
-
-        # Add failure reason if available
-        if status == "failed":
-            failure_reason = (
-                data.get("payload[transaction][failure_message]")
-                or data.get("payload[transaction][memo]")
-                or "Unknown error"
-            )
-            metadata["failure_reason"] = failure_reason
-
-        # Add subscription state change metadata
-        if event_type == "subscription_state_change":
-            metadata["cancel_at_period_end"] = (
-                data.get("payload[subscription][cancel_at_end_of_period]") == "true"
-            )
-
-        return {
-            "id": f"evt_{customer_id}_{data.get('id', '')}",
-            "type": event_type,
-            "customer_id": str(customer_id),
-            "amount": amount,
-            "currency": "USD",  # Chargify always uses USD
-            "status": status,
-            "timestamp": timestamp,
-            "metadata": metadata,
-            "customer_data": {
-                "company_name": organization or "Unknown",
-                "team_size": 0,  # Not provided in webhook
-                "plan_name": plan_name or "Unknown",
-            },
-        }

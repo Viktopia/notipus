@@ -309,6 +309,23 @@ def test_shopify_webhook_success(client, mock_slack_response, mock_webhook_valid
             "total_spent": "299.95",
             "note": "Enterprise customer",
             "tags": ["enterprise", "priority"],
+            "default_address": {
+                "company": "Test Company",
+                "country": "United States",
+                "country_code": "US",
+            },
+            "metafields": [
+                {
+                    "key": "team_size",
+                    "value": "25",
+                    "namespace": "customer",
+                },
+                {
+                    "key": "plan_type",
+                    "value": "enterprise_annual",
+                    "namespace": "subscription",
+                },
+            ],
         },
         "total_price": "29.99",
         "subtotal_price": "24.99",

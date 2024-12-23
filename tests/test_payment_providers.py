@@ -72,6 +72,7 @@ def test_shopify_order_parsing():
         "X-Shopify-Shop-Domain": "test.myshopify.com",
         "X-Shopify-Hmac-SHA256": "test_signature",
         "X-Shopify-Order-Id": "123456789",
+        "X-Shopify-Api-Version": "2024-01",
     }
     mock_request.get_json.return_value = {
         "id": 123456789,
@@ -86,6 +87,23 @@ def test_shopify_order_parsing():
             "total_spent": "299.95",
             "note": "Enterprise customer",
             "tags": ["enterprise", "priority"],
+            "default_address": {
+                "company": "Test Company",
+                "country": "United States",
+                "country_code": "US",
+            },
+            "metafields": [
+                {
+                    "key": "team_size",
+                    "value": "25",
+                    "namespace": "customer",
+                },
+                {
+                    "key": "plan_type",
+                    "value": "enterprise_annual",
+                    "namespace": "subscription",
+                },
+            ],
         },
         "total_price": "29.99",
         "subtotal_price": "24.99",
@@ -116,6 +134,8 @@ def test_shopify_order_parsing():
     assert event["amount"] == 29.99
     assert event["status"] == "success"
     assert event["metadata"]["order_number"] == 1001
+    assert event["metadata"]["shop_domain"] == "test.myshopify.com"
+    assert event["metadata"]["plan_type"] == "enterprise_annual"
     assert event["customer_data"]["company_name"] == "Test Company"
     assert event["customer_data"]["team_size"] == 25
     assert event["customer_data"]["plan_name"] == "Enterprise Plan"
@@ -261,6 +281,11 @@ def test_shopify_invalid_webhook_data():
     with pytest.raises(InvalidDataError, match="Empty webhook data"):
         provider.parse_webhook(mock_request)
 
+    # Test empty dict
+    mock_request.get_json.return_value = {}
+    with pytest.raises(InvalidDataError, match="Missing required fields"):
+        provider.parse_webhook(mock_request)
+
     # Test missing customer ID
     mock_request.get_json.return_value = {"test": "data"}
     with pytest.raises(InvalidDataError, match="Missing required fields"):
@@ -321,6 +346,7 @@ def test_invalid_webhook_data():
 def test_chargify_subscription_state_change():
     """Test parsing of Chargify subscription state change webhook"""
     provider = ChargifyProvider(webhook_secret="test_secret")
+    provider._webhook_cache.clear()  # Clear the cache before test
 
     mock_request = MagicMock(spec=Request)
     mock_request.content_type = "application/x-www-form-urlencoded"
@@ -410,6 +436,7 @@ def test_shopify_customer_data_update():
 def test_chargify_webhook_deduplication():
     """Test Chargify webhook deduplication logic"""
     provider = ChargifyProvider("")
+    provider._DEDUP_WINDOW_SECONDS = 60  # Set window to 60 seconds for testing
 
     # Create a mock request with payment_success event
     mock_request = Mock()
@@ -422,9 +449,13 @@ def test_chargify_webhook_deduplication():
         "id": "12345",
         "payload[subscription][id]": "sub_789",
         "payload[subscription][customer][id]": "cust_123",
-        "payload[transaction][amount_in_cents]": "10000",
+        "payload[subscription][customer][email]": "test@example.com",
+        "payload[subscription][customer][first_name]": "Test",
+        "payload[subscription][customer][last_name]": "User",
         "payload[subscription][customer][organization]": "Test Co",
         "payload[subscription][product][name]": "Enterprise Plan",
+        "payload[transaction][amount_in_cents]": "10000",
+        "created_at": "2024-03-15T10:00:00Z",
     }
     mock_form = MagicMock()
     mock_form.to_dict.return_value = form_data
@@ -436,23 +467,18 @@ def test_chargify_webhook_deduplication():
     assert event1["type"] == "payment_success"
     assert event1["customer_id"] == "cust_123"
 
-    # Same event within dedup window should be marked as duplicate
-    with pytest.raises(InvalidDataError, match="Duplicate webhook"):
-        provider.parse_webhook(mock_request)
-
-    # Different event type for same customer should be processed
-    mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_2"
-    form_data["event"] = "renewal_success"
+    # Same customer within dedup window should be marked as duplicate
+    mock_request.headers["X-Chargify-Webhook-Id"] = "different_webhook_id"
+    form_data["event"] = "renewal_success"  # Different event type
     mock_form.to_dict.return_value = form_data
-    event2 = provider.parse_webhook(mock_request)
-    assert event2 is not None
-    assert event2["type"] == "renewal_success"
-    assert event2["customer_id"] == "cust_123"
+    with pytest.raises(InvalidDataError, match="Duplicate webhook for customer"):
+        provider.parse_webhook(mock_request)
 
     # Different customer should be processed
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_3"
     form_data["event"] = "payment_success"
     form_data["payload[subscription][customer][id]"] = "cust_456"
+    form_data["payload[subscription][customer][email]"] = "other@example.com"
     mock_form.to_dict.return_value = form_data
     event3 = provider.parse_webhook(mock_request)
     assert event3 is not None
@@ -462,7 +488,10 @@ def test_chargify_webhook_deduplication():
     # Test cache cleanup - events outside dedup window
     provider._DEDUP_WINDOW_SECONDS = 0  # Set window to 0 to force cleanup
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_4"
+    form_data["payload[subscription][customer][id]"] = "cust_123"  # Back to first customer
+    form_data["payload[subscription][customer][email]"] = "test@example.com"
+    mock_form.to_dict.return_value = form_data
     event4 = provider.parse_webhook(mock_request)
     assert event4 is not None
     assert event4["type"] == "payment_success"
-    assert event4["customer_id"] == "cust_456"
+    assert event4["customer_id"] == "cust_123"

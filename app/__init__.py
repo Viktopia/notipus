@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional
 import os
 import logging
 from flask import Flask
-from pythonjsonlogger.jsonlogger import JsonFormatter
+from pythonjsonlogger.json import JsonFormatter
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from .event_processor import EventProcessor
