@@ -162,91 +162,47 @@ class ActionItem:
 class NotificationSection:
     """Section of a notification message"""
 
-    text: str
+    title: str
+    fields: Dict[str, str]
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"type": "section", "text": {"type": "mrkdwn", "text": self.text}}
+        return {
+            "type": "section",
+            "title": {"type": "plain_text", "text": self.title},
+            "fields": [
+                {"type": "mrkdwn", "text": f"*{k}*\n{v}"}
+                for k, v in self.fields.items()
+            ]
+        }
 
 
 @dataclass
 class Notification:
     """A notification to be sent to Slack"""
 
-    def __init__(
-        self,
-        id: str,
-        status: str,
-        event: PaymentEvent,
-        sections: List[NotificationSection] = None,
-        action_buttons: List[Dict[str, Any]] = None,
-    ):
-        self.id = id
-        self.status = status
-        self.event = event
-        self.sections = sections or []
-        self.action_buttons = action_buttons or []
+    title: str
+    sections: List[NotificationSection]
+    color: str
+    emoji: str
 
     def to_slack_message(self) -> Dict[str, Any]:
         """Convert notification to Slack message format"""
         blocks = []
 
         # Add header
-        title = self._get_title()
-        blocks.append(
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": title},
-            }
-        )
+        blocks.append({
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"{self.emoji} {self.title}"},
+        })
 
         # Add sections
         for section in self.sections:
-            blocks.append(
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": section.text},
-                }
-            )
-
-        # Add action buttons if any
-        if self.action_buttons:
-            blocks.append({"type": "actions", "elements": self.action_buttons})
+            blocks.append(section.to_dict())
 
         return {
             "blocks": blocks,
-            "color": self._get_color(),
+            "color": self.color,
         }
-
-    def _get_title(self) -> str:
-        """Get notification title based on event type"""
-        amount_str = f"${self.event.amount:,.2f}" if self.event.amount else ""
-
-        if self.event.event_type == "payment_success":
-            return f"🎉 Payment Received: {amount_str}"
-        elif self.event.event_type == "payment_failure":
-            return f"🚨 Payment Failed: {amount_str}"
-        elif self.event.event_type == "trial_end":
-            days_left = self.event.metadata.get("days_remaining", "few")
-            return f"📢 Trial Ending in {days_left} Days"
-        elif self.event.event_type == "subscription_update":
-            old_plan = self.event.metadata.get("old_plan", "")
-            new_plan = self.event.metadata.get("new_plan", "")
-            if old_plan and new_plan:
-                return f"📈 Plan Change: {old_plan} → {new_plan}"
-            return "ℹ️ Subscription Updated"
-        else:
-            return "ℹ️ Account Update"
-
-    def _get_color(self) -> str:
-        """Get notification color based on event type"""
-        if self.event.event_type == "payment_success":
-            return "#36a64f"  # Green
-        elif self.event.event_type == "payment_failure":
-            return "#dc3545"  # Red
-        elif self.event.event_type == "trial_end":
-            return "#ffc107"  # Yellow
-        else:
-            return "#17a2b8"  # Blue
 
 
 @dataclass

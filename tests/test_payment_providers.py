@@ -495,3 +495,68 @@ def test_chargify_webhook_deduplication():
     assert event4 is not None
     assert event4["type"] == "payment_success"
     assert event4["customer_id"] == "cust_123"
+
+
+def test_event_processor_notification_formatting():
+    """Test that the EventProcessor correctly formats notifications"""
+    from app.event_processor import EventProcessor
+
+    processor = EventProcessor()
+
+    # Test payment success event
+    event_data = {
+        "type": "payment_success",
+        "status": "completed",
+        "amount": 99.99,
+        "currency": "USD",
+        "timestamp": "2024-01-01T12:00:00Z",
+        "metadata": {
+            "subscription_id": "sub_123",
+            "customer_id": "cust_456"
+        }
+    }
+
+    customer_data = {
+        "company_name": "Acme Corp",
+        "team_size": 50,
+        "plan_name": "Enterprise"
+    }
+
+    notification = processor.format_notification(event_data, customer_data)
+
+    assert notification is not None
+    assert notification.title == "Payment Received: $99.99"
+    assert notification.color == "#36a64f"
+    assert notification.emoji == "🎉"
+    assert len(notification.sections) == 3  # Customer info, event details, metadata
+
+    # Test payment failure event
+    event_data = {
+        "type": "payment_failure",
+        "status": "failed",
+        "amount": 199.99,
+        "currency": "USD",
+        "timestamp": "2024-01-01T12:00:00Z",
+        "metadata": {
+            "failure_reason": "insufficient_funds",
+            "subscription_id": "sub_123"
+        }
+    }
+
+    notification = processor.format_notification(event_data, customer_data)
+
+    assert notification is not None
+    assert notification.title == "Payment Failed: $199.99"
+    assert notification.color == "#dc3545"
+    assert notification.emoji == "🚨"
+    assert len(notification.sections) == 3
+
+    # Test invalid event type
+    event_data["type"] = "invalid_type"
+    notification = processor.format_notification(event_data, customer_data)
+    assert notification is None
+
+    # Test missing customer data
+    event_data["type"] = "payment_success"
+    notification = processor.format_notification(event_data, {})
+    assert notification is None

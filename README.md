@@ -130,3 +130,39 @@ Environment variables are passed to the container at runtime, making it easy to 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Configuration
+
+The application requires the following environment variables:
+
+- `SLACK_WEBHOOK_URL`: The Slack webhook URL to send notifications to
+- `SHOPIFY_WEBHOOK_SECRET`: The webhook secret from your Shopify app settings
+- `CHARGIFY_WEBHOOK_SECRET`: (Optional) The webhook secret from your Chargify settings
+- `SENTRY_DSN`: (Optional) Sentry DSN for error tracking
+- `DEBUG`: Set to "true" to enable debug logging (default: false)
+
+## Debug Logging
+
+To enable verbose debug logging, set the `DEBUG` environment variable to "true":
+
+```bash
+# In development
+export DEBUG=true
+
+# In production (Heroku)
+heroku config:set DEBUG=true
+
+# In Docker
+docker run -e DEBUG=true ...
+```
+
+Debug logs include:
+- Detailed webhook payload contents
+- Signature validation details
+- Customer and subscription data
+- Webhook processing steps
+- Deduplication checks
+
+This is useful for troubleshooting webhook processing issues or understanding the data flow.
+
+Note: Debug logs may contain sensitive information, so use with caution in production environments.
