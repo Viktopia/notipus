@@ -24,7 +24,9 @@ def shopify_webhook():
             return jsonify({"error": "Invalid webhook data"}), 400
 
         # Format notification using event processor
-        notification = current_app.event_processor.format_notification(event_data)
+        notification = current_app.event_processor.format_notification(
+            event_data, event_data.get("customer_data", {})
+        )
         if not notification:
             return jsonify({"error": "Failed to format notification"}), 500
 
@@ -76,7 +78,9 @@ def chargify_webhook():
             return jsonify({"error": "Invalid webhook data"}), 400
 
         # Format notification using event processor
-        notification = current_app.event_processor.format_notification(event_data)
+        notification = current_app.event_processor.format_notification(
+            event_data, event_data.get("customer_data", {})
+        )
         if not notification:
             return jsonify({"error": "Failed to format notification"}), 500
 
