@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app, redirect, url_for
+from flask import Blueprint, jsonify, request, current_app
 import requests
 import sentry_sdk
 from app.providers.base import InvalidDataError
@@ -7,12 +7,6 @@ bp = Blueprint("webhooks", __name__)
 
 
 @bp.route("/webhook/shopify", methods=["POST"])
-def shopify_webhook_redirect():
-    """Redirect singular webhook path to plural form"""
-    return redirect(url_for("webhooks.shopify_webhook"))
-
-
-@bp.route("/webhooks/shopify", methods=["POST"])
 def shopify_webhook():
     """Handle Shopify webhooks"""
     try:
@@ -29,7 +23,7 @@ def shopify_webhook():
         if not event_data:
             return jsonify({"error": "Invalid webhook data"}), 400
 
-        # Format notification
+        # Format notification using event processor
         notification = current_app.event_processor.format_notification(event_data)
         if not notification:
             return jsonify({"error": "Failed to format notification"}), 500
@@ -65,12 +59,6 @@ def shopify_webhook():
 
 
 @bp.route("/webhook/chargify", methods=["POST"])
-def chargify_webhook_redirect():
-    """Redirect singular webhook path to plural form"""
-    return redirect(url_for("webhooks.chargify_webhook"))
-
-
-@bp.route("/webhooks/chargify", methods=["POST"])
 def chargify_webhook():
     """Handle Chargify webhooks"""
     try:
@@ -87,7 +75,7 @@ def chargify_webhook():
         if not event_data:
             return jsonify({"error": "Invalid webhook data"}), 400
 
-        # Format notification
+        # Format notification using event processor
         notification = current_app.event_processor.format_notification(event_data)
         if not notification:
             return jsonify({"error": "Failed to format notification"}), 500

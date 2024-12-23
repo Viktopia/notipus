@@ -85,6 +85,21 @@ class PaymentEvent:
         if not isinstance(self.timestamp, datetime):
             raise ValueError("Timestamp must be a datetime object")
 
+    def __getitem__(self, key: str) -> Any:
+        """Support dictionary-like access to event data"""
+        if hasattr(self, key):
+            return getattr(self, key)
+        if key in self.metadata:
+            return self.metadata[key]
+        raise KeyError(f"'{key}' not found in event data")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get event data with a default value"""
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
 
 @dataclass
 class CustomerInsight:

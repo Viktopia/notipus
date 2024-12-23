@@ -7,7 +7,8 @@ LABEL fly_launch_runtime="flask"
 # Install Poetry
 ENV POETRY_HOME="/opt/poetry" \
     POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false
+    POETRY_VIRTUALENVS_CREATE=false \
+    PYTHONUNBUFFERED=1
 
 RUN pip install poetry
 
@@ -22,4 +23,5 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["poetry", "run", "flask", "run", "--host=0.0.0.0", "--port=8080"]
+# Use Gunicorn instead of Flask development server
+CMD ["poetry", "run", "gunicorn", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "app:create_app()"]

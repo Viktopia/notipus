@@ -71,8 +71,8 @@ poetry run python -m app.main
 ```
 
 2. Configure webhooks in Shopify and Chargify to point to your endpoints:
-- Shopify: `https://your-domain/webhooks/shopify`
-- Chargify: `https://your-domain/webhooks/chargify`
+- Shopify: `https://your-domain/webhook/shopify`
+- Chargify: `https://your-domain/webhook/chargify`
 
 ## Development
 
