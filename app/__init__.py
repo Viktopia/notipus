@@ -55,18 +55,17 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     required_config = [
         "SLACK_WEBHOOK_URL",
         "SHOPIFY_WEBHOOK_SECRET",
-        "SHOPIFY_SHOP_URL",
-        "SHOPIFY_ACCESS_TOKEN",
     ]
     missing_config = [key for key in required_config if not app.config.get(key)]
     if missing_config:
         raise ValueError(f"Missing required configuration: {', '.join(missing_config)}")
 
-    # Initialize Shopify API
-    shop_url = app.config["SHOPIFY_SHOP_URL"]
-    access_token = app.config["SHOPIFY_ACCESS_TOKEN"]
-    session = shopify.Session(shop_url, "2024-01", access_token)
-    shopify.ShopifyResource.activate_session(session)
+    # Initialize Shopify API if credentials are provided
+    shop_url = app.config.get("SHOPIFY_SHOP_URL")
+    access_token = app.config.get("SHOPIFY_ACCESS_TOKEN")
+    if shop_url and access_token:
+        session = shopify.Session(shop_url, "2024-01", access_token)
+        shopify.ShopifyResource.activate_session(session)
 
     # Register blueprints
     from app.routes import bp as webhooks_bp
