@@ -11,20 +11,32 @@ class WebhookValidationError(Exception):
     pass
 
 
-class InvalidDataError(Exception):
-    """Raised when data is invalid or malformed"""
+class WebhookError(Exception):
+    """Base class for webhook errors"""
 
     pass
 
 
-class CustomerNotFoundError(Exception):
-    """Raised when customer is not found"""
+class InvalidDataError(WebhookError):
+    """Raised when webhook data is invalid"""
+
+    pass
+
+
+class CustomerNotFoundError(WebhookError):
+    """Raised when customer data cannot be found"""
 
     pass
 
 
 class APIError(Exception):
     """Raised when API request fails"""
+
+    pass
+
+
+class InvalidEventType(WebhookError):
+    """Raised when event type is not supported"""
 
     pass
 

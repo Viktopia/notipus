@@ -1,237 +1,99 @@
 import json
-from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 import pytest
-from app import create_app
 import requests
-from app.models import Notification, NotificationSection, PaymentEvent
-from app.providers.base import InvalidDataError
+from app import create_app
+from app.models import Notification, Section
+from app.event_processor import EventProcessor
+from app.providers import ChargifyProvider, ShopifyProvider
 
 
 @pytest.fixture
 def mock_webhook_validation(monkeypatch):
-    """Mock webhook validation and notification formatting"""
+    """Mock webhook validation and parsing"""
 
-    def mock_validate(self, request):
-        return True
-
-    def mock_parse_shopify_webhook(self, request, **kwargs):
-        data = request.get_json()
-        webhook_topic = request.headers.get("X-Shopify-Topic", "orders/create")
-
-        if not data:
-            raise InvalidDataError("Missing required fields")
-
-        if webhook_topic.startswith("orders/"):
-            if "customer" not in data:
-                raise InvalidDataError("Missing required fields")
-
-            customer = data["customer"]
-            # Extract team size from line items properties if available
-            team_size = 0
-            plan_name = "Unknown"
-            for item in data.get("line_items", []):
-                for prop in item.get("properties", []):
-                    if prop.get("name") == "team_size":
-                        try:
-                            team_size = int(prop.get("value", 0))
-                        except ValueError:
-                            pass
-                    elif prop.get("name") == "plan_type":
-                        plan_name = prop.get("value", "Unknown")
-
-            return {
-                "id": str(data["id"]),
-                "type": webhook_topic.replace("/", "_"),
-                "customer_id": str(customer["id"]),
-                "amount": float(data["total_price"]),
-                "currency": data["currency"],
-                "status": "success" if data["financial_status"] == "paid" else "failed",
-                "timestamp": data["created_at"],
-                "metadata": {
-                    "source": "shopify",
-                    "shop_domain": request.headers.get("X-Shopify-Shop-Domain"),
-                    "order_number": data["order_number"],
-                    "order_id": data["id"],
-                    "customer_email": customer.get("email"),
-                    "customer_name": (
-                        f"{customer.get('first_name', '')} "
-                        f"{customer.get('last_name', '')}"
-                    ).strip(),
-                    "plan_type": plan_name,
-                },
-                "customer_data": {
-                    "company_name": customer.get("company", "Unknown"),
-                    "team_size": team_size,
-                    "plan_name": data.get("line_items", [{}])[0].get(
-                        "title", "Unknown"
-                    ),
-                },
-            }
-        elif webhook_topic.startswith("customers/"):
-            if "id" not in data:
-                raise InvalidDataError("Missing required fields")
-
-            # Extract team size and plan type from metafields if available
-            team_size = 0
-            plan_name = "Unknown"
-            for metafield in data.get("metafields", []):
-                if (
-                    metafield.get("namespace") == "customer"
-                    and metafield.get("key") == "team_size"
-                ):
-                    try:
-                        team_size = int(metafield.get("value", 0))
-                    except ValueError:
-                        pass
-                elif (
-                    metafield.get("namespace") == "subscription"
-                    and metafield.get("key") == "plan_type"
-                ):
-                    plan_name = metafield.get("value", "Unknown")
-
-            return {
-                "id": str(data["id"]),
-                "type": webhook_topic.replace("/", "_"),
-                "customer_id": str(data["id"]),
-                "amount": float(data.get("total_spent", 0)),
-                "currency": "USD",
-                "status": "success",
-                "timestamp": data["updated_at"],
-                "metadata": {
-                    "source": "shopify",
-                    "shop_domain": request.headers.get("X-Shopify-Shop-Domain"),
-                    "customer_email": data.get("email"),
-                    "customer_name": (
-                        f"{data.get('first_name', '')} {data.get('last_name', '')}"
-                    ).strip(),
-                    "tags": data.get("tags", []),
-                    "orders_count": data.get("orders_count", 0),
-                    "plan_type": plan_name,
-                },
-                "customer_data": {
-                    "company_name": data.get("company", "Unknown"),
-                    "team_size": team_size,
-                    "plan_name": plan_name,
-                },
-            }
-
-    def mock_parse_chargify_webhook(self, request):
-        if request.content_type != "application/x-www-form-urlencoded":
-            raise InvalidDataError("Invalid content type")
-
-        data = request.form.to_dict()
-        if not data:
-            raise InvalidDataError("Empty webhook data")
-
-        event_type = data.get("event")
-        if not event_type:
-            raise InvalidDataError("Missing required fields")
-
-        customer_id = data.get("payload[subscription][customer][id]")
-        if not customer_id:
-            raise InvalidDataError("Missing required fields")
-
-        status = "success"
-
-        if "failure" in event_type:
-            status = "failed"
-        elif event_type == "subscription_state_change":
-            status = data.get("payload[subscription][state]", "unknown")
-
-        # Build metadata
-        metadata = {
-            "source": "chargify",
-            "subscription_id": data.get("payload[subscription][id]"),
-            "customer_email": data["payload[subscription][customer][email]"],
-            "customer_name": (
-                f"{data.get('payload[subscription][customer][first_name]', '')} "
-                f"{data.get('payload[subscription][customer][last_name]', '')}"
-            ).strip(),
-        }
-
-        # Add failure reason if available
-        if status == "failed":
-            failure_reason = (
-                data.get("payload[transaction][failure_message]")
-                or data.get("payload[transaction][memo]")
-                or "Unknown error"
-            )
-            metadata["failure_reason"] = failure_reason
-
-        # Add subscription state change metadata
-        if event_type == "subscription_state_change":
-            metadata["cancel_at_period_end"] = (
-                data.get("payload[subscription][cancel_at_end_of_period]") == "true"
-            )
-
-        return {
-            "id": f"evt_{customer_id}_{data.get('id', '')}",
-            "type": event_type,
-            "customer_id": str(customer_id),
-            "amount": float(data.get("payload[transaction][amount_in_cents]", 0)) / 100,
-            "currency": "USD",
-            "status": status,
-            "timestamp": data.get("created_at"),
-            "metadata": metadata,
-            "customer_data": {
-                "company_name": data.get(
-                    "payload[subscription][customer][organization]", "Unknown"
-                ),
-                "team_size": 0,
-                "plan_name": data.get(
-                    "payload[subscription][product][name]", "Unknown"
-                ),
-            },
-        }
-
-    def mock_format_notification(*args, **kwargs):
+    def mock_format_notification(event_data, customer_data):
         """Mock notification formatting"""
-        # Extract event data from either positional or keyword args
-        event_data = kwargs.get("event") if "event" in kwargs else args[0]
+        if not event_data or not customer_data:
+            raise ValueError("Missing required data")
 
-        # Create PaymentEvent object
-        try:
-            timestamp = datetime.fromisoformat(
-                event_data["timestamp"].replace("Z", "+00:00")
+        # Map event types
+        event_type = event_data.get("type")
+        if event_type == "subscription_state_change":
+            event_type = "subscription_canceled"
+        elif event_type == "customers/update":
+            event_type = "customer_updated"
+
+        if event_type not in EventProcessor.VALID_EVENT_TYPES:
+            raise ValueError("Invalid event type")
+
+        title = "Test Notification"
+        sections = []
+
+        if event_type == "payment_failure":
+            title = "Payment Failed"
+            sections = [
+                Section(
+                    title="Payment Details",
+                    fields={
+                        "Status": "Failed",
+                        "Amount": f"${event_data.get('amount', 0):.2f}",
+                    },
+                )
+            ]
+        elif event_data.get("type") == "payment_success":
+            title = "Payment Received"
+            sections = [
+                Section(
+                    title="Payment Details",
+                    fields={
+                        "Status": "Success",
+                        "Amount": f"${event_data.get('amount', 0):.2f}",
+                    },
+                )
+            ]
+        elif event_data.get("type") == "subscription_cancelled":
+            title = "Subscription Cancelled"
+            sections = [
+                Section(
+                    title="Subscription Details",
+                    fields={
+                        "Status": "Cancelled",
+                        "Plan": event_data.get("plan_name", "Unknown"),
+                    },
+                )
+            ]
+        else:
+            sections = [
+                Section(
+                    title="Event Details",
+                    fields={
+                        "Type": event_data.get("type", "Unknown"),
+                        "Status": event_data.get("status", "Unknown"),
+                    },
+                )
+            ]
+
+        sections.append(
+            Section(
+                title="Customer Details",
+                fields={
+                    "Company": customer_data.get("company_name", "Unknown"),
+                    "Email": customer_data.get("email", "Unknown"),
+                },
             )
-        except (ValueError, TypeError, KeyError):
-            timestamp = datetime.now()
-
-        payment_event = PaymentEvent(
-            id=event_data["id"],
-            event_type=event_data["type"],
-            customer_id=event_data["customer_id"],
-            amount=event_data["amount"],
-            currency=event_data["currency"],
-            status=event_data["status"],
-            timestamp=timestamp,
-            metadata=event_data["metadata"],
         )
 
-        return Notification(
-            id=payment_event.id,
-            status=payment_event.status,
-            event=payment_event,
-            sections=[NotificationSection(text="Test notification")],
-            action_buttons=[],
+        notification = Notification(
+            title=title,
+            sections=sections,
+            color="#36a64f",  # Green for success
+            emoji="🎉",
         )
+        notification.status = event_data.get("status", "info")
+        return notification
 
-    monkeypatch.setattr(
-        "app.providers.chargify.ChargifyProvider.validate_webhook", mock_validate
-    )
-    monkeypatch.setattr(
-        "app.providers.shopify.ShopifyProvider.validate_webhook", mock_validate
-    )
-    monkeypatch.setattr(
-        "app.providers.chargify.ChargifyProvider.parse_webhook",
-        mock_parse_chargify_webhook,
-    )
-    monkeypatch.setattr(
-        "app.providers.shopify.ShopifyProvider.parse_webhook",
-        mock_parse_shopify_webhook,
-    )
     monkeypatch.setattr(
         "app.event_processor.EventProcessor.format_notification",
         mock_format_notification,
@@ -248,14 +110,18 @@ def app(mock_webhook_validation):
         "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
         "CHARGIFY_WEBHOOK_SECRET": "test_secret",
         "SHOPIFY_WEBHOOK_SECRET": "test_secret",
+        "SHOPIFY_SHOP_URL": "test.myshopify.com",
+        "SHOPIFY_ACCESS_TOKEN": "test_token",
     }
     app = create_app(test_config)
 
-    # Initialize providers
-    from app.providers import ChargifyProvider, ShopifyProvider
-
+    # Initialize providers with mocked validation
     app.chargify_provider = ChargifyProvider(webhook_secret="test_secret")
     app.shopify_provider = ShopifyProvider(webhook_secret="test_secret")
+
+    # Mock validate_webhook for both providers
+    app.chargify_provider.validate_webhook = lambda x: True
+    app.shopify_provider.validate_webhook = lambda x: True
 
     # Mock the event processor
     processor = MagicMock()

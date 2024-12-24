@@ -1,92 +1,158 @@
 import pytest
-from unittest.mock import MagicMock
+import json
+from unittest.mock import Mock, patch
+from flask import Request
 
 
-@pytest.fixture(autouse=True)
-def mock_env_vars(monkeypatch):
-    """Mock environment variables for testing."""
-    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/test")
-    monkeypatch.setenv("CHARGIFY_WEBHOOK_SECRET", "test_secret")
-    monkeypatch.setenv("SHOPIFY_WEBHOOK_SECRET", "test_secret")
+@pytest.fixture
+def mock_webhook_validation():
+    """Mock webhook validation for tests"""
+
+    def mock_format_notification(*args, **kwargs):
+        return {"blocks": [], "color": "#28a745"}
+
+    with patch(
+        "app.event_processor.EventProcessor.format_notification",
+        mock_format_notification,
+    ):
+        yield mock_format_notification
+
+
+@pytest.fixture
+def app():
+    """Create a test Flask app"""
+    test_config = {
+        "TESTING": True,
+        "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
+        "CHARGIFY_WEBHOOK_SECRET": "test_secret",
+        "SHOPIFY_WEBHOOK_SECRET": "test_secret",
+        "SHOPIFY_SHOP_URL": "test.myshopify.com",
+        "SHOPIFY_ACCESS_TOKEN": "test_token",
+    }
+    from app import create_app
+
+    app = create_app(test_config)
+    return app
+
+
+@pytest.fixture
+def client(app):
+    """Create a test client"""
+    return app.test_client()
 
 
 @pytest.fixture
 def mock_slack_response():
-    """Mock successful Slack API response."""
-    response = MagicMock()
-    response.status_code = 200
-    response.raise_for_status.return_value = None
-    return response
+    """Mock successful Slack API response"""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"ok": True}
+    return mock_response
 
 
 @pytest.fixture
-def mock_failed_slack_response():
-    """Mock failed Slack API response."""
-    response = MagicMock()
-    response.status_code = 500
-    response.raise_for_status.side_effect = Exception("Slack API error")
-    return response
-
-
-@pytest.fixture
-def sample_shopify_order():
-    """Sample Shopify order data."""
-    return {
-        "id": "123",
-        "contact_email": "john.doe@example.com",
-        "created_at": "2024-03-15T10:00:00Z",
-        "currency": "USD",
+def mock_shopify_request():
+    """Mock Shopify webhook request"""
+    mock_request = Mock(spec=Request)
+    mock_request.content_type = "application/json"
+    mock_request.headers = {
+        "X-Shopify-Topic": "orders/paid",
+        "X-Shopify-Shop-Domain": "test.myshopify.com",
+        "X-Shopify-Hmac-SHA256": "test_signature",
+        "X-Shopify-Order-Id": "123456789",
+        "X-Shopify-Api-Version": "2024-01",
+    }
+    mock_data = {
+        "id": 123456789,
+        "order_number": 1001,
         "customer": {
-            "id": "456",
-            "first_name": "John",
-            "last_name": "Doe",
-            "email": "john.doe@example.com",
+            "id": 456,
+            "email": "test@example.com",
+            "first_name": "Test",
+            "last_name": "User",
+            "company": "Test Company",
+            "orders_count": 5,
+            "total_spent": "299.95",
         },
         "total_price": "29.99",
+        "currency": "USD",
         "financial_status": "paid",
     }
+    mock_request.data = json.dumps(mock_data).encode("utf-8")
+    mock_request.get_json.return_value = mock_data
+    return mock_request
 
 
 @pytest.fixture
-def sample_chargify_payment():
-    """Sample Chargify payment data."""
-    return {
-        "id": "67890",
+def mock_shopify_customer_request():
+    """Mock Shopify customer webhook request"""
+    mock_request = Mock(spec=Request)
+    mock_request.content_type = "application/json"
+    mock_request.headers = {
+        "X-Shopify-Topic": "customers/update",
+        "X-Shopify-Shop-Domain": "test.myshopify.com",
+        "X-Shopify-Hmac-SHA256": "test_signature",
+    }
+    mock_data = {
+        "id": 456,
+        "email": "test@example.com",
+        "accepts_marketing": True,
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-03-15T10:00:00Z",
+        "first_name": "Test",
+        "last_name": "User",
+        "company": "Updated Company Name",
+        "orders_count": 10,
+        "total_spent": "599.90",
+        "note": "Enterprise customer, upgraded plan",
+        "tags": ["enterprise", "priority", "annual"],
+        "addresses": [
+            {
+                "id": 1,
+                "company": "Updated Company Name",
+                "country": "United States",
+                "country_code": "US",
+            }
+        ],
+        "metafields": [
+            {
+                "key": "team_size",
+                "value": "50",
+                "namespace": "customer",
+            },
+            {
+                "key": "plan_type",
+                "value": "enterprise_annual",
+                "namespace": "subscription",
+            },
+        ],
+    }
+    mock_request.data = json.dumps(mock_data).encode("utf-8")
+    mock_request.get_json.return_value = mock_data
+    return mock_request
+
+
+@pytest.fixture
+def mock_chargify_request():
+    """Mock Chargify webhook request"""
+    mock_request = Mock(spec=Request)
+    mock_request.content_type = "application/x-www-form-urlencoded"
+    mock_request.headers = {
+        "X-Chargify-Webhook-Id": "test_webhook_1",
+        "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
+    }
+    mock_request.form = Mock()
+    mock_request.form.to_dict.return_value = {
         "event": "payment_success",
+        "id": "12345",
+        "payload[subscription][id]": "sub_789",
         "payload[subscription][customer][id]": "cust_123",
-        "payload[subscription][customer][email]": "jane.smith@example.com",
-        "payload[subscription][customer][first_name]": "Jane",
-        "payload[subscription][customer][last_name]": "Smith",
-        "payload[transaction][amount_in_cents]": "2999",
+        "payload[subscription][customer][email]": "test@example.com",
+        "payload[subscription][customer][first_name]": "Test",
+        "payload[subscription][customer][last_name]": "User",
+        "payload[subscription][customer][organization]": "Test Co",
+        "payload[subscription][product][name]": "Enterprise Plan",
+        "payload[transaction][amount_in_cents]": "10000",
         "created_at": "2024-03-15T10:00:00Z",
     }
-
-
-@pytest.fixture
-def sample_chargify_failure():
-    """Sample Chargify payment failure data."""
-    return {
-        "id": "67891",
-        "event": "payment_failure",
-        "payload[subscription][customer][id]": "cust_456",
-        "payload[subscription][customer][email]": "alice.j@example.com",
-        "payload[subscription][customer][first_name]": "Alice",
-        "payload[subscription][customer][last_name]": "Johnson",
-        "payload[transaction][amount_in_cents]": "4999",
-        "retry_count": "2",
-        "created_at": "2024-03-15T10:00:00Z",
-    }
-
-
-@pytest.fixture
-def sample_chargify_trial_end():
-    """Sample Chargify trial end data."""
-    return {
-        "id": "67892",
-        "event": "trial_end",
-        "payload[subscription][customer][id]": "cust_789",
-        "payload[subscription][customer][email]": "bob.w@example.com",
-        "payload[subscription][customer][first_name]": "Bob",
-        "payload[subscription][customer][last_name]": "Wilson",
-        "created_at": "2024-03-15T10:00:00Z",
-    }
+    return mock_request

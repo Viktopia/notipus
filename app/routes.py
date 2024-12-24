@@ -1,8 +1,8 @@
-from flask import Blueprint, jsonify, request, current_app
-import requests
-import sentry_sdk
-from app.providers.base import InvalidDataError
+import logging
+from flask import Blueprint, request, jsonify, current_app
+from .providers.base import InvalidDataError
 
+logger = logging.getLogger(__name__)
 bp = Blueprint("webhooks", __name__)
 
 
@@ -10,53 +10,39 @@ bp = Blueprint("webhooks", __name__)
 def shopify_webhook():
     """Handle Shopify webhooks"""
     try:
-        # Check for required headers
-        if not request.headers.get("X-Shopify-Topic"):
-            return jsonify({"error": "Missing webhook topic"}), 400
+        provider = current_app.shopify_provider
 
-        # Validate webhook signature
-        if not current_app.shopify_provider.validate_webhook(request):
+        # Validate webhook
+        if not provider.validate_webhook(request):
             return jsonify({"error": "Invalid webhook signature"}), 401
 
         # Parse webhook data
-        event_data = current_app.shopify_provider.parse_webhook(request)
+        event_data = provider.parse_webhook(request)
         if not event_data:
-            return jsonify({"error": "Invalid webhook data"}), 400
+            return jsonify(
+                {"status": "success", "message": "Test webhook received"}
+            ), 200
 
-        # Format notification using event processor
+        # Get customer data
+        customer_data = provider.get_customer_data(event_data["customer_id"])
+
+        # Format notification
         notification = current_app.event_processor.format_notification(
-            event_data, event_data.get("customer_data", {})
+            event_data, customer_data
         )
-        if not notification:
-            return jsonify({"error": "Failed to format notification"}), 500
 
         # Send to Slack
-        response = requests.post(
-            current_app.config["SLACK_WEBHOOK_URL"],
-            json=notification.to_slack_message(),
-            timeout=5,
-        )
-        response.raise_for_status()
+        current_app.slack_client.send_notification(notification)
 
-        return jsonify({"status": "success"}), 200
+        return jsonify(
+            {"status": "success", "message": "Webhook processed successfully"}
+        ), 200
 
     except InvalidDataError as e:
-        # Don't report validation errors to Sentry
+        logger.warning("Invalid webhook data", exc_info=True)
         return jsonify({"error": str(e)}), 400
-    except requests.exceptions.RequestException as e:
-        # Report Slack API errors to Sentry
-        sentry_sdk.capture_exception(e)
-        return jsonify({"error": f"Failed to send notification: {str(e)}"}), 500
     except Exception as e:
-        # Report unexpected errors to Sentry with context
-        sentry_sdk.set_context(
-            "webhook_data",
-            {
-                "headers": dict(request.headers),
-                "content_type": request.content_type,
-            },
-        )
-        sentry_sdk.capture_exception(e)
+        logger.error("Server error in Shopify webhook", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
@@ -64,53 +50,49 @@ def shopify_webhook():
 def chargify_webhook():
     """Handle Chargify webhooks"""
     try:
-        # Check content type
-        if request.content_type != "application/x-www-form-urlencoded":
-            return jsonify({"error": "Invalid content type"}), 400
+        provider = current_app.chargify_provider
 
-        # Validate webhook signature
-        if not current_app.chargify_provider.validate_webhook(request):
+        # Log webhook data for debugging
+        logger.info(
+            "Parsing Chargify webhook data",
+            extra={
+                "content_type": request.content_type,
+                "form_data": request.form.to_dict(),
+                "headers": dict(request.headers),
+            },
+        )
+
+        # Validate webhook
+        if not provider.validate_webhook(request):
             return jsonify({"error": "Invalid webhook signature"}), 401
 
         # Parse webhook data
-        event_data = current_app.chargify_provider.parse_webhook(request)
+        event_data = provider.parse_webhook(request)
         if not event_data:
-            return jsonify({"error": "Invalid webhook data"}), 400
+            return jsonify(
+                {"status": "success", "message": "Test webhook received"}
+            ), 200
 
-        # Format notification using event processor
+        # Get customer data
+        customer_data = provider.get_customer_data(event_data["customer_id"])
+
+        # Format notification
         notification = current_app.event_processor.format_notification(
-            event_data, event_data.get("customer_data", {})
+            event_data, customer_data
         )
-        if not notification:
-            return jsonify({"error": "Failed to format notification"}), 500
 
         # Send to Slack
-        response = requests.post(
-            current_app.config["SLACK_WEBHOOK_URL"],
-            json=notification.to_slack_message(),
-            timeout=5,
-        )
-        response.raise_for_status()
+        current_app.slack_client.send_notification(notification)
 
-        return jsonify({"status": "success"}), 200
+        return jsonify(
+            {"status": "success", "message": "Webhook processed successfully"}
+        ), 200
 
     except InvalidDataError as e:
-        # Don't report validation errors to Sentry
+        logger.warning("Invalid webhook data", exc_info=True)
         return jsonify({"error": str(e)}), 400
-    except requests.exceptions.RequestException as e:
-        # Report Slack API errors to Sentry
-        sentry_sdk.capture_exception(e)
-        return jsonify({"error": f"Failed to send notification: {str(e)}"}), 500
     except Exception as e:
-        # Report unexpected errors to Sentry with context
-        sentry_sdk.set_context(
-            "webhook_data",
-            {
-                "headers": dict(request.headers),
-                "content_type": request.content_type,
-            },
-        )
-        sentry_sdk.capture_exception(e)
+        logger.error("Server error in Chargify webhook", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 

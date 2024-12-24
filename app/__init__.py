@@ -5,8 +5,10 @@ from flask import Flask
 from pythonjsonlogger.json import JsonFormatter
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
+import shopify
 from .event_processor import EventProcessor
 from .providers import ChargifyProvider, ShopifyProvider
+from .slack_client import SlackClient
 
 # Configure logging
 logger = logging.getLogger()
@@ -40,6 +42,8 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
         SLACK_WEBHOOK_URL=os.getenv("SLACK_WEBHOOK_URL"),
         CHARGIFY_WEBHOOK_SECRET=os.getenv("CHARGIFY_WEBHOOK_SECRET"),
         SHOPIFY_WEBHOOK_SECRET=os.getenv("SHOPIFY_WEBHOOK_SECRET"),
+        SHOPIFY_SHOP_URL=os.getenv("SHOPIFY_SHOP_URL"),
+        SHOPIFY_ACCESS_TOKEN=os.getenv("SHOPIFY_ACCESS_TOKEN"),
         DEBUG=debug_mode,
     )
 
@@ -51,10 +55,18 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     required_config = [
         "SLACK_WEBHOOK_URL",
         "SHOPIFY_WEBHOOK_SECRET",
+        "SHOPIFY_SHOP_URL",
+        "SHOPIFY_ACCESS_TOKEN",
     ]
     missing_config = [key for key in required_config if not app.config.get(key)]
     if missing_config:
         raise ValueError(f"Missing required configuration: {', '.join(missing_config)}")
+
+    # Initialize Shopify API
+    shop_url = app.config["SHOPIFY_SHOP_URL"]
+    access_token = app.config["SHOPIFY_ACCESS_TOKEN"]
+    session = shopify.Session(shop_url, "2024-01", access_token)
+    shopify.ShopifyResource.activate_session(session)
 
     # Register blueprints
     from app.routes import bp as webhooks_bp
@@ -69,5 +81,6 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
         webhook_secret=app.config["SHOPIFY_WEBHOOK_SECRET"]
     )
     app.event_processor = EventProcessor()
+    app.slack_client = SlackClient(webhook_url=app.config["SLACK_WEBHOOK_URL"])
 
     return app

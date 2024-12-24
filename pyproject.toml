@@ -17,6 +17,7 @@ python-dotenv = "^1.0.1"
 sentry-sdk = {extras = ["flask"], version = "^2.19.2"}
 python-json-logger = "^3.2.1"
 gunicorn = "^21.2.0"
+expiringdict = "^1.2.2"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -24,6 +25,11 @@ pytest = "^8.3.4"
 pytest-cov = "^6.0.0"
 ruff = "^0.8.4"
 pre-commit = "^4.0.1"
+black = "^24.2.0"
+isort = "^5.13.2"
+flake8 = "^7.0.0"
+mypy = "^1.8.0"
+types-requests = "^2.31.0.20240218"
 
 [build-system]
 requires = ["poetry-core"]

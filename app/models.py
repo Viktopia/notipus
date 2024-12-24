@@ -56,37 +56,45 @@ class FeatureUsage:
 
 @dataclass
 class PaymentEvent:
-    """Represents a payment-related event"""
+    """Represents a payment-related event from any payment provider"""
 
-    id: str
-    event_type: str  # "payment_success", "payment_failure", "trial_end", etc.
-    customer_id: str
-    amount: float
-    currency: str
-    status: str
-    timestamp: datetime
-    subscription_id: Optional[str] = None
-    error_message: Optional[str] = None
-    retry_count: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self):
-        """Validate event data"""
-        if not self.event_type:
+    def __init__(
+        self,
+        id: str,
+        event_type: str,
+        customer_id: str,
+        amount: float,
+        currency: str,
+        status: str,
+        timestamp: datetime,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        if not event_type:
             raise ValueError("Event type is required")
-        if not self.customer_id:
+        if not customer_id:
             raise ValueError("Customer ID is required")
-        if self.amount < 0:
+        if amount < 0:
             raise ValueError("Amount cannot be negative")
-        if not self.currency or len(self.currency) != 3:
+        if not currency or len(currency) != 3:
             raise ValueError("Invalid currency code")
-        if not self.status:
+        if not status:
             raise ValueError("Status is required")
-        if not isinstance(self.timestamp, datetime):
+        if not isinstance(timestamp, datetime):
             raise ValueError("Timestamp must be a datetime object")
+
+        self.id = id
+        self.event_type = event_type
+        self.customer_id = customer_id
+        self.amount = amount
+        self.currency = currency
+        self.status = status
+        self.timestamp = timestamp
+        self.metadata = metadata or {}
 
     def __getitem__(self, key: str) -> Any:
         """Support dictionary-like access to event data"""
+        if key == "type":
+            return self.event_type
         if hasattr(self, key):
             return getattr(self, key)
         if key in self.metadata:
@@ -172,37 +180,98 @@ class NotificationSection:
             "fields": [
                 {"type": "mrkdwn", "text": f"*{k}*\n{v}"}
                 for k, v in self.fields.items()
-            ]
+            ],
         }
 
 
 @dataclass
 class Notification:
-    """A notification to be sent to Slack"""
+    """Slack notification message"""
 
     title: str
     sections: List[NotificationSection]
-    color: str
-    emoji: str
+    color: str = "#17a2b8"  # Default info color
+    emoji: str = "ℹ️"  # Default info emoji
+    action_buttons: List[Dict[str, str]] = field(default_factory=list)
+    _status: str = field(default="info", init=False)
+
+    def __post_init__(self):
+        """Initialize status based on color"""
+        self._status = self._get_status_from_color(self.color)
 
     def to_slack_message(self) -> Dict[str, Any]:
-        """Convert notification to Slack message format"""
+        """Convert to Slack message format"""
         blocks = []
 
-        # Add header
-        blocks.append({
-            "type": "header",
-            "text": {"type": "plain_text", "text": f"{self.emoji} {self.title}"},
-        })
+        # Add title block with emoji
+        blocks.append(
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"{self.emoji} {self.title}",
+                    "emoji": True,
+                },
+            }
+        )
 
         # Add sections
         for section in self.sections:
             blocks.append(section.to_dict())
 
+        # Add action buttons if any
+        if self.action_buttons:
+            blocks.append(
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": button["text"]},
+                            "url": button["url"],
+                            "style": button.get("style", "default"),
+                        }
+                        for button in self.action_buttons
+                    ],
+                }
+            )
+
         return {
             "blocks": blocks,
             "color": self.color,
         }
+
+    @property
+    def status(self) -> str:
+        """Get notification status"""
+        return self._status
+
+    @status.setter
+    def status(self, value: str) -> None:
+        """Set notification status and update color"""
+        self._status = value
+        self.color = self._get_color_from_status(value)
+
+    def _get_status_from_color(self, color: str) -> str:
+        """Map color to status"""
+        color_map = {
+            "#28a745": "success",
+            "#dc3545": "failed",
+            "#ffc107": "warning",
+            "#17a2b8": "info",
+        }
+        return color_map.get(color, "info")
+
+    def _get_color_from_status(self, status: str) -> str:
+        """Map status to color"""
+        status_map = {
+            "success": "#28a745",
+            "failed": "#dc3545",
+            "error": "#dc3545",
+            "warning": "#ffc107",
+            "info": "#17a2b8",
+        }
+        return status_map.get(status.lower(), "#17a2b8")
 
 
 @dataclass

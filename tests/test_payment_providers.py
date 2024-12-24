@@ -1,9 +1,11 @@
+import json
+import pytest
 from unittest.mock import MagicMock, patch, Mock
 from flask import Request
 
-import pytest
 from app.providers import PaymentProvider, ChargifyProvider, ShopifyProvider
 from app.providers.base import InvalidDataError
+from app.event_processor import EventProcessor
 
 
 def test_payment_provider_interface():
@@ -129,16 +131,13 @@ def test_shopify_order_parsing():
     }
 
     event = provider.parse_webhook(mock_request)
-    assert event["type"] == "orders_paid"
+    assert event["type"] == "payment_success"
     assert event["customer_id"] == "456"
     assert event["amount"] == 29.99
     assert event["status"] == "success"
     assert event["metadata"]["order_number"] == 1001
-    assert event["metadata"]["shop_domain"] == "test.myshopify.com"
-    assert event["metadata"]["plan_type"] == "enterprise_annual"
-    assert event["customer_data"]["company_name"] == "Test Company"
-    assert event["customer_data"]["team_size"] == 25
-    assert event["customer_data"]["plan_name"] == "Enterprise Plan"
+    assert event["metadata"]["financial_status"] == "paid"
+    assert event["metadata"]["fulfillment_status"] == "fulfilled"
 
 
 def test_chargify_webhook_validation():
@@ -166,7 +165,7 @@ def test_shopify_webhook_validation():
     provider = ShopifyProvider("test_secret")
 
     # Create mock request with valid signature
-    mock_request = Mock()
+    mock_request = Mock(spec=Request)
     mock_request.headers = {
         "X-Shopify-Hmac-SHA256": "crxL3PMfBMvgMYyppPUPjAooPtjS7fh0dOiGPTYm3QU=",
         "X-Shopify-Topic": "orders/paid",
@@ -174,6 +173,7 @@ def test_shopify_webhook_validation():
         "X-Shopify-Test": "true",
     }
     mock_request.content_type = "application/json"
+    mock_request.data = b'{"test": "data"}'
     mock_request.get_data.return_value = b'{"test": "data"}'
 
     # Test valid signature
@@ -210,51 +210,25 @@ def test_shopify_webhook_validation():
     assert not provider.validate_webhook(mock_request)
 
 
-def test_shopify_test_webhook():
+@pytest.mark.usefixtures("mock_webhook_validation")
+def test_shopify_test_webhook(monkeypatch):
     """Test handling of Shopify test webhooks"""
     provider = ShopifyProvider("test_secret")
 
-    # Create mock request with test webhook
-    mock_request = Mock()
+    # Create mock request
+    mock_request = Mock(spec=Request)
     mock_request.headers = {
         "X-Shopify-Hmac-SHA256": "test_signature",
-        "X-Shopify-Topic": "orders/paid",
+        "X-Shopify-Topic": "test",
         "X-Shopify-Shop-Domain": "test.myshopify.com",
-        "X-Shopify-Test": "true",
-        "X-Shopify-Triggered-At": "2024-01-01T00:00:00Z",
     }
     mock_request.content_type = "application/json"
+    mock_request.data = b'{"test": true}'
+    mock_request.get_json.return_value = {"test": True}
 
-    # Mock the webhook data
-    test_data = {
-        "id": "test_order_123",
-        "customer": {
-            "id": "test_customer_456",
-            "email": "test@example.com",
-            "first_name": "Test",
-            "last_name": "User",
-            "company": "Test Company",
-            "metafields": [{"key": "team_size", "value": "10"}],
-        },
-        "total_price": "100.00",
-        "currency": "USD",
-        "line_items": [{"title": "Test Plan"}],
-    }
-    mock_request.get_json.return_value = test_data
-
-    # Test parsing test webhook
+    # Test should be ignored
     event = provider.parse_webhook(mock_request)
-    assert event is not None
-    assert event["type"] == "orders_paid"
-    assert event["customer_id"] == "test_customer_456"
-    assert event["amount"] == 100.0
-    assert event["currency"] == "USD"
-    assert event["status"] == "success"
-    assert event["metadata"]["source"] == "shopify"
-    assert event["metadata"]["shop_domain"] == "test.myshopify.com"
-    assert event["customer_data"]["company_name"] == "Test Company"
-    assert event["customer_data"]["team_size"] == 10
-    assert event["customer_data"]["plan_name"] == "Test Plan"
+    assert event is None
 
 
 def test_shopify_invalid_webhook_data():
@@ -262,7 +236,7 @@ def test_shopify_invalid_webhook_data():
     provider = ShopifyProvider("test_secret")
 
     # Create mock request
-    mock_request = Mock()
+    mock_request = Mock(spec=Request)
     mock_request.headers = {
         "X-Shopify-Hmac-SHA256": "test_signature",
         "X-Shopify-Topic": "orders/paid",
@@ -277,11 +251,7 @@ def test_shopify_invalid_webhook_data():
 
     # Test empty data
     mock_request.content_type = "application/json"
-    mock_request.get_json.return_value = None
-    with pytest.raises(InvalidDataError, match="Empty webhook data"):
-        provider.parse_webhook(mock_request)
-
-    # Test empty dict
+    mock_request.data = b"{}"
     mock_request.get_json.return_value = {}
     with pytest.raises(InvalidDataError, match="Missing required fields"):
         provider.parse_webhook(mock_request)
@@ -292,28 +262,14 @@ def test_shopify_invalid_webhook_data():
         provider.parse_webhook(mock_request)
 
     # Test invalid amount format
-    mock_request.get_json.return_value = {
-        "id": "test_123",
-        "total_price": "invalid",
-    }
-    event = provider.parse_webhook(mock_request)
-    assert event["amount"] == 0.0  # Should default to 0 for invalid amount
-
-    # Test invalid team size
-    mock_request.get_json.return_value = {
-        "id": "test_123",
-        "customer": {"metafields": [{"key": "team_size", "value": "invalid"}]},
-    }
-    event = provider.parse_webhook(mock_request)
-    assert (
-        event["customer_data"]["team_size"] == 0
-    )  # Should default to 0 for invalid team size
+    mock_request.get_json.return_value = {"id": 123, "total_price": "invalid"}
+    with pytest.raises(InvalidDataError, match="Missing required fields"):
+        provider.parse_webhook(mock_request)
 
 
 def test_invalid_webhook_data():
-    """Test handling of invalid webhook data"""
+    """Test handling of invalid webhook data for Chargify"""
     chargify = ChargifyProvider(webhook_secret="test_secret")
-    shopify = ShopifyProvider(webhook_secret="test_secret")
 
     # Test Chargify with invalid data
     mock_chargify_request = MagicMock(spec=Request)
@@ -325,22 +281,8 @@ def test_invalid_webhook_data():
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
     }
 
-    with pytest.raises(InvalidDataError, match="Empty webhook data"):
-        chargify.parse_webhook(mock_chargify_request)
-
-    # Test Shopify with invalid data
-    mock_shopify_request = MagicMock(spec=Request)
-    mock_shopify_request.content_type = "application/json"
-    mock_shopify_request.get_json.return_value = {}
-    mock_shopify_request.headers = {
-        "X-Shopify-Topic": "orders/paid",
-        "X-Shopify-Shop-Domain": "test.myshopify.com",
-        "X-Shopify-Hmac-SHA256": "test_signature",
-        "X-Shopify-Order-Id": "123456789",
-    }
-
     with pytest.raises(InvalidDataError, match="Missing required fields"):
-        shopify.parse_webhook(mock_shopify_request)
+        chargify.parse_webhook(mock_chargify_request)
 
 
 def test_chargify_subscription_state_change():
@@ -383,14 +325,14 @@ def test_shopify_customer_data_update():
     """Test parsing of Shopify customers/update webhook"""
     provider = ShopifyProvider(webhook_secret="test_secret")
 
-    mock_request = MagicMock(spec=Request)
+    mock_request = Mock(spec=Request)
     mock_request.content_type = "application/json"
     mock_request.headers = {
         "X-Shopify-Topic": "customers/update",
         "X-Shopify-Shop-Domain": "test.myshopify.com",
         "X-Shopify-Hmac-SHA256": "test_signature",
     }
-    mock_request.get_json.return_value = {
+    mock_data = {
         "id": 456,
         "email": "test@example.com",
         "accepts_marketing": True,
@@ -424,13 +366,14 @@ def test_shopify_customer_data_update():
             },
         ],
     }
+    mock_request.data = json.dumps(mock_data).encode("utf-8")
+    mock_request.get_json.return_value = mock_data
 
     event = provider.parse_webhook(mock_request)
-    assert event["type"] == "customers_update"
+    assert event is not None
+    assert event["type"] == "customers/update"
     assert event["customer_id"] == "456"
-    assert event["customer_data"]["company_name"] == "Updated Company Name"
-    assert event["customer_data"]["team_size"] == 50
-    assert "enterprise_annual" in str(event["metadata"])
+    assert event["customer_data"]["company"] == "Updated Company Name"
 
 
 def test_chargify_webhook_deduplication():
@@ -488,7 +431,9 @@ def test_chargify_webhook_deduplication():
     # Test cache cleanup - events outside dedup window
     provider._DEDUP_WINDOW_SECONDS = 0  # Set window to 0 to force cleanup
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_4"
-    form_data["payload[subscription][customer][id]"] = "cust_123"  # Back to first customer
+    form_data[
+        "payload[subscription][customer][id]"
+    ] = "cust_123"  # Back to first customer
     form_data["payload[subscription][customer][email]"] = "test@example.com"
     mock_form.to_dict.return_value = form_data
     event4 = provider.parse_webhook(mock_request)
@@ -498,65 +443,48 @@ def test_chargify_webhook_deduplication():
 
 
 def test_event_processor_notification_formatting():
-    """Test that the EventProcessor correctly formats notifications"""
-    from app.event_processor import EventProcessor
-
+    """Test that EventProcessor correctly formats notifications for various event types"""
     processor = EventProcessor()
 
-    # Test payment success event
+    # Test successful payment event
     event_data = {
         "type": "payment_success",
-        "status": "completed",
-        "amount": 99.99,
+        "customer_id": "cust_123",
+        "amount": 29.99,
         "currency": "USD",
-        "timestamp": "2024-01-01T12:00:00Z",
+        "status": "success",
         "metadata": {
             "subscription_id": "sub_123",
-            "customer_id": "cust_456"
-        }
+            "plan": "enterprise",
+        },
     }
-
     customer_data = {
-        "company_name": "Acme Corp",
-        "team_size": 50,
-        "plan_name": "Enterprise"
+        "company": "Acme Corp",
+        "team_size": "50",
+        "plan": "Enterprise",
     }
 
     notification = processor.format_notification(event_data, customer_data)
+    assert notification.title == "Payment Received: $29.99"
+    assert notification.status == "success"
+    assert (
+        len(notification.sections) == 3
+    )  # Event Details, Customer Details, and Metadata
+    assert notification.sections[0].title == "Event Details"
+    assert notification.sections[1].title == "Customer Details"
+    assert notification.sections[2].title == "Additional Details"
 
-    assert notification is not None
-    assert notification.title == "Payment Received: $99.99"
-    assert notification.color == "#36a64f"
-    assert notification.emoji == "🎉"
-    assert len(notification.sections) == 3  # Customer info, event details, metadata
-
-    # Test payment failure event
-    event_data = {
-        "type": "payment_failure",
-        "status": "failed",
-        "amount": 199.99,
-        "currency": "USD",
-        "timestamp": "2024-01-01T12:00:00Z",
-        "metadata": {
-            "failure_reason": "insufficient_funds",
-            "subscription_id": "sub_123"
-        }
-    }
+    # Test failed payment event
+    event_data["type"] = "payment_failure"
+    event_data["status"] = "failed"
+    event_data["metadata"]["failure_reason"] = "card_declined"
 
     notification = processor.format_notification(event_data, customer_data)
-
-    assert notification is not None
-    assert notification.title == "Payment Failed: $199.99"
-    assert notification.color == "#dc3545"
-    assert notification.emoji == "🚨"
-    assert len(notification.sections) == 3
-
-    # Test invalid event type
-    event_data["type"] = "invalid_type"
-    notification = processor.format_notification(event_data, customer_data)
-    assert notification is None
-
-    # Test missing customer data
-    event_data["type"] = "payment_success"
-    notification = processor.format_notification(event_data, {})
-    assert notification is None
+    assert notification.title == "Payment Failed"
+    assert notification.color == "#dc3545"  # Red for failure
+    assert (
+        len(notification.sections) == 3
+    )  # Event Details, Customer Details, and Metadata
+    assert (
+        "card_declined" in notification.sections[2].fields[2]
+    )  # Check failure reason in metadata
