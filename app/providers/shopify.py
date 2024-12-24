@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from flask import Request, current_app
+from flask import Request
 import hmac
 import hashlib
 import logging

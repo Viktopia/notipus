@@ -116,11 +116,59 @@ All errors should return JSON responses with:
 - Error type (if applicable)
 
 ### 4. Testing Requirements
+
+#### Test Infrastructure
+- **Poetry** for test dependency management
+- **pytest** as the test runner
+- **pytest-cov** for coverage reporting
+- **pytest-mock** for mocking
+
+#### Test Execution
+Tests can be run in two ways:
+
+1. **Local Development**
+```bash
+# Run all tests with coverage
+poetry run pytest --cov=app tests/
+
+# Run specific test file
+poetry run pytest tests/test_file.py
+
+# Run tests with verbose output
+poetry run pytest -v tests/
+```
+
+2. **Continuous Integration**
+Tests run automatically on GitHub Actions:
+- On every push to master
+- On every pull request
+- Across Python versions 3.9, 3.10, and 3.11
+- With coverage reporting
+- Alongside linting checks (ruff)
+
+#### Test Requirements
 Each component must have comprehensive tests covering:
 - Happy path scenarios
 - Error cases
 - Edge cases
 - Invalid input handling
+- Webhook validation
+- Data parsing
+- Event processing
+- Notification formatting
+
+#### Test Organization
+- Use fixtures in `conftest.py` for shared test setup
+- Group tests by component/functionality
+- Use descriptive test names that explain the scenario
+- Include docstrings for complex test cases
+- Mock external services and API calls
+
+#### Code Coverage
+- Maintain high test coverage
+- Cover all error handling paths
+- Test boundary conditions
+- Include integration tests for main workflows
 
 ## Project Structure
 ```

@@ -1,7 +1,6 @@
 from typing import Dict, Any
 import logging
 from .models.notification import Notification, Section
-from flask import current_app
 
 logger = logging.getLogger(__name__)
 
