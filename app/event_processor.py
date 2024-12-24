@@ -104,9 +104,9 @@ class EventProcessor:
         """Format event data into fields"""
         fields = {}
         if "amount" in event_data:
-            fields[
-                "Amount"
-            ] = f"${event_data['amount']:.2f} {event_data.get('currency', 'USD')}"
+            fields["Amount"] = (
+                f"${event_data['amount']:.2f} {event_data.get('currency', 'USD')}"
+            )
         if "status" in event_data:
             fields["Status"] = event_data["status"]
         if "created_at" in event_data:
@@ -123,9 +123,9 @@ class EventProcessor:
         if "email" in customer_data:
             fields["Email"] = customer_data["email"]
         if "first_name" in customer_data and "last_name" in customer_data:
-            fields[
-                "Contact"
-            ] = f"{customer_data['first_name']} {customer_data['last_name']}"
+            fields["Contact"] = (
+                f"{customer_data['first_name']} {customer_data['last_name']}"
+            )
         if "orders_count" in customer_data:
             fields["Orders"] = str(customer_data["orders_count"])
         if "total_spent" in customer_data:

@@ -431,9 +431,9 @@ def test_chargify_webhook_deduplication():
     # Test cache cleanup - events outside dedup window
     provider._DEDUP_WINDOW_SECONDS = 0  # Set window to 0 to force cleanup
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_4"
-    form_data[
-        "payload[subscription][customer][id]"
-    ] = "cust_123"  # Back to first customer
+    form_data["payload[subscription][customer][id]"] = (
+        "cust_123"  # Back to first customer
+    )
     form_data["payload[subscription][customer][email]"] = "test@example.com"
     mock_form.to_dict.return_value = form_data
     event4 = provider.parse_webhook(mock_request)
@@ -498,35 +498,26 @@ def test_chargify_memo_parsing():
     test_cases = [
         (
             "Wire payment received for $233.76 24th December '24\n$228.90 allocated to Shopify Order 2067",
-            "2067"
+            "2067",
         ),
-        (
-            "Payment for Shopify Order 1234",
-            "1234"
-        ),
-        (
-            "$500 allocated to order 5678",
-            "5678"
-        ),
-        (
-            "Regular payment - no order reference",
-            None
-        ),
+        ("Payment for Shopify Order 1234", "1234"),
+        ("$500 allocated to order 5678", "5678"),
+        ("Regular payment - no order reference", None),
         (
             "Multiple orders: allocated to 1111 and Shopify Order 2222",
-            "2222"  # Should prioritize explicit Shopify Order mention
+            "2222",  # Should prioritize explicit Shopify Order mention
         ),
         (
             "Order 3333 and Shopify Order 4444",
-            "4444"  # Should prioritize explicit Shopify Order mention
+            "4444",  # Should prioritize explicit Shopify Order mention
         ),
         (
             "Just Order 5555",
-            "5555"  # Should match generic order reference
+            "5555",  # Should match generic order reference
         ),
         (
             "",  # Empty memo
-            None
+            None,
         ),
     ]
 
@@ -579,7 +570,7 @@ def test_shopify_order_ref_matching():
         "metadata": {
             "order_number": "1234",
             "order_ref": "1234",
-        }
+        },
     }
 
     # Create a Chargify payment event
@@ -589,7 +580,7 @@ def test_shopify_order_ref_matching():
         "metadata": {
             "shopify_order_ref": "1234",
             "memo": "Payment for Shopify Order 1234",
-        }
+        },
     }
 
     # Test Shopify -> Chargify linking
