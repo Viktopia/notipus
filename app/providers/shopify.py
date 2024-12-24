@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from flask import Request
+from flask import Request, current_app
 import hmac
 import hashlib
 import logging
@@ -92,6 +92,7 @@ class ShopifyProvider(PaymentProvider):
                 "status": "success",  # Default status
                 "metadata": {
                     "order_number": data.get("order_number"),
+                    "order_ref": str(data.get("order_number")) if data.get("order_number") else None,
                     "financial_status": data.get("financial_status"),
                     "fulfillment_status": data.get("fulfillment_status"),
                 },

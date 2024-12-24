@@ -488,3 +488,114 @@ def test_event_processor_notification_formatting():
     assert (
         "card_declined" in notification.sections[2].fields[2]
     )  # Check failure reason in metadata
+
+
+def test_chargify_memo_parsing():
+    """Test that Chargify memo field is correctly parsed for Shopify order references"""
+    provider = ChargifyProvider(webhook_secret="test_secret")
+
+    # Test various memo formats
+    test_cases = [
+        (
+            "Wire payment received for $233.76 24th December '24\n$228.90 allocated to Shopify Order 2067",
+            "2067"
+        ),
+        (
+            "Payment for Shopify Order 1234",
+            "1234"
+        ),
+        (
+            "$500 allocated to order 5678",
+            "5678"
+        ),
+        (
+            "Regular payment - no order reference",
+            None
+        ),
+        (
+            "Multiple orders: allocated to 1111 and Shopify Order 2222",
+            "2222"  # Should prioritize explicit Shopify Order mention
+        ),
+        (
+            "Order 3333 and Shopify Order 4444",
+            "4444"  # Should prioritize explicit Shopify Order mention
+        ),
+        (
+            "Just Order 5555",
+            "5555"  # Should match generic order reference
+        ),
+        (
+            "",  # Empty memo
+            None
+        ),
+    ]
+
+    for memo, expected_ref in test_cases:
+        ref = provider._parse_shopify_order_ref(memo)
+        assert ref == expected_ref, f"Failed to parse memo: {memo}"
+
+
+def test_chargify_payment_success_with_shopify_ref():
+    """Test that payment_success webhook includes Shopify order reference when present"""
+    provider = ChargifyProvider(webhook_secret="test_secret")
+
+    # Create a mock Flask request
+    mock_request = MagicMock(spec=Request)
+    mock_request.content_type = "application/x-www-form-urlencoded"
+    mock_request.form = MagicMock()
+    mock_request.headers = {
+        "X-Chargify-Webhook-Id": "webhook_123",
+        "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
+    }
+    mock_request.form.to_dict.return_value = {
+        "event": "payment_success",
+        "payload[subscription][id]": "sub_12345",
+        "payload[subscription][customer][id]": "cust_456",
+        "payload[subscription][customer][email]": "test@example.com",
+        "payload[subscription][customer][first_name]": "Test",
+        "payload[subscription][customer][last_name]": "User",
+        "payload[subscription][customer][organization]": "Test Company",
+        "payload[subscription][product][name]": "Enterprise Plan",
+        "payload[transaction][id]": "tr_123",
+        "payload[transaction][amount_in_cents]": "10000",
+        "payload[transaction][memo]": "Wire payment received for $100.00\nAllocated to Shopify Order 1234",
+        "created_at": "2024-03-15T10:00:00Z",
+    }
+
+    event = provider.parse_webhook(mock_request)
+    assert event["type"] == "payment_success"
+    assert event["metadata"]["shopify_order_ref"] == "1234"
+    assert "memo" in event["metadata"]  # Full memo should be preserved
+
+
+def test_shopify_order_ref_matching():
+    """Test that Shopify and Chargify events are correctly linked by order reference"""
+    processor = EventProcessor()
+
+    # Create a Shopify order event
+    shopify_event = {
+        "type": "payment_success",
+        "provider": "shopify",
+        "metadata": {
+            "order_number": "1234",
+            "order_ref": "1234",
+        }
+    }
+
+    # Create a Chargify payment event
+    chargify_event = {
+        "type": "payment_success",
+        "provider": "chargify",
+        "metadata": {
+            "shopify_order_ref": "1234",
+            "memo": "Payment for Shopify Order 1234",
+        }
+    }
+
+    # Test Shopify -> Chargify linking
+    processed_shopify = processor._link_related_events(shopify_event)
+    assert processed_shopify["metadata"]["order_ref"] == "1234"
+
+    # Test Chargify -> Shopify linking
+    processed_chargify = processor._link_related_events(chargify_event)
+    assert processed_chargify["metadata"]["related_order_ref"] == "1234"

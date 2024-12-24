@@ -1,11 +1,12 @@
 from typing import Dict, Any
-from flask import Request
+from flask import Request, current_app
 import hmac
 import hashlib
 import time
 import logging
 from collections import OrderedDict
 from datetime import datetime
+import re
 
 from .base import PaymentProvider, InvalidDataError, CustomerNotFoundError
 
@@ -337,6 +338,28 @@ class ChargifyProvider(PaymentProvider):
         else:
             raise InvalidDataError(f"Unsupported event type: {event_type}")
 
+    def _parse_shopify_order_ref(self, memo: str) -> str:
+        """Extract Shopify order reference from transaction memo."""
+        if not memo:
+            return None
+
+        # First look for explicit mentions of Shopify order with any format
+        match = re.search(r'Shopify Order[^\d]*(\d+)', memo, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        # Then look for any order number mentioned in an amount allocation
+        match = re.search(r'allocated to[^$]*?(\d+)', memo, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        # Finally look for any order number in the memo
+        match = re.search(r'order[^\d]*(\d+)', memo, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        return None
+
     def _parse_payment_success(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse payment_success webhook data"""
         amount = data.get("payload[transaction][amount_in_cents]")
@@ -344,6 +367,11 @@ class ChargifyProvider(PaymentProvider):
             raise InvalidDataError("Missing amount")
 
         customer_data = self.get_customer_data(data)
+
+        # Extract Shopify order reference from memo
+        memo = data.get("payload[transaction][memo]", "")
+        shopify_order_ref = self._parse_shopify_order_ref(memo)
+
         return {
             "type": "payment_success",
             "customer_id": data["payload[subscription][customer][id]"],
@@ -354,6 +382,8 @@ class ChargifyProvider(PaymentProvider):
                 "subscription_id": data["payload[subscription][id]"],
                 "transaction_id": data.get("payload[transaction][id]", ""),
                 "plan_name": data["payload[subscription][product][name]"],
+                "shopify_order_ref": shopify_order_ref,
+                "memo": memo,  # Include full memo for reference
             },
             "customer_data": customer_data,
         }

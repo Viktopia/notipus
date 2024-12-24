@@ -1,6 +1,7 @@
 from typing import Dict, Any
 import logging
 from .models.notification import Notification, Section
+from flask import current_app
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,9 @@ class EventProcessor:
             "GBP",
         ]:
             raise ValueError("Invalid currency")
+
+        # Link related events first
+        event_data = self._link_related_events(event_data)
 
         # Create sections
         event_section = Section(
@@ -167,3 +171,25 @@ class EventProcessor:
             "info": "#17a2b8",
         }
         return status_colors.get(status, "#17a2b8")  # Default to info color
+
+    def _link_related_events(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Link related Shopify and Chargify events based on order references."""
+        if not event_data or "metadata" not in event_data:
+            return event_data
+
+        metadata = event_data["metadata"]
+        provider = event_data.get("provider")
+
+        # For Shopify events, look for matching Chargify payment
+        if provider == "shopify" and metadata.get("order_ref"):
+            order_ref = metadata["order_ref"]
+            # TODO: Look up matching Chargify payment in database
+            metadata["related_payment_ref"] = None  # Placeholder for now
+
+        # For Chargify events, look for matching Shopify order
+        elif provider == "chargify" and metadata.get("shopify_order_ref"):
+            order_ref = metadata["shopify_order_ref"]
+            # TODO: Look up matching Shopify order in database
+            metadata["related_order_ref"] = order_ref
+
+        return event_data
