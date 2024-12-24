@@ -344,17 +344,17 @@ class ChargifyProvider(PaymentProvider):
             return None
 
         # First look for explicit mentions of Shopify order with any format
-        match = re.search(r'Shopify Order[^\d]*(\d+)', memo, re.IGNORECASE)
+        match = re.search(r"Shopify Order[^\d]*(\d+)", memo, re.IGNORECASE)
         if match:
             return match.group(1)
 
         # Then look for any order number mentioned in an amount allocation
-        match = re.search(r'allocated to[^$]*?(\d+)', memo, re.IGNORECASE)
+        match = re.search(r"allocated to[^$]*?(\d+)", memo, re.IGNORECASE)
         if match:
             return match.group(1)
 
         # Finally look for any order number in the memo
-        match = re.search(r'order[^\d]*(\d+)', memo, re.IGNORECASE)
+        match = re.search(r"order[^\d]*(\d+)", memo, re.IGNORECASE)
         if match:
             return match.group(1)
 
