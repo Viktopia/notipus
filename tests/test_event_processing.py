@@ -52,10 +52,11 @@ def test_missing_required_customer_data():
         "plan_name": "Enterprise",
     }
 
-    with pytest.raises(
-        ValueError, match="Missing required customer data: company name"
-    ):
-        processor.format_notification(event_data, customer_data)
+    # No longer raises an error since company defaults to 'Individual'
+    notification = processor.format_notification(event_data, customer_data)
+    company_field = next((field for field in notification.sections[1].fields if field[0] == "Company"), None)
+    assert company_field is not None
+    assert company_field[1] == "Individual"
 
 
 def test_invalid_event_type():

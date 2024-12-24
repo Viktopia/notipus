@@ -41,7 +41,7 @@ class EventProcessor:
             raise ValueError("Missing customer data")
 
         # Validate required customer data
-        company_name = customer_data.get("company_name") or customer_data.get("company")
+        company_name = customer_data.get("company_name") or customer_data.get("company", "Individual")
         if not company_name:
             raise ValueError("Missing required customer data: company name")
 
@@ -62,11 +62,23 @@ class EventProcessor:
 
         # Create sections
         event_section = Section(
-            title="Event Details", fields=self._format_event_fields(event_data)
+            title="Event Details",
+            fields={
+                "Type": event_data["type"],
+                "Amount": f"${event_data.get('amount', 0):.2f}",
+                "Currency": event_data.get("currency", "USD"),
+                "Status": event_data.get("status", "unknown"),
+            },
         )
 
         customer_section = Section(
-            title="Customer Details", fields=self._format_customer_fields(customer_data)
+            title="Customer Details",
+            fields={
+                "Company": company_name,
+                "Email": customer_data.get("email", "Unknown"),
+                "First Name": customer_data.get("first_name", "Unknown"),
+                "Last Name": customer_data.get("last_name", "Unknown"),
+            },
         )
 
         metadata_section = Section(
@@ -78,6 +90,8 @@ class EventProcessor:
         notification = Notification(
             title=self._format_title(event_data, {"company_name": company_name}),
             sections=[event_section, customer_section, metadata_section],
+            color="#36a64f",  # Green for success
+            emoji="🎉",
         )
 
         # Set status after creation

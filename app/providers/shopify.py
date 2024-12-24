@@ -138,7 +138,7 @@ class ShopifyProvider(PaymentProvider):
             customer = data["order"].get("customer", {})
 
         return {
-            "company": customer.get("company", ""),
+            "company": customer.get("company", "Individual"),
             "email": customer.get("email", ""),
             "first_name": customer.get("first_name", ""),
             "last_name": customer.get("last_name", ""),
