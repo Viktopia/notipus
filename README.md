@@ -127,9 +127,6 @@ Environment variables are passed to the container at runtime, making it easy to 
 4. Push to the branch: `git push origin feature/amazing-feature`
 5. Open a pull request
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Configuration
 
@@ -148,9 +145,6 @@ To enable verbose debug logging, set the `DEBUG` environment variable to "true":
 ```bash
 # In development
 export DEBUG=true
-
-# In production (Heroku)
-heroku config:set DEBUG=true
 
 # In Docker
 docker run -e DEBUG=true ...
