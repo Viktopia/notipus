@@ -41,7 +41,9 @@ class EventProcessor:
             raise ValueError("Missing customer data")
 
         # Validate required customer data
-        company_name = customer_data.get("company_name") or customer_data.get("company", "Individual")
+        company_name = customer_data.get("company_name") or customer_data.get(
+            "company", "Individual"
+        )
         if not company_name:
             raise ValueError("Missing required customer data: company name")
 
