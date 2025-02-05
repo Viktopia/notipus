@@ -1,7 +1,7 @@
 import pytest
-import json
 from unittest.mock import Mock, patch
-from flask import Request
+from django.test.client import RequestFactory
+from django.urls import reverse
 
 
 @pytest.fixture
@@ -12,33 +12,23 @@ def mock_webhook_validation():
         return {"blocks": [], "color": "#28a745"}
 
     with patch(
-        "app.event_processor.EventProcessor.format_notification",
+        "webhooks.event_processor.EventProcessor.format_notification",
         mock_format_notification,
     ):
         yield mock_format_notification
 
 
 @pytest.fixture
-def app():
-    """Create a test Flask app"""
-    test_config = {
-        "TESTING": True,
-        "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
-        "CHARGIFY_WEBHOOK_SECRET": "test_secret",
-        "SHOPIFY_WEBHOOK_SECRET": "test_secret",
-        "SHOPIFY_SHOP_URL": "test.myshopify.com",
-        "SHOPIFY_ACCESS_TOKEN": "test_token",
-    }
-    from app import create_app
-
-    app = create_app(test_config)
-    return app
+def client():
+    """Django test client"""
+    from django.test import Client
+    return Client()
 
 
 @pytest.fixture
-def client(app):
-    """Create a test client"""
-    return app.test_client()
+def request_factory():
+    """Django RequestFactory for mocking requests"""
+    return RequestFactory()
 
 
 @pytest.fixture
@@ -51,18 +41,16 @@ def mock_slack_response():
 
 
 @pytest.fixture
-def mock_shopify_request():
+def mock_shopify_request(request_factory):
     """Mock Shopify webhook request"""
-    mock_request = Mock(spec=Request)
-    mock_request.content_type = "application/json"
-    mock_request.headers = {
+    headers = {
         "X-Shopify-Topic": "orders/paid",
         "X-Shopify-Shop-Domain": "test.myshopify.com",
         "X-Shopify-Hmac-SHA256": "test_signature",
         "X-Shopify-Order-Id": "123456789",
         "X-Shopify-Api-Version": "2024-01",
     }
-    mock_data = {
+    data = {
         "id": 123456789,
         "order_number": 1001,
         "customer": {
@@ -78,22 +66,24 @@ def mock_shopify_request():
         "currency": "USD",
         "financial_status": "paid",
     }
-    mock_request.data = json.dumps(mock_data).encode("utf-8")
-    mock_request.get_json.return_value = mock_data
-    return mock_request
+    request = request_factory.post(
+        reverse('shopify_webhook'),  # Убедитесь, что у вас есть соответствующий маршрут
+        data=data,
+        content_type="application/json",
+        **headers
+    )
+    return request
 
 
 @pytest.fixture
-def mock_shopify_customer_request():
+def mock_shopify_customer_request(request_factory):
     """Mock Shopify customer webhook request"""
-    mock_request = Mock(spec=Request)
-    mock_request.content_type = "application/json"
-    mock_request.headers = {
+    headers = {
         "X-Shopify-Topic": "customers/update",
         "X-Shopify-Shop-Domain": "test.myshopify.com",
         "X-Shopify-Hmac-SHA256": "test_signature",
     }
-    mock_data = {
+    data = {
         "id": 456,
         "email": "test@example.com",
         "accepts_marketing": True,
@@ -127,22 +117,23 @@ def mock_shopify_customer_request():
             },
         ],
     }
-    mock_request.data = json.dumps(mock_data).encode("utf-8")
-    mock_request.get_json.return_value = mock_data
-    return mock_request
+    request = request_factory.post(
+        reverse('shopify_customer_webhook'),  # Убедитесь, что у вас есть соответствующий маршрут
+        data=data,
+        content_type="application/json",
+        **headers
+    )
+    return request
 
 
 @pytest.fixture
-def mock_chargify_request():
+def mock_chargify_request(request_factory):
     """Mock Chargify webhook request"""
-    mock_request = Mock(spec=Request)
-    mock_request.content_type = "application/x-www-form-urlencoded"
-    mock_request.headers = {
+    headers = {
         "X-Chargify-Webhook-Id": "test_webhook_1",
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
     }
-    mock_request.form = Mock()
-    mock_request.form.to_dict.return_value = {
+    data = {
         "event": "payment_success",
         "id": "12345",
         "payload[subscription][id]": "sub_789",
@@ -155,4 +146,10 @@ def mock_chargify_request():
         "payload[transaction][amount_in_cents]": "10000",
         "created_at": "2024-03-15T10:00:00Z",
     }
-    return mock_request
+    request = request_factory.post(
+        reverse('chargify_webhook'),  # Убедитесь, что у вас есть соответствующий маршрут
+        data=data,
+        content_type="application/x-www-form-urlencoded",
+        **headers
+    )
+    return request

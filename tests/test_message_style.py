@@ -1,5 +1,5 @@
-from app.message_generator import MessageGenerator
-
+import pytest
+from webhooks.message_generator import MessageGenerator
 
 def test_payment_success_messages_are_celebratory():
     """Test that payment success messages have a fun, celebratory tone"""
@@ -9,14 +9,14 @@ def test_payment_success_messages_are_celebratory():
 
     message = generator.payment_success(event)
 
-    # Should use fun emoji
+    # Проверяем, что сообщение содержит хотя бы один из веселых emoji
     assert any(emoji in message for emoji in ["🎉", "💸", "🎊", "🚀", "💪"])
 
-    # Should use casual, celebratory language
+    # Проверяем, что используется праздничная лексика
     celebratory_phrases = ["Woohoo", "Awesome", "Yay", "Sweet", "Nice one", "Ka-ching"]
     assert any(phrase in message for phrase in celebratory_phrases)
 
-    # Should still include the important information
+    # Проверяем, что важная информация присутствует в сообщении
     assert event["customer_name"] in message
     assert event["amount"] in message
 
@@ -29,15 +29,16 @@ def test_payment_failure_messages_are_light_but_clear():
 
     message = generator.payment_failure(event)
 
-    # Should use appropriate emoji
+    # Проверяем, что используется подходящий emoji
     assert any(emoji in message for emoji in ["😅", "🤔", "👀", "💭"])
 
-    # Should use light but clear language
+    # Проверяем, что используется лёгкая, но понятная формулировка
     light_phrases = ["Oops", "Uh-oh", "Looks like", "Seems like", "Hit a snag"]
     assert any(phrase in message for phrase in light_phrases)
 
-    # Should still convey urgency
-    assert "needs attention" in message.lower() or "needs looking at" in message.lower()
+    # Проверяем, что сообщение передаёт ощущение срочности
+    lower_message = message.lower()
+    assert "needs attention" in lower_message or "needs looking at" in lower_message
 
 
 def test_trial_ending_messages_are_encouraging():
@@ -52,10 +53,10 @@ def test_trial_ending_messages_are_encouraging():
 
     message = generator.trial_ending(event)
 
-    # Should use positive emoji
+    # Проверяем, что используется позитивный emoji
     assert any(emoji in message for emoji in ["✨", "🌟", "💫", "🚀"])
 
-    # Should use encouraging language
+    # Проверяем, что используется поддерживающая лексика
     encouraging_phrases = [
         "loving",
         "crushing it",
@@ -65,7 +66,7 @@ def test_trial_ending_messages_are_encouraging():
     ]
     assert any(phrase in message.lower() for phrase in encouraging_phrases)
 
-    # Should mention their actual usage
+    # Проверяем, что упоминается одна из популярных функций
     assert "API" in message or "Dashboard" in message
 
 
@@ -82,11 +83,11 @@ def test_upgrade_messages_are_extra_celebratory():
 
     message = generator.plan_upgrade(event)
 
-    # Should use multiple celebratory emoji
+    # Проверяем, что используется несколько праздничных emoji
     emoji_count = sum(message.count(emoji) for emoji in ["🎉", "🚀", "⭐️", "🌟", "💪"])
     assert emoji_count >= 2
 
-    # Should use extra enthusiastic language
+    # Проверяем, что используется крайне воодушевляющая лексика
     enthusiastic_phrases = [
         "Awesome upgrade",
         "Leveled up",
@@ -96,7 +97,7 @@ def test_upgrade_messages_are_extra_celebratory():
     ]
     assert any(phrase in message for phrase in enthusiastic_phrases)
 
-    # Should reference growth/improvement
+    # Проверяем, что упоминается рост/улучшение
     growth_phrases = ["growing", "scaling", "expanding", "moving up"]
     assert any(phrase in message.lower() for phrase in growth_phrases)
 
@@ -105,7 +106,7 @@ def test_messages_maintain_brand_voice():
     """Test that all messages maintain our brand voice regardless of situation"""
     generator = MessageGenerator()
 
-    # Test various event types
+    # Тестируем для разных типов событий
     events = [
         {"type": "payment_success", "customer_name": "Acme"},
         {"type": "payment_failure", "customer_name": "Acme"},
@@ -116,7 +117,7 @@ def test_messages_maintain_brand_voice():
     for event in events:
         message = generator.generate(event)
 
-        # Should never use formal language
+        # Сообщение не должно содержать формальных фраз
         formal_phrases = [
             "Dear customer",
             "We regret to inform",
@@ -126,11 +127,12 @@ def test_messages_maintain_brand_voice():
         ]
         assert not any(phrase in message for phrase in formal_phrases)
 
-        # Should always include at least one emoji
-        assert any(char for char in message if char in generator.ALL_EMOJI)
+        # Сообщение должно содержать хотя бы один emoji из общего набора
+        # Предполагаем, что generator.ALL_EMOJI содержит строку с допустимыми emoji
+        assert any(char in generator.ALL_EMOJI for char in message)
 
-        # Should always be personal
+        # Сообщение должно быть персонализированным
         assert event["customer_name"] in message
 
-        # Should never be too long (keep it snappy)
+        # Сообщение не должно быть слишком длинным (меньше 50 слов)
         assert len(message.split()) < 50

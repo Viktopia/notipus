@@ -1,36 +1,22 @@
-[tool.poetry]
+[project]
 name = "notipus"
 version = "0.1.0"
-description = "A webhook service that sends enriched Shopify and Chargify notifications to Slack"
-authors = ["Viktopia Studio <info@viktopia.io>"]
-readme = "README.md"
-packages = [
-    { include = "app" }
+description = ""
+authors = [
+    {name = "Your Name",email = "you@example.com"}
 ]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-flask = "^3.1.0"
-requests = "^2.32.3"
-shopifyapi = "^12.7.0"
-python-dotenv = "^1.0.1"
-sentry-sdk = {extras = ["flask"], version = "^2.19.2"}
-python-json-logger = "^3.2.1"
-gunicorn = "^21.2.0"
-expiringdict = "^1.2.2"
+requires-python = ">=3.13"
+dependencies = [
+    "django (>=5.1.5,<6.0.0)",
+    "requests (>=2.32.3,<3.0.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "gunicorn (>=23.0.0,<24.0.0)",
+    "psycopg2 (>=2.9.10,<3.0.0)",
+    "pytest (>=8.3.4,<9.0.0)"
+]
 
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.4"
-pytest-cov = "^6.0.0"
-ruff = "^0.8.4"
-pre-commit = "^4.0.1"
-black = "^24.2.0"
-isort = "^5.13.2"
-flake8 = "^7.0.0"
-mypy = "^1.8.0"
-types-requests = "^2.31.0.20240218"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

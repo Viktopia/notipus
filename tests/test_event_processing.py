@@ -1,6 +1,6 @@
 import pytest
-from app.event_processor import EventProcessor
-from app.models import Notification
+from webhooks.event_processor import EventProcessor
+from webhooks.models.notification import Notification
 
 
 def test_notification_formatting():
@@ -30,9 +30,7 @@ def test_notification_formatting():
     assert notification.title == "Payment Received: $29.99"
     assert notification.status == "success"
     assert notification.color == "#28a745"  # Green
-    assert (
-        len(notification.sections) == 3
-    )  # Event Details, Customer Details, Additional Details
+    assert len(notification.sections) == 3  # Event Details, Customer Details, Additional Details
 
 
 def test_missing_required_customer_data():

@@ -1,12 +1,12 @@
 import json
 import pytest
 from unittest.mock import MagicMock, patch, Mock
-from flask import Request
+# Импортируем Django HttpRequest, если нужно (но здесь мы используем MagicMock)
+# from django.http import HttpRequest
 
-from app.providers import PaymentProvider, ChargifyProvider, ShopifyProvider
-from app.providers.base import InvalidDataError
-from app.event_processor import EventProcessor
-
+from webhooks.providers import PaymentProvider, ChargifyProvider, ShopifyProvider
+from webhooks.providers.base import InvalidDataError
+from webhooks.event_processor import EventProcessor
 
 def test_payment_provider_interface():
     """Test that payment providers implement the required interface"""
@@ -23,15 +23,15 @@ def test_chargify_payment_failure_parsing():
     """Test that Chargify payment failure webhooks are properly parsed"""
     provider = ChargifyProvider(webhook_secret="test_secret")
 
-    # Create a mock Flask request
-    mock_request = MagicMock(spec=Request)
+    # Создаем мок запроса (аналог Flask request)
+    mock_request = MagicMock()
     mock_request.content_type = "application/x-www-form-urlencoded"
     mock_request.form = MagicMock()
     mock_request.headers = {
         "X-Chargify-Webhook-Id": "webhook_123",
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
     }
-    mock_request.form.to_dict.return_value = {
+    mock_request.POST.dict.return_value = {
         "event": "payment_failure",
         "payload[subscription][id]": "sub_12345",
         "payload[subscription][state]": "past_due",
@@ -66,8 +66,8 @@ def test_shopify_order_parsing():
     """Test that Shopify order webhooks are properly parsed"""
     provider = ShopifyProvider(webhook_secret="test_secret")
 
-    # Create a mock Flask request
-    mock_request = MagicMock(spec=Request)
+    # Создаем мок запроса
+    mock_request = MagicMock()
     mock_request.content_type = "application/json"
     mock_request.headers = {
         "X-Shopify-Topic": "orders/paid",
@@ -76,7 +76,7 @@ def test_shopify_order_parsing():
         "X-Shopify-Order-Id": "123456789",
         "X-Shopify-Api-Version": "2024-01",
     }
-    mock_request.get_json.return_value = {
+    shopify_data = {
         "id": 123456789,
         "order_number": 1001,
         "customer": {
@@ -130,6 +130,11 @@ def test_shopify_order_parsing():
         ],
     }
 
+    mock_request.get_json.return_value = shopify_data
+    # Обязательно задаём request.data как JSON в виде байтов
+    mock_request.data = json.dumps(shopify_data).encode("utf-8")
+
+
     event = provider.parse_webhook(mock_request)
     assert event["type"] == "payment_success"
     assert event["customer_id"] == "456"
@@ -144,28 +149,32 @@ def test_chargify_webhook_validation():
     """Test Chargify webhook signature validation"""
     provider = ChargifyProvider(webhook_secret="test_secret")
 
-    # Create a mock Flask request with realistic headers
-    mock_request = MagicMock(spec=Request)
+    # Создаем мок запроса с заголовками
+    mock_request = MagicMock()
     mock_request.headers = {
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "1234567890abcdef",
         "X-Chargify-Webhook-Id": "webhook_123",
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": "Chargify Webhooks",
     }
-    mock_request.get_data.return_value = (
-        b"payload[event]=payment_failure&payload[subscription][id]=sub_12345"
-    )
+    # Передаем корректное тело запроса
+    body = b"payload[event]=payment_failure&payload[subscription][id]=sub_12345"
+    mock_request.get_data.return_value = body  # Байты
+    mock_request.body = body  # Для совместимости с методом validate_webhook
 
+    # Патчим hmac.compare_digest
     with patch("hmac.compare_digest", return_value=True):
         assert provider.validate_webhook(mock_request) is True
+
+
 
 
 def test_shopify_webhook_validation():
     """Test Shopify webhook signature validation"""
     provider = ShopifyProvider("test_secret")
 
-    # Create mock request with valid signature
-    mock_request = Mock(spec=Request)
+    # Создаем мок запроса с валидной сигнатурой
+    mock_request = Mock()
     mock_request.headers = {
         "X-Shopify-Hmac-SHA256": "crxL3PMfBMvgMYyppPUPjAooPtjS7fh0dOiGPTYm3QU=",
         "X-Shopify-Topic": "orders/paid",
@@ -173,40 +182,36 @@ def test_shopify_webhook_validation():
         "X-Shopify-Test": "true",
     }
     mock_request.content_type = "application/json"
-    mock_request.data = b'{"test": "data"}'
-    mock_request.get_data.return_value = b'{"test": "data"}'
+    mock_request.body = b'{"test": "data"}'  # Явно задаем атрибут body
 
-    # Test valid signature
+    # Тест валидной сигнатуры
     with patch("hmac.new") as mock_hmac:
         mock_hmac.return_value.digest.return_value = b"test_digest"
-        mock_b64encode = Mock(
-            return_value=b"crxL3PMfBMvgMYyppPUPjAooPtjS7fh0dOiGPTYm3QU="
-        )
+        mock_b64encode = Mock(return_value=b"crxL3PMfBMvgMYyppPUPjAooPtjS7fh0dOiGPTYm3QU=")
         with patch("base64.b64encode", mock_b64encode):
             assert provider.validate_webhook(mock_request)
 
-    # Test missing signature
+    # Тест отсутствия сигнатуры
     mock_request.headers.pop("X-Shopify-Hmac-SHA256")
     assert not provider.validate_webhook(mock_request)
 
-    # Test missing topic
+    # Тест отсутствия топика
     mock_request.headers["X-Shopify-Hmac-SHA256"] = "test_signature"
     mock_request.headers.pop("X-Shopify-Topic")
     assert not provider.validate_webhook(mock_request)
 
-    # Test missing shop domain
+
+    # Тест отсутствия домена магазина
     mock_request.headers["X-Shopify-Topic"] = "orders/paid"
     mock_request.headers.pop("X-Shopify-Shop-Domain")
     assert not provider.validate_webhook(mock_request)
 
-    # Test invalid signature
-    mock_request.headers.update(
-        {
-            "X-Shopify-Hmac-SHA256": "invalid_signature",
-            "X-Shopify-Topic": "orders/paid",
-            "X-Shopify-Shop-Domain": "test.myshopify.com",
-        }
-    )
+    # Тест неверной сигнатуры
+    mock_request.headers.update({
+        "X-Shopify-Hmac-SHA256": "invalid_signature",
+        "X-Shopify-Topic": "orders/paid",
+        "X-Shopify-Shop-Domain": "test.myshopify.com",
+    })
     assert not provider.validate_webhook(mock_request)
 
 
@@ -215,8 +220,8 @@ def test_shopify_test_webhook(monkeypatch):
     """Test handling of Shopify test webhooks"""
     provider = ShopifyProvider("test_secret")
 
-    # Create mock request
-    mock_request = Mock(spec=Request)
+    # Создаем мок запроса
+    mock_request = Mock()
     mock_request.headers = {
         "X-Shopify-Hmac-SHA256": "test_signature",
         "X-Shopify-Topic": "test",
@@ -226,7 +231,7 @@ def test_shopify_test_webhook(monkeypatch):
     mock_request.data = b'{"test": true}'
     mock_request.get_json.return_value = {"test": True}
 
-    # Test should be ignored
+    # Для тестовых вебхуков должно возвращаться None (игнорирование)
     event = provider.parse_webhook(mock_request)
     assert event is None
 
@@ -235,8 +240,8 @@ def test_shopify_invalid_webhook_data():
     """Test handling of invalid Shopify webhook data"""
     provider = ShopifyProvider("test_secret")
 
-    # Create mock request
-    mock_request = Mock(spec=Request)
+    # Создаем мок запроса
+    mock_request = Mock()
     mock_request.headers = {
         "X-Shopify-Hmac-SHA256": "test_signature",
         "X-Shopify-Topic": "orders/paid",
@@ -244,24 +249,24 @@ def test_shopify_invalid_webhook_data():
     }
     mock_request.content_type = "application/json"
 
-    # Test wrong content type
+    # Тест неверного content type
     mock_request.content_type = "application/x-www-form-urlencoded"
     with pytest.raises(InvalidDataError, match="Invalid content type"):
         provider.parse_webhook(mock_request)
 
-    # Test empty data
+    # Тест пустых данных
     mock_request.content_type = "application/json"
     mock_request.data = b"{}"
     mock_request.get_json.return_value = {}
     with pytest.raises(InvalidDataError, match="Missing required fields"):
         provider.parse_webhook(mock_request)
 
-    # Test missing customer ID
+    # Тест отсутствия customer_id
     mock_request.get_json.return_value = {"test": "data"}
     with pytest.raises(InvalidDataError, match="Missing required fields"):
         provider.parse_webhook(mock_request)
 
-    # Test invalid amount format
+    # Тест неверного формата суммы
     mock_request.get_json.return_value = {"id": 123, "total_price": "invalid"}
     with pytest.raises(InvalidDataError, match="Missing required fields"):
         provider.parse_webhook(mock_request)
@@ -271,11 +276,11 @@ def test_invalid_webhook_data():
     """Test handling of invalid webhook data for Chargify"""
     chargify = ChargifyProvider(webhook_secret="test_secret")
 
-    # Test Chargify with invalid data
-    mock_chargify_request = MagicMock(spec=Request)
+    # Тест Chargify с некорректными данными
+    mock_chargify_request = MagicMock()
     mock_chargify_request.content_type = "application/x-www-form-urlencoded"
     mock_chargify_request.form = MagicMock()
-    mock_chargify_request.form.to_dict.return_value = {}
+    mock_chargify_request.POST.dict.return_value = {}
     mock_chargify_request.headers = {
         "X-Chargify-Webhook-Id": "webhook_123",
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
@@ -288,16 +293,16 @@ def test_invalid_webhook_data():
 def test_chargify_subscription_state_change():
     """Test parsing of Chargify subscription state change webhook"""
     provider = ChargifyProvider(webhook_secret="test_secret")
-    provider._webhook_cache.clear()  # Clear the cache before test
+    provider._webhook_cache.clear()  # Очищаем кэш перед тестом
 
-    mock_request = MagicMock(spec=Request)
+    mock_request = MagicMock()
     mock_request.content_type = "application/x-www-form-urlencoded"
     mock_request.form = MagicMock()
     mock_request.headers = {
         "X-Chargify-Webhook-Id": "webhook_123",
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
     }
-    mock_request.form.to_dict.return_value = {
+    mock_request.POST.dict.return_value = {
         "event": "subscription_state_change",
         "payload[subscription][id]": "sub_12345",
         "payload[subscription][state]": "canceled",
@@ -325,7 +330,7 @@ def test_shopify_customer_data_update():
     """Test parsing of Shopify customers/update webhook"""
     provider = ShopifyProvider(webhook_secret="test_secret")
 
-    mock_request = Mock(spec=Request)
+    mock_request = Mock()
     mock_request.content_type = "application/json"
     mock_request.headers = {
         "X-Shopify-Topic": "customers/update",
@@ -366,8 +371,9 @@ def test_shopify_customer_data_update():
             },
         ],
     }
-    mock_request.data = json.dumps(mock_data).encode("utf-8")
     mock_request.get_json.return_value = mock_data
+    mock_request.data = json.dumps(mock_data).encode("utf-8")
+    
 
     event = provider.parse_webhook(mock_request)
     assert event is not None
@@ -379,11 +385,12 @@ def test_shopify_customer_data_update():
 def test_chargify_webhook_deduplication():
     """Test Chargify webhook deduplication logic"""
     provider = ChargifyProvider("")
-    provider._DEDUP_WINDOW_SECONDS = 60  # Set window to 60 seconds for testing
+    provider._DEDUP_WINDOW_SECONDS = 60  # Устанавливаем окно дедупликации на 60 секунд для теста
 
-    # Create a mock request with payment_success event
-    mock_request = Mock()
+    # Создаем мок запроса с событием payment_success
+    mock_request = MagicMock()
     mock_request.content_type = "application/x-www-form-urlencoded"
+    mock_request.form = MagicMock()
     mock_request.headers = {
         "X-Chargify-Webhook-Id": "test_webhook_1",
     }
@@ -400,42 +407,40 @@ def test_chargify_webhook_deduplication():
         "payload[transaction][amount_in_cents]": "10000",
         "created_at": "2024-03-15T10:00:00Z",
     }
-    mock_form = MagicMock()
-    mock_form.to_dict.return_value = form_data
-    mock_request.form = mock_form
-
-    # First event should be processed
+    # mock_form = MagicMock()
+    # mock_form.POST.dict.return_value = form_data
+    # mock_request.form = mock_form
+    mock_request.POST.dict.return_value = form_data
+    # Первое событие должно обработаться
     event1 = provider.parse_webhook(mock_request)
     assert event1 is not None
     assert event1["type"] == "payment_success"
     assert event1["customer_id"] == "cust_123"
 
-    # Same customer within dedup window should be marked as duplicate
+    # Для того же customer в рамках дедупликационного окна событие должно считаться дубликатом
     mock_request.headers["X-Chargify-Webhook-Id"] = "different_webhook_id"
-    form_data["event"] = "renewal_success"  # Different event type
-    mock_form.to_dict.return_value = form_data
+    form_data["event"] = "renewal_success"  # меняем тип события
+    mock_request.POST.dict.return_value = form_data
     with pytest.raises(InvalidDataError, match="Duplicate webhook for customer"):
         provider.parse_webhook(mock_request)
 
-    # Different customer should be processed
+    # Для другого customer событие должно обработаться
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_3"
     form_data["event"] = "payment_success"
     form_data["payload[subscription][customer][id]"] = "cust_456"
     form_data["payload[subscription][customer][email]"] = "other@example.com"
-    mock_form.to_dict.return_value = form_data
+    mock_request.POST.dict.return_value = form_data
     event3 = provider.parse_webhook(mock_request)
     assert event3 is not None
     assert event3["type"] == "payment_success"
     assert event3["customer_id"] == "cust_456"
 
-    # Test cache cleanup - events outside dedup window
-    provider._DEDUP_WINDOW_SECONDS = 0  # Set window to 0 to force cleanup
+    # Тест очистки кэша – события вне дедупликационного окна
+    provider._DEDUP_WINDOW_SECONDS = 0  # Устанавливаем окно в 0 для принудительной очистки
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_4"
-    form_data["payload[subscription][customer][id]"] = (
-        "cust_123"  # Back to first customer
-    )
+    form_data["payload[subscription][customer][id]"] = "cust_123"  # возвращаем первого клиента
     form_data["payload[subscription][customer][email]"] = "test@example.com"
-    mock_form.to_dict.return_value = form_data
+    mock_request.POST.dict.return_value = form_data
     event4 = provider.parse_webhook(mock_request)
     assert event4 is not None
     assert event4["type"] == "payment_success"
@@ -446,7 +451,7 @@ def test_event_processor_notification_formatting():
     """Test that EventProcessor correctly formats notifications for various event types"""
     processor = EventProcessor()
 
-    # Test successful payment event
+    # Тест успешного платежного события
     event_data = {
         "type": "payment_success",
         "customer_id": "cust_123",
@@ -467,34 +472,30 @@ def test_event_processor_notification_formatting():
     notification = processor.format_notification(event_data, customer_data)
     assert notification.title == "Payment Received: $29.99"
     assert notification.status == "success"
-    assert (
-        len(notification.sections) == 3
-    )  # Event Details, Customer Details, and Metadata
+    assert len(notification.sections) == 3  # Event Details, Customer Details, and Metadata
     assert notification.sections[0].title == "Event Details"
     assert notification.sections[1].title == "Customer Details"
     assert notification.sections[2].title == "Additional Details"
 
-    # Test failed payment event
+    # Тест для события неуспешного платежа
     event_data["type"] = "payment_failure"
     event_data["status"] = "failed"
     event_data["metadata"]["failure_reason"] = "card_declined"
 
     notification = processor.format_notification(event_data, customer_data)
     assert notification.title == "Payment Failed"
-    assert notification.color == "#dc3545"  # Red for failure
-    assert (
-        len(notification.sections) == 3
-    )  # Event Details, Customer Details, and Metadata
-    assert (
-        "card_declined" in notification.sections[2].fields[2]
-    )  # Check failure reason in metadata
+    assert notification.color == "#dc3545"  # Красный для ошибки
+    assert len(notification.sections) == 3  # Event Details, Customer Details, and Metadata
+    # Проверяем, что в метаданных содержится причина ошибки.
+    # Если структура fields отличается, возможно, понадобится адаптировать проверку.
+    assert "card_declined" in notification.sections[2].fields[2]
 
 
 def test_chargify_memo_parsing():
     """Test that Chargify memo field is correctly parsed for Shopify order references"""
     provider = ChargifyProvider(webhook_secret="test_secret")
 
-    # Test various memo formats
+    # Тестируем различные форматы memo
     test_cases = [
         (
             "Wire payment received for $233.76 24th December '24\n$228.90 allocated to Shopify Order 2067",
@@ -505,18 +506,18 @@ def test_chargify_memo_parsing():
         ("Regular payment - no order reference", None),
         (
             "Multiple orders: allocated to 1111 and Shopify Order 2222",
-            "2222",  # Should prioritize explicit Shopify Order mention
+            "2222",  # Приоритет отдается явному упоминанию Shopify Order
         ),
         (
             "Order 3333 and Shopify Order 4444",
-            "4444",  # Should prioritize explicit Shopify Order mention
+            "4444",  # Приоритет отдается явному упоминанию Shopify Order
         ),
         (
             "Just Order 5555",
-            "5555",  # Should match generic order reference
+            "5555",  # Соответствие по шаблону общего order reference
         ),
         (
-            "",  # Empty memo
+            "",  # Пустой memo
             None,
         ),
     ]
@@ -530,15 +531,15 @@ def test_chargify_payment_success_with_shopify_ref():
     """Test that payment_success webhook includes Shopify order reference when present"""
     provider = ChargifyProvider(webhook_secret="test_secret")
 
-    # Create a mock Flask request
-    mock_request = MagicMock(spec=Request)
+    # Создаем мок запроса
+    mock_request = MagicMock()
     mock_request.content_type = "application/x-www-form-urlencoded"
     mock_request.form = MagicMock()
     mock_request.headers = {
         "X-Chargify-Webhook-Id": "webhook_123",
         "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
     }
-    mock_request.form.to_dict.return_value = {
+    mock_request.POST.dict.return_value = {
         "event": "payment_success",
         "payload[subscription][id]": "sub_12345",
         "payload[subscription][customer][id]": "cust_456",
@@ -556,14 +557,14 @@ def test_chargify_payment_success_with_shopify_ref():
     event = provider.parse_webhook(mock_request)
     assert event["type"] == "payment_success"
     assert event["metadata"]["shopify_order_ref"] == "1234"
-    assert "memo" in event["metadata"]  # Full memo should be preserved
+    assert "memo" in event["metadata"]  # Полное memo должно быть сохранено
 
 
 def test_shopify_order_ref_matching():
     """Test that Shopify and Chargify events are correctly linked by order reference"""
     processor = EventProcessor()
 
-    # Create a Shopify order event
+    # Создаем событие Shopify заказа
     shopify_event = {
         "type": "payment_success",
         "provider": "shopify",
@@ -573,7 +574,7 @@ def test_shopify_order_ref_matching():
         },
     }
 
-    # Create a Chargify payment event
+    # Создаем событие платежа из Chargify
     chargify_event = {
         "type": "payment_success",
         "provider": "chargify",
@@ -583,10 +584,10 @@ def test_shopify_order_ref_matching():
         },
     }
 
-    # Test Shopify -> Chargify linking
+    # Тест связывания: Shopify -> Chargify
     processed_shopify = processor._link_related_events(shopify_event)
     assert processed_shopify["metadata"]["order_ref"] == "1234"
 
-    # Test Chargify -> Shopify linking
+    # Тест связывания: Chargify -> Shopify
     processed_chargify = processor._link_related_events(chargify_event)
     assert processed_chargify["metadata"]["related_order_ref"] == "1234"

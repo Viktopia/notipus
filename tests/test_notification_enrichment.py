@@ -1,9 +1,8 @@
 from datetime import datetime
 import pytest
 from unittest.mock import MagicMock
-from app.providers.base import PaymentProvider, PaymentEvent
-from app.enrichment import NotificationEnricher
-
+from webhooks.providers.base import PaymentProvider, PaymentEvent
+from webhooks.enrichment import NotificationEnricher
 
 @pytest.fixture
 def mock_provider():
@@ -105,18 +104,18 @@ def test_customer_context_is_comprehensive(mock_provider, sample_payment_event):
     enricher = NotificationEnricher(provider=mock_provider)
     notification = enricher.enrich_notification(sample_payment_event)
 
-    # Check customer data is included in sections
+    # Проверка: данные о клиенте должны присутствовать в одной из секций
     customer_section = next(s for s in notification.sections if "Customer" in s.text)
     assert "Acme Corp" in customer_section.text
     assert "Enterprise" in customer_section.text
     assert "50" in customer_section.text  # team size
 
-    # Check metrics are included
+    # Проверка: метрики должны присутствовать
     metrics_section = next(s for s in notification.sections if "Metrics" in s.text)
     assert "15,000" in metrics_section.text  # API calls
     assert "25" in metrics_section.text  # active users
 
-    # Check payment history is included
+    # Проверка: история платежей должна присутствовать
     history_section = next(
         s for s in notification.sections if "Payment History" in s.text
     )
@@ -124,7 +123,7 @@ def test_customer_context_is_comprehensive(mock_provider, sample_payment_event):
     assert "success" in history_section.text.lower()
     assert "failed" in history_section.text.lower()
 
-    # Check customer insights
+    # Проверка: сведения о клиенте (insights)
     insights_section = next(s for s in notification.sections if "Insights" in s.text)
     assert "health score" in insights_section.text.lower()
     assert "0.8" in insights_section.text
@@ -137,11 +136,13 @@ def test_action_items_are_specific_and_actionable(mock_provider, sample_payment_
     enricher = NotificationEnricher(provider=mock_provider)
     notification = enricher.enrich_notification(sample_payment_event)
     assert notification.sections is not None
+    # Проверяем, что хотя бы в одной секции присутствует слово "action" (без учета регистра)
     assert any("action" in section.text.lower() for section in notification.sections)
 
 
 def test_notification_correlates_related_events(mock_provider, sample_payment_event):
     """Test that notifications include correlated events for context"""
+    # Переопределяем возвращаемые данные для get_related_events
     mock_provider.get_related_events.return_value = [
         {"event_type": "payment_failure", "timestamp": "2024-03-15T10:00:00Z"},
         {"event_type": "payment_success", "timestamp": "2024-03-15T11:00:00Z"},
