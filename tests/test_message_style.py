@@ -1,5 +1,5 @@
-import pytest
 from webhooks.message_generator import MessageGenerator
+
 
 def test_payment_success_messages_are_celebratory():
     """Test that payment success messages have a fun, celebratory tone"""

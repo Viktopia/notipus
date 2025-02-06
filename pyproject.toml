@@ -6,7 +6,7 @@ authors = [
     {name = "Viktopia Studio",email = "info@viktopia.io"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "django (>=5.1.5,<6.0.0)",
     "requests (>=2.32.3,<3.0.0)",

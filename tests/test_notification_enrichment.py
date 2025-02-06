@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from webhooks.providers.base import PaymentProvider, PaymentEvent
 from webhooks.enrichment import NotificationEnricher
 
+
 @pytest.fixture
 def mock_provider():
     provider = MagicMock(spec=PaymentProvider)

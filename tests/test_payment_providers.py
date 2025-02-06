@@ -8,6 +8,7 @@ from webhooks.providers import PaymentProvider, ChargifyProvider, ShopifyProvide
 from webhooks.providers.base import InvalidDataError
 from webhooks.event_processor import EventProcessor
 
+
 def test_payment_provider_interface():
     """Test that payment providers implement the required interface"""
     providers = [
@@ -134,7 +135,6 @@ def test_shopify_order_parsing():
     # Обязательно задаём request.data как JSON в виде байтов
     mock_request.data = json.dumps(shopify_data).encode("utf-8")
 
-
     event = provider.parse_webhook(mock_request)
     assert event["type"] == "payment_success"
     assert event["customer_id"] == "456"
@@ -167,8 +167,6 @@ def test_chargify_webhook_validation():
         assert provider.validate_webhook(mock_request) is True
 
 
-
-
 def test_shopify_webhook_validation():
     """Test Shopify webhook signature validation"""
     provider = ShopifyProvider("test_secret")
@@ -187,7 +185,9 @@ def test_shopify_webhook_validation():
     # Тест валидной сигнатуры
     with patch("hmac.new") as mock_hmac:
         mock_hmac.return_value.digest.return_value = b"test_digest"
-        mock_b64encode = Mock(return_value=b"crxL3PMfBMvgMYyppPUPjAooPtjS7fh0dOiGPTYm3QU=")
+        mock_b64encode = Mock(
+            return_value=b"crxL3PMfBMvgMYyppPUPjAooPtjS7fh0dOiGPTYm3QU="
+        )
         with patch("base64.b64encode", mock_b64encode):
             assert provider.validate_webhook(mock_request)
 
@@ -200,18 +200,19 @@ def test_shopify_webhook_validation():
     mock_request.headers.pop("X-Shopify-Topic")
     assert not provider.validate_webhook(mock_request)
 
-
     # Тест отсутствия домена магазина
     mock_request.headers["X-Shopify-Topic"] = "orders/paid"
     mock_request.headers.pop("X-Shopify-Shop-Domain")
     assert not provider.validate_webhook(mock_request)
 
     # Тест неверной сигнатуры
-    mock_request.headers.update({
-        "X-Shopify-Hmac-SHA256": "invalid_signature",
-        "X-Shopify-Topic": "orders/paid",
-        "X-Shopify-Shop-Domain": "test.myshopify.com",
-    })
+    mock_request.headers.update(
+        {
+            "X-Shopify-Hmac-SHA256": "invalid_signature",
+            "X-Shopify-Topic": "orders/paid",
+            "X-Shopify-Shop-Domain": "test.myshopify.com",
+        }
+    )
     assert not provider.validate_webhook(mock_request)
 
 
@@ -373,7 +374,6 @@ def test_shopify_customer_data_update():
     }
     mock_request.get_json.return_value = mock_data
     mock_request.data = json.dumps(mock_data).encode("utf-8")
-    
 
     event = provider.parse_webhook(mock_request)
     assert event is not None
@@ -385,7 +385,9 @@ def test_shopify_customer_data_update():
 def test_chargify_webhook_deduplication():
     """Test Chargify webhook deduplication logic"""
     provider = ChargifyProvider("")
-    provider._DEDUP_WINDOW_SECONDS = 60  # Устанавливаем окно дедупликации на 60 секунд для теста
+    provider._DEDUP_WINDOW_SECONDS = (
+        60  # Устанавливаем окно дедупликации на 60 секунд для теста
+    )
 
     # Создаем мок запроса с событием payment_success
     mock_request = MagicMock()
@@ -436,9 +438,13 @@ def test_chargify_webhook_deduplication():
     assert event3["customer_id"] == "cust_456"
 
     # Тест очистки кэша – события вне дедупликационного окна
-    provider._DEDUP_WINDOW_SECONDS = 0  # Устанавливаем окно в 0 для принудительной очистки
+    provider._DEDUP_WINDOW_SECONDS = (
+        0  # Устанавливаем окно в 0 для принудительной очистки
+    )
     mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_4"
-    form_data["payload[subscription][customer][id]"] = "cust_123"  # возвращаем первого клиента
+    form_data["payload[subscription][customer][id]"] = (
+        "cust_123"  # возвращаем первого клиента
+    )
     form_data["payload[subscription][customer][email]"] = "test@example.com"
     mock_request.POST.dict.return_value = form_data
     event4 = provider.parse_webhook(mock_request)
@@ -472,7 +478,9 @@ def test_event_processor_notification_formatting():
     notification = processor.format_notification(event_data, customer_data)
     assert notification.title == "Payment Received: $29.99"
     assert notification.status == "success"
-    assert len(notification.sections) == 3  # Event Details, Customer Details, and Metadata
+    assert (
+        len(notification.sections) == 3
+    )  # Event Details, Customer Details, and Metadata
     assert notification.sections[0].title == "Event Details"
     assert notification.sections[1].title == "Customer Details"
     assert notification.sections[2].title == "Additional Details"
@@ -485,7 +493,9 @@ def test_event_processor_notification_formatting():
     notification = processor.format_notification(event_data, customer_data)
     assert notification.title == "Payment Failed"
     assert notification.color == "#dc3545"  # Красный для ошибки
-    assert len(notification.sections) == 3  # Event Details, Customer Details, and Metadata
+    assert (
+        len(notification.sections) == 3
+    )  # Event Details, Customer Details, and Metadata
     # Проверяем, что в метаданных содержится причина ошибки.
     # Если структура fields отличается, возможно, понадобится адаптировать проверку.
     assert "card_declined" in notification.sections[2].fields[2]

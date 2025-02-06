@@ -22,6 +22,7 @@ def mock_webhook_validation():
 def client():
     """Django test client"""
     from django.test import Client
+
     return Client()
 
 
@@ -67,10 +68,10 @@ def mock_shopify_request(request_factory):
         "financial_status": "paid",
     }
     request = request_factory.post(
-        reverse('shopify_webhook'),  # Убедитесь, что у вас есть соответствующий маршрут
+        reverse("shopify_webhook"),  # Убедитесь, что у вас есть соответствующий маршрут
         data=data,
         content_type="application/json",
-        **headers
+        **headers,
     )
     return request
 
@@ -118,10 +119,12 @@ def mock_shopify_customer_request(request_factory):
         ],
     }
     request = request_factory.post(
-        reverse('shopify_customer_webhook'),  # Убедитесь, что у вас есть соответствующий маршрут
+        reverse(
+            "shopify_customer_webhook"
+        ),  # Убедитесь, что у вас есть соответствующий маршрут
         data=data,
         content_type="application/json",
-        **headers
+        **headers,
     )
     return request
 
@@ -147,9 +150,11 @@ def mock_chargify_request(request_factory):
         "created_at": "2024-03-15T10:00:00Z",
     }
     request = request_factory.post(
-        reverse('chargify_webhook'),  # Убедитесь, что у вас есть соответствующий маршрут
+        reverse(
+            "chargify_webhook"
+        ),  # Убедитесь, что у вас есть соответствующий маршрут
         data=data,
         content_type="application/x-www-form-urlencoded",
-        **headers
+        **headers,
     )
     return request

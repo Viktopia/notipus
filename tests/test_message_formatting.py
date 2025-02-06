@@ -1,7 +1,7 @@
-import pytest
 from webhooks.models.notification import Notification, Section
 
-#@pytest.mark.django_db
+
+# @pytest.mark.django_db
 def test_payment_failure_message_structure():
     """Test that payment failure messages have the correct structure"""
     notification = Notification(
@@ -27,7 +27,7 @@ def test_payment_failure_message_structure():
         emoji="🚨",
     )
 
-    # Если Notification является Django-моделью, возможно, придётся сохранять объект, 
+    # Если Notification является Django-моделью, возможно, придётся сохранять объект,
     # либо тестировать метод до сохранения, если он не зависит от базы данных.
     assert notification.status == "failed"
     assert notification.color == "#dc3545"
@@ -37,7 +37,7 @@ def test_payment_failure_message_structure():
     assert len(message["blocks"]) == 3  # Заголовок + 2 секции
 
 
-#@pytest.mark.django_db
+# @pytest.mark.django_db
 def test_trial_end_message_structure():
     """Test that trial end messages have the correct structure"""
     notification = Notification(
@@ -71,7 +71,7 @@ def test_trial_end_message_structure():
     assert len(message["blocks"]) == 3  # Заголовок + 2 секции
 
 
-#@pytest.mark.django_db
+# @pytest.mark.django_db
 def test_message_color_by_type():
     """Test that message color is set based on event type"""
     failure_notification = Notification(
@@ -102,7 +102,7 @@ def test_message_color_by_type():
     assert info_notification.color == "#17a2b8"
 
 
-#@pytest.mark.django_db
+# @pytest.mark.django_db
 def test_status_color_sync():
     """Test that status and color stay in sync"""
     notification = Notification(
@@ -129,7 +129,7 @@ def test_status_color_sync():
     assert notification.color == "#17a2b8"
 
 
-#@pytest.mark.django_db
+# @pytest.mark.django_db
 def test_action_buttons():
     """Test that action buttons are properly formatted"""
     notification = Notification(
