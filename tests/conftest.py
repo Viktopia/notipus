@@ -12,7 +12,7 @@ def mock_webhook_validation():
         return {"blocks": [], "color": "#28a745"}
 
     with patch(
-        "webhooks.event_processor.EventProcessor.format_notification",
+        "app.webhooks.event_processor.EventProcessor.format_notification",
         mock_format_notification,
     ):
         yield mock_format_notification

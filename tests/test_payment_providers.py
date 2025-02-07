@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch, Mock
 # Импортируем Django HttpRequest, если нужно (но здесь мы используем MagicMock)
 # from django.http import HttpRequest
 
-from webhooks.providers import PaymentProvider, ChargifyProvider, ShopifyProvider
-from webhooks.providers.base import InvalidDataError
-from webhooks.event_processor import EventProcessor
+from app.webhooks.providers import PaymentProvider, ChargifyProvider, ShopifyProvider
+from app.webhooks.providers.base import InvalidDataError
+from app.webhooks.event_processor import EventProcessor
 
 
 def test_payment_provider_interface():

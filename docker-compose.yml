@@ -17,9 +17,7 @@ services:
     build: .
     container_name: django_app
     command: gunicorn --bind 0.0.0.0:8000 django_notipus.wsgi:application
-    volumes:
-      - .:/app
-      - static_volume:/app/static
+
     environment:
       - DEBUG=True
       - DB_HOST=db

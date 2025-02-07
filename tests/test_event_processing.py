@@ -1,6 +1,6 @@
 import pytest
-from webhooks.event_processor import EventProcessor
-from webhooks.models.notification import Notification
+from app.webhooks.event_processor import EventProcessor
+from app.webhooks.models.notification import Notification
 
 
 def test_notification_formatting():

@@ -1,4 +1,4 @@
-from webhooks.message_generator import MessageGenerator
+from app.webhooks.message_generator import MessageGenerator
 
 
 def test_payment_success_messages_are_celebratory():

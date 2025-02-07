@@ -1,4 +1,4 @@
-from webhooks.models.notification import Notification, Section
+from app.webhooks.models.notification import Notification, Section
 
 
 # @pytest.mark.django_db
