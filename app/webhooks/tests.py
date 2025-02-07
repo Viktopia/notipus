@@ -1,5 +1,6 @@
 from django.test import TestCase, Client
 
+
 class ChargifyWebhookTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -16,7 +17,10 @@ class ChargifyWebhookTest(TestCase):
 
     def test_valid_webhook(self):
         response = self.client.post(
-            self.url, self.data, content_type="application/x-www-form-urlencoded", **self.headers
+            self.url,
+            self.data,
+            content_type="application/x-www-form-urlencoded",
+            **self.headers,
         )
         self.assertEqual(response.status_code, 200)
 
@@ -24,6 +28,9 @@ class ChargifyWebhookTest(TestCase):
         headers = self.headers.copy()
         headers["HTTP_X-Chargify-Webhook-Signature-Hmac-Sha-256"] = "invalid_signature"
         response = self.client.post(
-            self.url, self.data, content_type="application/x-www-form-urlencoded", **headers
+            self.url,
+            self.data,
+            content_type="application/x-www-form-urlencoded",
+            **headers,
         )
         self.assertEqual(response.status_code, 400)

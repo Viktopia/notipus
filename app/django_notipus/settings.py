@@ -19,7 +19,7 @@ from webhooks.event_processor import EventProcessor
 from webhooks.slack_client import SlackClient
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))  # Загрузка переменных из .env
+load_dotenv(os.path.join(BASE_DIR, ".env"))  # Load variables from .env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -131,10 +131,10 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 
-# Указываем директорию, куда будут собраны статические файлы
+# Specify the directory where static files will be collected
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Указываем дополнительные директории для статических файлов
+# Specify additional directories for static files
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
@@ -164,7 +164,7 @@ LOGGING = {
 CHARGIFY_WEBHOOK_SECRET = os.getenv("CHARGIFY_WEBHOOK_SECRET")
 
 
-# Конфигурация провайдеров
+# Provider configurations
 SHOPIFY_SHOP_URL = os.getenv("SHOPIFY_SHOP_URL")
 SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 SHOPIFY_WEBHOOK_SECRET = os.getenv("SHOPIFY_WEBHOOK_SECRET")
@@ -172,9 +172,9 @@ SHOPIFY_PROVIDER = ShopifyProvider(webhook_secret=SHOPIFY_WEBHOOK_SECRET)
 
 CHARGIFY_PROVIDER = ChargifyProvider(webhook_secret="your_chargify_webhook_secret")
 
-# Конфигурация процессора событий
+# Event processor configuration
 EVENT_PROCESSOR = EventProcessor()
 
-# Конфигурация Slack-клиента
+# Slack client configuration
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 SLACK_CLIENT = SlackClient(webhook_url=SLACK_WEBHOOK_URL)

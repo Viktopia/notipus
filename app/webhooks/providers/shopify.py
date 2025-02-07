@@ -24,7 +24,7 @@ class ShopifyProvider(PaymentProvider):
 
     def __init__(self, webhook_secret: str):
         """Initialize provider with webhook secret"""
-        
+
         super().__init__(webhook_secret)
         self._current_webhook_data = None
 
@@ -41,7 +41,7 @@ class ShopifyProvider(PaymentProvider):
 
         # Parse JSON data
         try:
-            data = json.loads(request.data)  # В Django используется request.body
+            data = json.loads(request.data)
         except (json.JSONDecodeError, AttributeError):
             raise InvalidDataError("Invalid JSON data")
 
@@ -90,9 +90,11 @@ class ShopifyProvider(PaymentProvider):
                 "status": "success",  # Default status
                 "metadata": {
                     "order_number": data.get("order_number"),
-                    "order_ref": str(data.get("order_number"))
-                    if data.get("order_number")
-                    else None,
+                    "order_ref": (
+                        str(data.get("order_number"))
+                        if data.get("order_number")
+                        else None
+                    ),
                     "financial_status": data.get("financial_status"),
                     "fulfillment_status": data.get("fulfillment_status"),
                 },
@@ -155,12 +157,15 @@ class ShopifyProvider(PaymentProvider):
         if not hmac_header:
             return False
 
-        # Убедимся, что body — это bytes
         if not isinstance(request.body, (bytes, bytearray)):
             raise TypeError("Expected bytes or bytearray for request body")
 
         message = request.body
-        secret = self.webhook_secret.encode("utf-8") if isinstance(self.webhook_secret, str) else self.webhook_secret
+        secret = (
+            self.webhook_secret.encode("utf-8")
+            if isinstance(self.webhook_secret, str)
+            else self.webhook_secret
+        )
 
         digest = hmac.new(secret, message, hashlib.sha256).digest()
         calculated_hmac = base64.b64encode(digest).decode("utf-8")

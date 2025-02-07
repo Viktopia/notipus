@@ -7,7 +7,7 @@ from collections import OrderedDict
 from datetime import datetime
 import re
 from typing import Dict, Any
-from django.http import HttpRequest  # Заменяем flask.Request на django.http.HttpRequest
+from django.http import HttpRequest
 from .base import PaymentProvider, InvalidDataError, CustomerNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class ChargifyProvider(PaymentProvider):
                 )
                 return False
 
-            body = request.body  # В Django используется request.body вместо request.get_data()
+            body = request.body
             if use_sha256:
                 expected_signature = hmac.new(
                     self.webhook_secret.encode(),
@@ -293,7 +293,7 @@ class ChargifyProvider(PaymentProvider):
             "Parsing Chargify webhook data",
             extra={
                 "content_type": request.content_type,
-                "form_data": request.POST.dict() if request.POST else None,  # В Django используется request.POST
+                "form_data": (request.POST.dict() if request.POST else None),
                 "headers": dict(request.headers),
             },
         )
@@ -303,7 +303,7 @@ class ChargifyProvider(PaymentProvider):
             raise InvalidDataError("Invalid content type")
 
         # Parse form data
-        data = request.POST.dict()  # В Django используется request.POST для form-data
+        data = request.POST.dict()
         if not data:
             raise InvalidDataError("Missing required fields")
 

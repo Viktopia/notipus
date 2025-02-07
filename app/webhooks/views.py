@@ -1,4 +1,3 @@
-from django.shortcuts import render
 import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -8,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 
 logger = logging.getLogger(__name__)
+
 
 @require_http_methods(["POST"])
 def shopify_webhook(request):
@@ -38,7 +38,8 @@ def shopify_webhook(request):
         settings.SLACK_CLIENT.send_notification(notification)
 
         return JsonResponse(
-            {"status": "success", "message": "Webhook processed successfully"}, status=200
+            {"status": "success", "message": "Webhook processed successfully"},
+            status=200,
         )
 
     except InvalidDataError as e:
@@ -47,6 +48,7 @@ def shopify_webhook(request):
     except Exception as e:
         logger.error("Server error in Shopify webhook", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -88,7 +90,8 @@ def chargify_webhook(request):
         settings.SLACK_CLIENT.send_notification(notification)
 
         return JsonResponse(
-            {"status": "success", "message": "Webhook processed successfully"}, status=200
+            {"status": "success", "message": "Webhook processed successfully"},
+            status=200,
         )
 
     except InvalidDataError as e:
@@ -97,6 +100,7 @@ def chargify_webhook(request):
     except Exception as e:
         logger.error("Server error in Chargify webhook", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+
 
 @require_http_methods(["GET"])
 def health_check(request):
