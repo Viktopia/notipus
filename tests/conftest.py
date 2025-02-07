@@ -68,7 +68,7 @@ def mock_shopify_request(request_factory):
         "financial_status": "paid",
     }
     request = request_factory.post(
-        reverse("shopify_webhook"),  # Убедитесь, что у вас есть соответствующий маршрут
+        reverse("shopify_webhook"),
         data=data,
         content_type="application/json",
         **headers,
@@ -119,9 +119,7 @@ def mock_shopify_customer_request(request_factory):
         ],
     }
     request = request_factory.post(
-        reverse(
-            "shopify_customer_webhook"
-        ),  # Убедитесь, что у вас есть соответствующий маршрут
+        reverse("shopify_customer_webhook"),
         data=data,
         content_type="application/json",
         **headers,
@@ -150,9 +148,7 @@ def mock_chargify_request(request_factory):
         "created_at": "2024-03-15T10:00:00Z",
     }
     request = request_factory.post(
-        reverse(
-            "chargify_webhook"
-        ),  # Убедитесь, что у вас есть соответствующий маршрут
+        reverse("chargify_webhook"),
         data=data,
         content_type="application/x-www-form-urlencoded",
         **headers,
