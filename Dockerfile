@@ -32,5 +32,5 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 8000
 
 # Command to start the server
-# CMD ["gunicorn", "--bind", "0.0.0.0:8000", "django_notipus.wsgi:application"]
-CMD ["poetry", "run", "python", "manage.py", "runserver"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "django_notipus.wsgi:application"]
+# CMD ["poetry", "run", "python", "manage.py", "runserver"]
