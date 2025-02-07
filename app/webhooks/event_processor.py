@@ -1,5 +1,6 @@
-from typing import Dict, Any
 import logging
+from typing import Any, Dict
+
 from .models.notification import Notification, Section
 
 logger = logging.getLogger(__name__)

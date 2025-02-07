@@ -1,8 +1,8 @@
-from typing import Dict, Any, List
 import random
+from typing import Any, Dict, List
 
-from .enrichment import EnrichedNotification, ActionItem
 from .domain_models import Priority
+from .enrichment import ActionItem, EnrichedNotification
 
 
 class MessageGenerator:

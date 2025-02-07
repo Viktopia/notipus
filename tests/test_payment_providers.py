@@ -1,9 +1,11 @@
 import json
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, Mock
-from app.webhooks.providers import PaymentProvider, ChargifyProvider, ShopifyProvider
-from app.webhooks.providers.base import InvalidDataError
+
 from app.webhooks.event_processor import EventProcessor
+from app.webhooks.providers import ChargifyProvider, PaymentProvider, ShopifyProvider
+from app.webhooks.providers.base import InvalidDataError
 
 
 def test_payment_provider_interface():

@@ -1,4 +1,5 @@
 import pytest
+
 from app.webhooks.event_processor import EventProcessor
 from app.webhooks.models.notification import Notification
 

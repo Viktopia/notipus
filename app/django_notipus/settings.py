@@ -10,12 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
-from webhooks.providers.shopify import ShopifyProvider
-from webhooks.providers.chargify import ChargifyProvider
 from webhooks.event_processor import EventProcessor
+from webhooks.providers.chargify import ChargifyProvider
+from webhooks.providers.shopify import ShopifyProvider
 from webhooks.slack_client import SlackClient
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

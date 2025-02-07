@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 from django.test.client import RequestFactory
 from django.urls import reverse
 

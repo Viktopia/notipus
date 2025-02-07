@@ -1,6 +1,8 @@
-import requests
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
+
+import requests
+
 from .models.notification import Notification
 
 logger = logging.getLogger(__name__)

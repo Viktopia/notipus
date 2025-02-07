@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from .providers.base import PaymentProvider, PaymentEvent
+from .providers.base import PaymentEvent, PaymentProvider
 
 
 @dataclass

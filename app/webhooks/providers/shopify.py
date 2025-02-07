@@ -1,13 +1,14 @@
 # providers/shopify.py
-from typing import Dict, Any, Optional
-from django.http import HttpRequest
-import hmac
-import hashlib
-import logging
 import base64
+import hashlib
+import hmac
 import json
+import logging
+from typing import Any, Dict, Optional
 
-from .base import PaymentProvider, InvalidDataError, CustomerNotFoundError
+from django.http import HttpRequest
+
+from .base import CustomerNotFoundError, InvalidDataError, PaymentProvider
 
 logger = logging.getLogger(__name__)
 

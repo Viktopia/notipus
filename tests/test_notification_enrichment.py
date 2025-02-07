@@ -1,8 +1,10 @@
 from datetime import datetime
-import pytest
 from unittest.mock import MagicMock
-from app.webhooks.providers.base import PaymentProvider, PaymentEvent
+
+import pytest
+
 from app.webhooks.enrichment import NotificationEnricher
+from app.webhooks.providers.base import PaymentEvent, PaymentProvider
 
 
 @pytest.fixture
