@@ -50,10 +50,10 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
-      - name: Prepare Django
-        run: |
-          poetry run python app/manage.py collectstatic --noinput
-          poetry run python app/manage.py migrate
+      # - name: Prepare Django
+        # run: |
+          # poetry run python app/manage.py collectstatic --noinput
+          # poetry run python app/manage.py migrate
 
       - name: Run tests
         run: poetry run pytest --cov=django_notipus
