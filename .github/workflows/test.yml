@@ -1,4 +1,4 @@
-name: Test
+name: Django CI
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.13"]
 
     steps:
     - uses: actions/checkout@v4
@@ -42,8 +42,13 @@ jobs:
     - name: Install project
       run: poetry install --no-interaction
 
+    - name: Prepare Django
+      run: |
+        poetry run python manage.py collectstatic --noinput
+        poetry run python manage.py migrate
+
     - name: Run tests
-      run: poetry run pytest --cov=app tests/
+      run: poetry run pytest --cov=django_notipus
 
     - name: Run linting
       run: |
