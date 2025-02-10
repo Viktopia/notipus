@@ -50,11 +50,6 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
-      # - name: Prepare Django
-        # run: |
-          # poetry run python app/manage.py collectstatic --noinput
-          # poetry run python app/manage.py migrate
-
       - name: Run tests
         run: poetry run pytest --cov=django_notipus
 
@@ -62,3 +57,18 @@ jobs:
         run: |
           poetry run ruff check .
           poetry run ruff format --check .
+
+      #----------------------------------------------
+      #       check TypeScript with ESLint
+      #----------------------------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies for TypeScript linting
+        run: |
+          npm install --global eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin
+
+      - name: Run TypeScript linting
+        run: eslint '**/*.ts' --max-warnings=0
