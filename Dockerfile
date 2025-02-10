@@ -16,7 +16,8 @@ WORKDIR /code
 
 # Copy only dependencies first to leverage Docker cache
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --no-dev --no-root
+#RUN poetry install --no-dev --no-root
+RUN poetry install  --no-root
 
 # Copy the rest of the application
 COPY . .
