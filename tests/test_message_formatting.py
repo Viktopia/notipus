@@ -1,6 +1,7 @@
-from app.models import Notification, Section
+from app.webhooks.models.notification import Notification, Section
 
 
+# @pytest.mark.django_db
 def test_payment_failure_message_structure():
     """Test that payment failure messages have the correct structure"""
     notification = Notification(
@@ -22,18 +23,18 @@ def test_payment_failure_message_structure():
                 },
             ),
         ],
-        color="#dc3545",  # Red
+        color="#dc3545",
         emoji="🚨",
     )
-
     assert notification.status == "failed"
     assert notification.color == "#dc3545"
 
     message = notification.to_slack_message()
     assert message["color"] == "#dc3545"
-    assert len(message["blocks"]) == 3  # Header + 2 sections
+    assert len(message["blocks"]) == 3
 
 
+# @pytest.mark.django_db
 def test_trial_end_message_structure():
     """Test that trial end messages have the correct structure"""
     notification = Notification(
@@ -64,9 +65,10 @@ def test_trial_end_message_structure():
 
     message = notification.to_slack_message()
     assert message["color"] == "#ffc107"
-    assert len(message["blocks"]) == 3  # Header + 2 sections
+    assert len(message["blocks"]) == 3
 
 
+# @pytest.mark.django_db
 def test_message_color_by_type():
     """Test that message color is set based on event type"""
     failure_notification = Notification(
@@ -97,6 +99,7 @@ def test_message_color_by_type():
     assert info_notification.color == "#17a2b8"
 
 
+# @pytest.mark.django_db
 def test_status_color_sync():
     """Test that status and color stay in sync"""
     notification = Notification(
@@ -104,7 +107,6 @@ def test_status_color_sync():
         sections=[],
     )
 
-    # Test setting status
     notification.status = "success"
     assert notification.status == "success"
     assert notification.color == "#28a745"
@@ -117,12 +119,12 @@ def test_status_color_sync():
     assert notification.status == "warning"
     assert notification.color == "#ffc107"
 
-    # Test invalid status defaults to info
     notification.status = "invalid"
     assert notification.status == "info"
     assert notification.color == "#17a2b8"
 
 
+# @pytest.mark.django_db
 def test_action_buttons():
     """Test that action buttons are properly formatted"""
     notification = Notification(
@@ -135,7 +137,7 @@ def test_action_buttons():
     )
 
     message = notification.to_slack_message()
-    assert len(message["blocks"]) == 2  # Header + actions
+    assert len(message["blocks"]) == 2
     actions_block = message["blocks"][1]
     assert actions_block["type"] == "actions"
     assert len(actions_block["elements"]) == 2

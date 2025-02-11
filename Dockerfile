@@ -1,28 +1,36 @@
 # syntax=docker/dockerfile:1
+# Use the official Python image
+FROM python:3.13-slim
 
-FROM python:3.9-slim
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-LABEL fly_launch_runtime="flask"
+# Set the working directory
+WORKDIR /app
+
+# Copy dependencies
+COPY pyproject.toml poetry.lock /app/
 
 # Install Poetry
-ENV POETRY_HOME="/opt/poetry" \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false \
-    PYTHONUNBUFFERED=1
+RUN pip install --upgrade pip && \
+    pip install poetry && \
+    poetry config virtualenvs.create false
 
-RUN pip install poetry
+RUN apt-get update && apt-get install -y libpq-dev gcc && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /code
+# Install project dependencies
+RUN poetry install --no-root --no-interaction --no-ansi
 
-# Copy only dependencies first to leverage Docker cache
-COPY pyproject.toml poetry.lock ./
-#RUN poetry install --no-dev --no-root
-RUN poetry install  --no-root
+COPY ./app/ .
 
-# Copy the rest of the application
-COPY . .
+RUN apt update && apt install -y postgresql-client
+# Collect static files (if used)
+RUN python manage.py collectstatic --noinput
 
-EXPOSE 8080
+# Port that the application will use
+EXPOSE 8000
 
-# Use Gunicorn instead of Flask development server
-CMD ["poetry", "run", "gunicorn", "--bind", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "app:create_app()"]
+# Command to start the server
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "django_notipus.wsgi:application"]
+# CMD ["poetry", "run", "python", "manage.py", "runserver"]

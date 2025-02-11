@@ -15,26 +15,50 @@ A webhook-driven notification service that sends enriched payment and subscripti
 
 ### Using Docker (Recommended)
 
-1. Clone the repository:
-```bash
-git clone git@github.com:Viktopia/notipus.git
+1. Clone the Repository
+Clone the repository to your local machine and navigate into the project directory:
+```
+git clone git@github.com:ThNikGhost/notipus.git
 cd notipus
 ```
 
-2. Build the Docker image:
-```bash
-docker build -t notipus .
+2. Build the Docker Image
+Build the necessary Docker containers for the project:
+```
+docker-compose build
 ```
 
-3. Run the container with your environment variables:
-```bash
-docker run -d \
-  -p 8080:8080 \
-  -e SLACK_WEBHOOK_URL=your_slack_webhook_url \
-  -e CHARGIFY_WEBHOOK_SECRET=your_chargify_webhook_secret \
-  -e SHOPIFY_WEBHOOK_SECRET=your_webhook_secret \
-  notipus
+3. Create the .env File
+Create a .env file in the root directory to store environment variables. Below is a template for reference:
 ```
+SLACK_WEBHOOK_URL=https://hooks.slack.com/test
+CHARGIFY_WEBHOOK_SECRET=test_secret
+SHOPIFY_WEBHOOK_SECRET=test_secret
+SHOPIFY_SHOP_URL=test.myshopify.com
+SHOPIFY_ACCESS_TOKEN=test_token
+```
+Note: Replace the placeholder values (test_secret, test_token, etc.) with the actual credentials and secrets for your environment.
+
+4. Run the Containers
+Start the Docker containers with the specified environment variables:
+```
+docker-compose up -d
+```
+The -d flag runs the containers in detached mode.
+
+5. Verify the Setup
+Ensure that the services are running correctly by checking the Docker container logs:
+```
+docker-compose logs -f
+```
+Access the application based on the configured settings (e.g., http://localhost:8000).
+
+6. Stopping the Containers
+To stop the running containers, use:
+```
+docker-compose down
+```
+Feel free to extend this setup guide with additional steps or troubleshooting tips specific to your project.
 
 ### Local Development
 
@@ -49,30 +73,15 @@ cd notipus
 poetry install
 ```
 
-3. Set required environment variables:
-```bash
-export SLACK_WEBHOOK_URL=your_slack_webhook_url
-export CHARGIFY_WEBHOOK_SECRET=your_chargify_webhook_secret
-export SHOPIFY_WEBHOOK_SECRET=your_webhook_secret
+3. Create the .env File
+Create a .env file in the root directory to store environment variables. Below is a template for reference:
 ```
-
-## Usage
-
-1. Start the server:
-
-Using Docker:
-```bash
-docker run -d -p 8080:8080 notipus
+SLACK_WEBHOOK_URL=https://hooks.slack.com/test
+CHARGIFY_WEBHOOK_SECRET=test_secret
+SHOPIFY_WEBHOOK_SECRET=test_secret
+SHOPIFY_SHOP_URL=test.myshopify.com
+SHOPIFY_ACCESS_TOKEN=test_token
 ```
-
-Local development:
-```bash
-poetry run python -m app.main
-```
-
-2. Configure webhooks in Shopify and Chargify to point to your endpoints:
-- Shopify: `https://your-domain/webhook/shopify`
-- Chargify: `https://your-domain/webhook/chargify`
 
 ## Development
 
@@ -96,28 +105,21 @@ poetry run isort .
 ```bash
 poetry run ruff check .
 ```
-
 ## Architecture
-
 The service is built with a modular architecture that separates concerns and makes it easy to extend:
 
-- `app/providers/`: Payment provider webhook handlers (Shopify, Chargify)
-- `app/insights.py`: Customer insights and recommendations
-- `app/event_processor.py`: Event processing and notification formatting
-- `app/models.py`: Common data models and enums
-- `app/__init__.py`: Flask application and webhook handlers
-
-## Docker Deployment
-
-The service is containerized using Docker for easy deployment. The Dockerfile:
-- Uses Python 3.9 slim base image
-- Installs Poetry for dependency management
-- Copies only necessary files
-- Sets up a non-root user for security
-- Exposes port 8080
-- Uses multi-stage build for smaller image size
-
-Environment variables are passed to the container at runtime, making it easy to deploy in different environments without modifying the code.
+```bash
+app/
+├── webhooks/
+│   ├── providers/      # Payment gateway integrations
+│   │   ├── base.py     ♻️ AbstractProvider
+│   │   ├── chargify.py ⚡ ChargifyWebhookProcessor
+│   │   └── shopify.py  🛒 ShopifyWebhookProcessor
+│   ├── models/
+│   │   └── notification.py # 🗄️ Notification model
+│   ├── event_processor.py  # ⚙️ Event handling
+│   └── message_generator.py # 📨 Content builder
+```
 
 ## Contributing
 
@@ -127,36 +129,12 @@ Environment variables are passed to the container at runtime, making it easy to 
 4. Push to the branch: `git push origin feature/amazing-feature`
 5. Open a pull request
 
-
 ## Configuration
 
 The application requires the following environment variables:
 
-- `SLACK_WEBHOOK_URL`: The Slack webhook URL to send notifications to
-- `SHOPIFY_WEBHOOK_SECRET`: The webhook secret from your Shopify app settings
-- `CHARGIFY_WEBHOOK_SECRET`: (Optional) The webhook secret from your Chargify settings
-- `SENTRY_DSN`: (Optional) Sentry DSN for error tracking
-- `DEBUG`: Set to "true" to enable debug logging (default: false)
-
-## Debug Logging
-
-To enable verbose debug logging, set the `DEBUG` environment variable to "true":
-
-```bash
-# In development
-export DEBUG=true
-
-# In Docker
-docker run -e DEBUG=true ...
-```
-
-Debug logs include:
-- Detailed webhook payload contents
-- Signature validation details
-- Customer and subscription data
-- Webhook processing steps
-- Deduplication checks
-
-This is useful for troubleshooting webhook processing issues or understanding the data flow.
-
-Note: Debug logs may contain sensitive information, so use with caution in production environments.
+- `SLACK_WEBHOOK_URL`: The Slack webhook URL used to send notifications.
+- `CHARGIFY_WEBHOOK_SECRET`: (Optional) The webhook secret from your Chargify settings.
+- `SHOPIFY_WEBHOOK_SECRET`: The webhook secret from your Shopify app settings.
+- `SHOPIFY_SHOP_URL`: The URL of your Shopify store (e.g., yourstore.myshopify.com).
+- `SHOPIFY_ACCESS_TOKEN`: The access token to authenticate API requests to your Shopify store.
