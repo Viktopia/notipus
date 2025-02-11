@@ -18,7 +18,7 @@ A webhook-driven notification service that sends enriched payment and subscripti
 1. Clone the Repository
 Clone the repository to your local machine and navigate into the project directory:
 ```
-git clone git@github.com:ThNikGhost/notipus.git
+git clone git@github.com:viktopia/notipus.git
 cd notipus
 ```
 
