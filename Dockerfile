@@ -22,7 +22,6 @@ RUN apt-get update && apt-get install -y libpq-dev gcc && rm -rf /var/lib/apt/li
 # Install project dependencies
 RUN poetry install --no-root --no-interaction --no-ansi
 
-# Copy project source code
 COPY ./app/ .
 
 RUN apt update && apt install -y postgresql-client
