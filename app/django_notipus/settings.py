@@ -36,7 +36,8 @@ SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 DEBUG = True
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
+# ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -49,6 +50,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "webhooks",
+    "core",
 ]
 
 MIDDLEWARE = [
