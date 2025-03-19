@@ -7,10 +7,7 @@ from django.db.models import Q
 import requests
 
 from core.models import UserProfile, Organization
-
-SLACK_CLIENT_ID = '8551300556885.8583299723987'
-SLACK_CLIENT_SECRET = 'e1f6c5840c3eed438d4447387c7740f9'
-SLACK_REDIRECT_URI = 'https://0b62-185-94-29-180.ngrok-free.app/auth/slack/callback'
+from django_notipus.settings import SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, SLACK_REDIRECT_URI
 
 
 def home(request):
