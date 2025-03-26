@@ -36,8 +36,7 @@ SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 DEBUG = True
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-# ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
 
 
 # Application definition
