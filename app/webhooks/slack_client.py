@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 import requests
 
-from webhooks.models.notification import Notification
+from .models.notification import Notification
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,6 @@ class SlackClient:
 
     def send_message(self, message: Dict[str, Any]) -> bool:
         """Send a message to Slack using the webhook URL"""
-        if self.webhook_url is None:
-            raise Exception("Webhook_url is unset")
         try:
             response = requests.post(self.webhook_url, json=message)
             response.raise_for_status()

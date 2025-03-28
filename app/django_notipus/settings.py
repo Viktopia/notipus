@@ -14,10 +14,10 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from webhooks.services.event_processor import EventProcessor
+from webhooks.event_processor import EventProcessor
 from webhooks.providers.chargify import ChargifyProvider
 from webhooks.providers.shopify import ShopifyProvider
-from webhooks.services.slack_client import SlackClient
+from webhooks.slack_client import SlackClient
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(BASE_DIR, ".env"))  # Load variables from .env
@@ -33,7 +33,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', False)
+DEBUG = True
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
 ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
@@ -179,13 +179,9 @@ CHARGIFY_PROVIDER = ChargifyProvider(webhook_secret="your_chargify_webhook_secre
 EVENT_PROCESSOR = EventProcessor()
 
 # Slack client configuration
-# SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
-SLACK_CLIENT = None
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+SLACK_CLIENT = SlackClient(webhook_url=SLACK_WEBHOOK_URL)
 
 SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID")
 SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET")
 SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI")
-
-SLACK_CLIENT_BOT_ID = os.getenv("SLACK_CLIENT_BOT_ID")
-SLACK_CLIENT_BOT_SECRET = os.getenv("SLACK_CLIENT_BOT_SECRET")
-SLACK_REDIRECT_BOT_URI = os.getenv("SLACK_REDIRECT_BOT_URI")

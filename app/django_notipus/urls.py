@@ -18,21 +18,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from ninja import NinjaAPI
-
-from webhooks.webhook_router import webhook_router
-
-ninja_api = NinjaAPI(
-    title="Notipus API",
-    version="1.0",
-    description="API for Slack authentication and integrations management",
-    csrf=True
-)
-
-ninja_api.add_router("/", webhook_router, tags=["Webhooks"])
-
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include("core.urls")),
-    path("", ninja_api.urls),
+    path("", include("core.urls")),
+    path("", include("webhooks.urls")),
 ]

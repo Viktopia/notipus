@@ -3,17 +3,15 @@ services:
     image: postgres:13
     container_name: postgres_db
     environment:
-      POSTGRES_DB: {DB_NAME}
-      POSTGRES_USER: {DB_USER}
-      POSTGRES_PASSWORD: {DB_PASSWORD}
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - app_network
-    env_file:
-      - app/.env
 
   django:
     build: .
@@ -21,11 +19,12 @@ services:
     command: gunicorn --bind 0.0.0.0:8000 django_notipus.wsgi:application
 
     environment:
-      - DB_HOST={DB_HOST}
-      - DB_PORT={DB_PORT}
-      - DB_NAME={DB_NAME}
-      - DB_USER={DB_USER}
-      - DB_PASSWORD={DB_PASSWORD}
+      - DEBUG=True
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=mydb
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
     ports:
       - "8000:8000"
     depends_on:
@@ -35,7 +34,7 @@ services:
     networks:
       - app_network
     env_file:
-      - app/.env
+      - .env
 
   nginx:
     image: nginx:latest
@@ -53,17 +52,18 @@ services:
     container_name: django_migrations
     command: poetry run python manage.py migrate
     environment:
-      - DB_HOST={DB_HOST}
-      - DB_PORT={DB_PORT}
-      - DB_NAME={DB_NAME}
-      - DB_USER={DB_USER}
-      - DB_PASSWORD={DB_PASSWORD}
+      - DEBUG=True
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=mydb
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
     depends_on:
       - db
     networks:
       - app_network
     env_file:
-      - app/.env
+      - .env
 
 volumes:
   postgres_data:
