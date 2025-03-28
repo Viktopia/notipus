@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.webhooks.event_processor import EventProcessor
+from webhooks.services.event_processor import EventProcessor
 from app.webhooks.providers import ChargifyProvider, PaymentProvider, ShopifyProvider
 from app.webhooks.providers.base import InvalidDataError
 
