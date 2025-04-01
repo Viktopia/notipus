@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from webhooks.services.event_processor import EventProcessor
 from webhooks.providers.chargify import ChargifyProvider
 from webhooks.providers.shopify import ShopifyProvider
+from webhooks.providers.stripe import StripeProvider
 from webhooks.services.slack_client import SlackClient
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -189,3 +190,14 @@ SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI")
 SLACK_CLIENT_BOT_ID = os.getenv("SLACK_CLIENT_BOT_ID")
 SLACK_CLIENT_BOT_SECRET = os.getenv("SLACK_CLIENT_BOT_SECRET")
 SLACK_REDIRECT_BOT_URI = os.getenv("SLACK_REDIRECT_BOT_URI")
+
+# Stripe
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_PLANS = {
+    'basic': os.getenv("STRIPE_BASIC_PLAN"),
+    'pro': os.getenv("STRIPE_PRO_PLAN"),
+    'enterprise': os.getenv("STRIPE_ENTERPRISE_PLAN")
+}
+TRIAL_PERIOD_DAYS = 14
+STRIPE_PROVIDER = StripeProvider()

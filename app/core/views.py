@@ -66,6 +66,22 @@ def slack_callback(request):
                 slack_domain=slack_domain,
                 name=name
             )
+            if not organization.stripe_customer_id:
+                customer_data = {
+                    "email": user.email,
+                    "name": organization.name,
+                    "metadata": {"slack_team_id": organization.slack_team_id}
+                }
+
+                response = requests.post(
+                    "https://api.stripe.com/v1/customers",
+                    headers={"Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}"},
+                    data=customer_data
+                )
+
+                if response.status_code == 200:
+                    organization.stripe_customer_id = response.json()['id']
+                    organization.save()
 
         user_profile, created = UserProfile.objects.get_or_create(
             user=user,

@@ -2,6 +2,7 @@ from django.http import HttpRequest, JsonResponse
 from django.conf import settings
 from ninja import Router
 import logging
+import json
 
 from .providers.base import InvalidDataError
 
@@ -86,3 +87,19 @@ async def chargify_webhook(request: HttpRequest):
     except Exception as e:
         logger.error("Server error in Chargify webhook", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@webhook_router.post('/webhook/stripe/')
+async def stripe_webhook(request: HttpRequest):
+    provider = settings.STRIPE_PROVIDER
+
+    if not provider.validate_webhook(request):
+        return JsonResponse({"error": "Invalid signature"}, status=403)
+
+    try:
+        payload = json.loads(request.body)
+        provider.process_event(payload)
+        return JsonResponse({"status": "success"})
+    except Exception as e:
+        logger.error(f"Stripe webhook error: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=400)
