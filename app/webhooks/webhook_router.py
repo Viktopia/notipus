@@ -1,10 +1,12 @@
 from django.http import HttpRequest, JsonResponse
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 from ninja import Router
 import logging
 import json
 
 from .providers.base import InvalidDataError
+from .providers.stripe import StripeProvider
 
 logger = logging.getLogger(__name__)
 webhook_router = Router()
@@ -90,8 +92,9 @@ async def chargify_webhook(request: HttpRequest):
 
 
 @webhook_router.post('/webhook/stripe/')
+@csrf_exempt
 async def stripe_webhook(request: HttpRequest):
-    provider = settings.STRIPE_PROVIDER
+    provider = StripeProvider()
 
     if not provider.validate_webhook(request):
         return JsonResponse({"error": "Invalid signature"}, status=403)

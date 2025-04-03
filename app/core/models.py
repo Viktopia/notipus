@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.db.models import JSONField
 
 
 class Organization(models.Model):
@@ -28,6 +29,16 @@ class UsageLimit(models.Model):
     max_monthly_registrations = models.IntegerField()
     max_daily_webhooks = models.IntegerField()
     features = models.JSONField(default=list)
+
+
+class Integration(models.Model):
+    INTEGRATION_TYPES = (
+        ('stripe', 'Stripe Payments'),
+        ('shopify', 'Shopify Store'),
+    )
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='integrations')
+    integration_type = models.CharField(max_length=20, choices=INTEGRATION_TYPES, db_index=True)
+    auth_data = JSONField(default=dict)
 
 
 class UserProfile(models.Model):
