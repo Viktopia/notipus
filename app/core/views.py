@@ -7,7 +7,11 @@ from django.db.models import Q
 import requests
 
 from core.models import UserProfile, Organization
-from django_notipus.settings import SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, SLACK_REDIRECT_URI
+from django_notipus.settings import (
+    SLACK_CLIENT_ID,
+    SLACK_CLIENT_SECRET,
+    SLACK_REDIRECT_URI,
+)
 
 
 def home(request):
@@ -20,27 +24,35 @@ def slack_auth(request):
 
 
 def slack_callback(request):
-    code = request.GET.get('code')
-    response = requests.post('https://slack.com/api/openid.connect.token', data={
-        'client_id': SLACK_CLIENT_ID,
-        'client_secret': SLACK_CLIENT_SECRET,
-        'code': code,
-        'redirect_uri': SLACK_REDIRECT_URI
-    })
+    code = request.GET.get("code")
+    response = requests.post(
+        "https://slack.com/api/openid.connect.token",
+        data={
+            "client_id": SLACK_CLIENT_ID,
+            "client_secret": SLACK_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": SLACK_REDIRECT_URI,
+        },
+    )
     data = response.json()
-    if not data.get('ok'):
-        return HttpResponse('Authentication failed', status=400)
+    if not data.get("ok"):
+        return HttpResponse("Authentication failed", status=400)
 
-    user_info_response = requests.get('https://slack.com/api/openid.connect.userInfo', headers={"Authorization": f"{data.get('token_type')} {data.get('access_token')}"})
+    user_info_response = requests.get(
+        "https://slack.com/api/openid.connect.userInfo",
+        headers={
+            "Authorization": f"{data.get('token_type')} {data.get('access_token')}"
+        },
+    )
     user_info = user_info_response.json()
-    if not user_info.get('ok'):
-        return HttpResponse('Get user info failed', status=400)
+    if not user_info.get("ok"):
+        return HttpResponse("Get user info failed", status=400)
 
-    slack_user_id = user_info.get('sub')
-    email = user_info.get('email')
-    slack_team_id = user_info.get('https://slack.com/team_id')
-    slack_domain = user_info.get('https://slack.com/team_domain')
-    name = user_info.get('name')
+    slack_user_id = user_info.get("sub")
+    email = user_info.get("email")
+    slack_team_id = user_info.get("https://slack.com/team_id")
+    slack_domain = user_info.get("https://slack.com/team_domain")
+    name = user_info.get("name")
 
     try:
         user_profile = UserProfile.objects.get(slack_user_id=slack_user_id)
@@ -59,18 +71,16 @@ def slack_callback(request):
             )
         except Organization.DoesNotExist:
             organization = Organization.objects.create(
-                slack_team_id=slack_team_id,
-                slack_domain=slack_domain,
-                name=name
+                slack_team_id=slack_team_id, slack_domain=slack_domain, name=name
             )
 
         user_profile, created = UserProfile.objects.get_or_create(
             user=user,
             defaults={
-                'slack_user_id': slack_user_id,
-                'slack_team_id': slack_team_id,
-                'organization': organization
-            }
+                "slack_user_id": slack_user_id,
+                "slack_team_id": slack_team_id,
+                "organization": organization,
+            },
         )
         if not created:
             user_profile.slack_user_id = slack_user_id
@@ -79,10 +89,13 @@ def slack_callback(request):
             user_profile.save()
 
     login(request, user)
-    return JsonResponse({
-        "slack_user_id": user_profile.slack_user_id,
-        "email": user.email,
-        "slack_team_id": user_profile.slack_team_id,
-        "slack_domain": user_profile.organization.slack_team_id,
-        "name": user.username,
-    }, status=200)
+    return JsonResponse(
+        {
+            "slack_user_id": user_profile.slack_user_id,
+            "email": user.email,
+            "slack_team_id": user_profile.slack_team_id,
+            "slack_domain": user_profile.organization.slack_team_id,
+            "name": user.username,
+        },
+        status=200,
+    )
