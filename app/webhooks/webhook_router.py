@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 webhook_router = Router()
 
 
-@webhook_router.post('/webhook/shopify/')
+@webhook_router.post("/webhook/shopify/")
 async def shopify_webhook(request: HttpRequest):
     try:
         provider = settings.SHOPIFY_PROVIDER
@@ -44,7 +44,7 @@ async def shopify_webhook(request: HttpRequest):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-@webhook_router.post('/webhook/chargify/')
+@webhook_router.post("/webhook/chargify/")
 async def chargify_webhook(request: HttpRequest):
     try:
         provider = settings.CHARGIFY_PROVIDER
