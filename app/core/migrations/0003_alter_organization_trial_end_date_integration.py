@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("core", "0002_usagelimit_organization_billing_cycle_anchor_and_more"),
     ]
