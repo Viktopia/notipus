@@ -68,7 +68,7 @@ jobs:
 
       - name: Install dependencies for TypeScript linting
         run: |
-          npm install --global eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin
+          npm install --global eslint@^9.0.0 typescript @typescript-eslint/parser@^7.0.0 @typescript-eslint/eslint-plugin@^7.0.0
 
       - name: Run TypeScript linting
         run: eslint '**/*.ts' --max-warnings=0
