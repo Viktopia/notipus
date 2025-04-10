@@ -71,4 +71,4 @@ jobs:
           npm install eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin
 
       - name: Run TypeScript linting
-        run: eslint '**/*.ts' --max-warnings=0
+        run: npx eslint '**/*.ts' --max-warnings=0
