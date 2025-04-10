@@ -16,6 +16,7 @@ export default [
         sourceType: 'module',
       },
       globals: {
+        console: "readonly",
         node: true,
       },
     },
