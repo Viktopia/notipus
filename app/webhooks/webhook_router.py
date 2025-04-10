@@ -89,7 +89,7 @@ async def chargify_webhook(request: HttpRequest):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-@webhook_router.post('/webhook/stripe/')
+@webhook_router.post("/webhook/stripe/")
 async def stripe_webhook(request: HttpRequest):
     provider = settings.STRIPE_PROVIDER
 

@@ -195,9 +195,11 @@ SLACK_REDIRECT_BOT_URI = os.getenv("SLACK_REDIRECT_BOT_URI")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 STRIPE_PLANS = {
-    'basic': os.getenv("STRIPE_BASIC_PLAN"),
-    'pro': os.getenv("STRIPE_PRO_PLAN"),
-    'enterprise': os.getenv("STRIPE_ENTERPRISE_PLAN")
+    "basic": os.getenv("STRIPE_BASIC_PLAN"),
+    "pro": os.getenv("STRIPE_PRO_PLAN"),
+    "enterprise": os.getenv("STRIPE_ENTERPRISE_PLAN"),
 }
 TRIAL_PERIOD_DAYS = 14
 STRIPE_PROVIDER = StripeProvider()
+
+DISABLE_BILLING = os.getenv('DISABLE_BILLING', 'False').lower() == 'true'

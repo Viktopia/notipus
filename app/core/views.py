@@ -22,28 +22,35 @@ def slack_auth(request):
 
 
 def slack_callback(request):
-    code = request.GET.get('code')
-    response = requests.post('https://slack.com/api/openid.connect.token', data={
-        'client_id': settings.SLACK_CLIENT_ID,
-        'client_secret': settings.SLACK_CLIENT_SECRET,
-        'code': code,
-        'redirect_uri': settings.SLACK_REDIRECT_URI
-    })
+    code = request.GET.get("code")
+    response = requests.post(
+        "https://slack.com/api/openid.connect.token",
+        data={
+            "client_id": settings.SLACK_CLIENT_ID,
+            "client_secret": settings.SLACK_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": settings.SLACK_REDIRECT_URI,
+        },
+    )
     data = response.json()
-    if not data.get('ok'):
-        return HttpResponse('Authentication failed', status=400)
+    if not data.get("ok"):
+        return HttpResponse("Authentication failed", status=400)
 
-    user_info_response = requests.get('https://slack.com/api/openid.connect.userInfo',
-                                      headers={"Authorization": f"{data.get('token_type')} {data.get('access_token')}"})
+    user_info_response = requests.get(
+        "https://slack.com/api/openid.connect.userInfo",
+        headers={
+            "Authorization": f"{data.get('token_type')} {data.get('access_token')}"
+        },
+    )
     user_info = user_info_response.json()
-    if not user_info.get('ok'):
-        return HttpResponse('Get user info failed', status=400)
+    if not user_info.get("ok"):
+        return HttpResponse("Get user info failed", status=400)
 
-    slack_user_id = user_info.get('sub')
-    email = user_info.get('email')
-    slack_team_id = user_info.get('https://slack.com/team_id')
-    slack_domain = user_info.get('https://slack.com/team_domain')
-    name = user_info.get('name')
+    slack_user_id = user_info.get("sub")
+    email = user_info.get("email")
+    slack_team_id = user_info.get("https://slack.com/team_id")
+    slack_domain = user_info.get("https://slack.com/team_domain")
+    name = user_info.get("name")
 
     try:
         user_profile = UserProfile.objects.get(slack_user_id=slack_user_id)
@@ -62,34 +69,32 @@ def slack_callback(request):
             )
         except Organization.DoesNotExist:
             organization = Organization.objects.create(
-                slack_team_id=slack_team_id,
-                slack_domain=slack_domain,
-                name=name
+                slack_team_id=slack_team_id, slack_domain=slack_domain, name=name
             )
             if not organization.stripe_customer_id:
                 customer_data = {
                     "email": user.email,
                     "name": organization.name,
-                    "metadata": {"slack_team_id": organization.slack_team_id}
+                    "metadata": {"slack_team_id": organization.slack_team_id},
                 }
 
                 response = requests.post(
                     "https://api.stripe.com/v1/customers",
                     headers={"Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}"},
-                    data=customer_data
+                    data=customer_data,
                 )
 
                 if response.status_code == 200:
-                    organization.stripe_customer_id = response.json()['id']
+                    organization.stripe_customer_id = response.json()["id"]
                     organization.save()
 
         user_profile, created = UserProfile.objects.get_or_create(
             user=user,
             defaults={
-                'slack_user_id': slack_user_id,
-                'slack_team_id': slack_team_id,
-                'organization': organization
-            }
+                "slack_user_id": slack_user_id,
+                "slack_team_id": slack_team_id,
+                "organization": organization,
+            },
         )
         if not created:
             user_profile.slack_user_id = slack_user_id
@@ -98,13 +103,16 @@ def slack_callback(request):
             user_profile.save()
 
     login(request, user)
-    return JsonResponse({
-        "slack_user_id": user_profile.slack_user_id,
-        "email": user.email,
-        "slack_team_id": user_profile.slack_team_id,
-        "slack_domain": user_profile.organization.slack_team_id,
-        "name": user.username,
-    }, status=200)
+    return JsonResponse(
+        {
+            "slack_user_id": user_profile.slack_user_id,
+            "email": user.email,
+            "slack_team_id": user_profile.slack_team_id,
+            "slack_domain": user_profile.organization.slack_team_id,
+            "name": user.username,
+        },
+        status=200,
+    )
 
 
 def slack_connect(request):
@@ -114,16 +122,19 @@ def slack_connect(request):
 
 
 def slack_connect_callback(request):
-    code = request.GET.get('code')
-    response = requests.post('https://slack.com/api/oauth.access', data={
-        'client_id': settings.SLACK_CLIENT_BOT_ID,
-        'client_secret': settings.SLACK_CLIENT_BOT_SECRET,
-        'code': code,
-        'redirect_uri': settings.SLACK_REDIRECT_BOT_URI
-    })
+    code = request.GET.get("code")
+    response = requests.post(
+        "https://slack.com/api/oauth.access",
+        data={
+            "client_id": settings.SLACK_CLIENT_BOT_ID,
+            "client_secret": settings.SLACK_CLIENT_BOT_SECRET,
+            "code": code,
+            "redirect_uri": settings.SLACK_REDIRECT_BOT_URI,
+        },
+    )
     data = response.json()
-    if not data.get('ok'):
-        return HttpResponse('Authentication failed', status=400)
+    if not data.get("ok"):
+        return HttpResponse("Authentication failed", status=400)
 
     settings.SLACK_CLIENT = SlackClient(webhook_url=data["incoming_webhook"]["url"])
 
