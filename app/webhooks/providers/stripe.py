@@ -10,6 +10,9 @@ class StripeProvider:
         self.webhook_secret = settings.STRIPE_WEBHOOK_SECRET
 
     def validate_webhook(self, request: HttpRequest) -> bool:
+        if settings.DISABLE_BILLING:
+            return False
+
         signature = request.headers.get("Stripe-Signature")
         payload = request.body
         secret = self.webhook_secret.encode()

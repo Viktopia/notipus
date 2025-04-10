@@ -17,8 +17,7 @@ from dotenv import load_dotenv
 from webhooks.services.event_processor import EventProcessor
 from webhooks.providers.chargify import ChargifyProvider
 from webhooks.providers.shopify import ShopifyProvider
-
-# from webhooks.providers.stripe import StripeProvider
+from webhooks.providers.stripe import StripeProvider
 from webhooks.services.slack_client import SlackClient
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,8 +37,7 @@ SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 DEBUG = os.getenv("DEBUG", False)
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-# ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
 
 
 # Application definition
@@ -204,3 +202,5 @@ STRIPE_PLANS = {
 STRIPE_CLIENT_ID = os.getenv("STRIPE_CLIENT_ID")
 STRIPE_REDIRECT_URI = os.getenv("STRIPE_REDIRECT_URI")
 TRIAL_PERIOD_DAYS = 14
+
+DISABLE_BILLING = os.getenv('DISABLE_BILLING', 'False').lower() == 'true'

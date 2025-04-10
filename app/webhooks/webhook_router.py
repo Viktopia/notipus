@@ -94,7 +94,7 @@ async def chargify_webhook(request: HttpRequest):
 @webhook_router.post("/webhook/stripe/")
 @csrf_exempt
 async def stripe_webhook(request: HttpRequest):
-    provider = StripeProvider()
+    provider = settings.STRIPE_PROVIDER
 
     if not provider.validate_webhook(request):
         return JsonResponse({"error": "Invalid signature"}, status=403)
