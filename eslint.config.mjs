@@ -1,4 +1,4 @@
-// eslint.config.js
+// eslint.config.mjs
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import js from '@eslint/js';
@@ -16,6 +16,7 @@ export default [
         sourceType: 'module',
       },
       globals: {
+        console: "readonly",
         node: true,
       },
     },
