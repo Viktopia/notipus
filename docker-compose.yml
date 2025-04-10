@@ -25,9 +25,12 @@ services:
       - DB_NAME=mydb
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
+    ports:
+      - "8000:8000"
     depends_on:
       - db
       - nginx
+      - migrations
     networks:
       - app_network
     env_file:
@@ -43,6 +46,24 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
     networks:
       - app_network
+
+  migrations:
+    build: .
+    container_name: django_migrations
+    command: poetry run python manage.py migrate
+    environment:
+      - DEBUG=True
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=mydb
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
+    depends_on:
+      - db
+    networks:
+      - app_network
+    env_file:
+      - .env
 
 volumes:
   postgres_data:

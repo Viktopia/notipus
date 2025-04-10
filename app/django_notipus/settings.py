@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "webhooks",
+    "core",
 ]
 
 MIDDLEWARE = [
@@ -180,3 +181,7 @@ EVENT_PROCESSOR = EventProcessor()
 # Slack client configuration
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 SLACK_CLIENT = SlackClient(webhook_url=SLACK_WEBHOOK_URL)
+
+SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID")
+SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET")
+SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI")
