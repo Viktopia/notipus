@@ -202,4 +202,4 @@ STRIPE_PLANS = {
 TRIAL_PERIOD_DAYS = 14
 STRIPE_PROVIDER = StripeProvider()
 
-DISABLE_BILLING = os.getenv('DISABLE_BILLING', 'False').lower() == 'true'
+DISABLE_BILLING = os.getenv("DISABLE_BILLING", "False").lower() == "true"
