@@ -3,15 +3,12 @@ from django.shortcuts import redirect
 from django.contrib.auth import login
 from django.contrib.auth.models import User
 from django.db.models import Q
+from django.conf import settings
 
 import requests
 
 from core.models import UserProfile, Organization
-from django_notipus.settings import (
-    SLACK_CLIENT_ID,
-    SLACK_CLIENT_SECRET,
-    SLACK_REDIRECT_URI,
-)
+from webhooks.services.slack_client import SlackClient
 
 
 def home(request):
@@ -19,7 +16,8 @@ def home(request):
 
 
 def slack_auth(request):
-    auth_url = f"https://slack.com/openid/connect/authorize?client_id={SLACK_CLIENT_ID}&scope=openid%20email%20profile&redirect_uri={SLACK_REDIRECT_URI}&response_type=code"
+    scopes = "openid,email,profile"
+    auth_url = f"https://slack.com/openid/connect/authorize?client_id={settings.SLACK_CLIENT_ID}&scope={scopes}&redirect_uri={settings.SLACK_REDIRECT_URI}&response_type=code"
     return redirect(auth_url)
 
 
@@ -28,10 +26,10 @@ def slack_callback(request):
     response = requests.post(
         "https://slack.com/api/openid.connect.token",
         data={
-            "client_id": SLACK_CLIENT_ID,
-            "client_secret": SLACK_CLIENT_SECRET,
+            "client_id": settings.SLACK_CLIENT_ID,
+            "client_secret": settings.SLACK_CLIENT_SECRET,
             "code": code,
-            "redirect_uri": SLACK_REDIRECT_URI,
+            "redirect_uri": settings.SLACK_REDIRECT_URI,
         },
     )
     data = response.json()
@@ -99,3 +97,29 @@ def slack_callback(request):
         },
         status=200,
     )
+
+
+def slack_connect(request):
+    scopes = "incoming-webhook,commands"
+    auth_url = f"https://slack.com/oauth/authorize?client_id={settings.SLACK_CLIENT_BOT_ID}&scope={scopes}&redirect_uri={settings.SLACK_REDIRECT_BOT_URI}"
+    return redirect(auth_url)
+
+
+def slack_connect_callback(request):
+    code = request.GET.get("code")
+    response = requests.post(
+        "https://slack.com/api/oauth.access",
+        data={
+            "client_id": settings.SLACK_CLIENT_BOT_ID,
+            "client_secret": settings.SLACK_CLIENT_BOT_SECRET,
+            "code": code,
+            "redirect_uri": settings.SLACK_REDIRECT_BOT_URI,
+        },
+    )
+    data = response.json()
+    if not data.get("ok"):
+        return HttpResponse("Authentication failed", status=400)
+
+    settings.SLACK_CLIENT = SlackClient(webhook_url=data["incoming_webhook"]["url"])
+
+    return JsonResponse({"success": True}, status=200)
