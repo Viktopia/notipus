@@ -10,6 +10,12 @@ logger = logging.getLogger(__name__)
 webhook_router = Router()
 
 
+@webhook_router.get("/webhook/health_check/")
+def health_check(request: HttpRequest) -> JsonResponse:
+    settings.SLACK_CLIENT.send_message({"text": "health_check"})
+    return JsonResponse({"success": True})
+
+
 @webhook_router.post("/webhook/shopify/")
 async def shopify_webhook(request: HttpRequest):
     try:
