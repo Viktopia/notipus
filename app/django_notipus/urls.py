@@ -26,7 +26,6 @@ ninja_api = NinjaAPI(
     title="Notipus API",
     version="1.0",
     description="API for Slack authentication and integrations management",
-    csrf=True,
 )
 
 ninja_api.add_router("/", webhook_router, tags=["Webhooks"])

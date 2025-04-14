@@ -36,8 +36,8 @@ SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 DEBUG = os.getenv("DEBUG", False)
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
-
+# ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
+ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
@@ -199,6 +199,6 @@ STRIPE_PLANS = {
     "enterprise": os.getenv("STRIPE_ENTERPRISE_PLAN"),
 }
 TRIAL_PERIOD_DAYS = 14
-STRIPE_PROVIDER = StripeProvider()
+STRIPE_PROVIDER = StripeProvider(STRIPE_WEBHOOK_SECRET)
 
 DISABLE_BILLING = os.getenv("DISABLE_BILLING", "False").lower() == "true"
