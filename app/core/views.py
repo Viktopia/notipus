@@ -6,9 +6,14 @@ from django.db.models import Q
 from django.conf import settings
 
 import requests
+import logging
 
-from core.models import UserProfile, Organization
+from core.models import UserProfile, Organization, Integration
+from core.services.stripe import StripeAPI
+from core.services.shopify import ShopifyAPI
 from webhooks.services.slack_client import SlackClient
+
+logger = logging.getLogger(__name__)
 
 
 def home(request):
@@ -78,15 +83,14 @@ def slack_callback(request):
                     "metadata": {"slack_team_id": organization.slack_team_id},
                 }
 
-                response = requests.post(
-                    "https://api.stripe.com/v1/customers",
-                    headers={"Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}"},
-                    data=customer_data,
-                )
+                stripe_customer_data = StripeAPI.create_stripe_customer(customer_data)
 
-                if response.status_code == 200:
-                    organization.stripe_customer_id = response.json()["id"]
-                    organization.save()
+                organization.stripe_customer_id = stripe_customer_data["id"]
+                organization.save()
+
+            if not organization.shop_domain:
+                organization.shop_domain = ShopifyAPI.get_shop_domain()
+                organization.save()
 
         user_profile, created = UserProfile.objects.get_or_create(
             user=user,
@@ -139,3 +143,59 @@ def slack_connect_callback(request):
     settings.SLACK_CLIENT = SlackClient(webhook_url=data["incoming_webhook"]["url"])
 
     return JsonResponse({"success": True}, status=200)
+
+
+def connect_shopify(request):
+    try:
+        user_profile = request.user.userprofile
+        organization = user_profile.organization
+
+        integration, created = Integration.objects.get_or_create(
+            organization=organization,
+            integration_type="shopify",
+            defaults={"auth_data": {"access_token": settings.SHOPIFY_ACCESS_TOKEN}},
+        )
+
+        if not created:
+            integration.auth_data = {"access_token": settings.SHOPIFY_ACCESS_TOKEN}
+            integration.save()
+
+        return JsonResponse(
+            {
+                "status": "success",
+                "message": "Shopify connected successfully",
+                "shop_domain": organization.shop_domain,
+            },
+            status=200,
+        )
+    except Exception as e:
+        logging.error(f"Error connecting Shopify: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+def connect_stripe(request):
+    try:
+        user_profile = request.user.userprofile
+        organization = user_profile.organization
+
+        integration, created = Integration.objects.get_or_create(
+            organization=organization,
+            integration_type="stripe",
+            defaults={"auth_data": {"secret_key": settings.STRIPE_SECRET_KEY}},
+        )
+
+        if not created:
+            integration.auth_data = {"secret_key": settings.STRIPE_SECRET_KEY}
+            integration.save()
+
+        return JsonResponse(
+            {
+                "status": "success",
+                "message": "Stripe connected successfully",
+                "customer_id": organization.stripe_customer_id,
+            },
+            status=200,
+        )
+    except Exception as e:
+        logging.error(f"Error connecting Stripe: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)

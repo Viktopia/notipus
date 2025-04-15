@@ -12,4 +12,6 @@ urlpatterns = [
         views.slack_connect_callback,
         name="slack_connect_callback",
     ),
+    path("connect/shopify/", views.connect_shopify, name="connect_shopify"),
+    path("connect/stripe/", views.connect_stripe, name="connect_stripe"),
 ]

@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.db.models import JSONField
 
 
 class Organization(models.Model):
@@ -25,6 +26,21 @@ class Organization(models.Model):
     )
     billing_cycle_anchor = models.DateTimeField(null=True)
     payment_method_added = models.BooleanField(default=False)
+    shop_domain = models.CharField(max_length=255, blank=True)
+
+
+class Integration(models.Model):
+    INTEGRATION_TYPES = (
+        ("stripe", "Stripe Payments"),
+        ("shopify", "Shopify Store"),
+    )
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="integrations"
+    )
+    integration_type = models.CharField(
+        max_length=20, choices=INTEGRATION_TYPES, db_index=True
+    )
+    auth_data = JSONField(default=dict)
 
 
 class UsageLimit(models.Model):
