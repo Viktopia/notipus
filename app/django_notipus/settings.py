@@ -14,10 +14,10 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from webhooks.event_processor import EventProcessor
+from webhooks.services.event_processor import EventProcessor
 from webhooks.providers.chargify import ChargifyProvider
 from webhooks.providers.shopify import ShopifyProvider
-from webhooks.slack_client import SlackClient
+from webhooks.providers.stripe import StripeProvider
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(BASE_DIR, ".env"))  # Load variables from .env
@@ -33,11 +33,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", False)
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
-
+# ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
+ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
@@ -179,9 +179,26 @@ CHARGIFY_PROVIDER = ChargifyProvider(webhook_secret="your_chargify_webhook_secre
 EVENT_PROCESSOR = EventProcessor()
 
 # Slack client configuration
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
-SLACK_CLIENT = SlackClient(webhook_url=SLACK_WEBHOOK_URL)
+# SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+SLACK_CLIENT = None
 
 SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID")
 SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET")
 SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI")
+
+SLACK_CLIENT_BOT_ID = os.getenv("SLACK_CLIENT_BOT_ID")
+SLACK_CLIENT_BOT_SECRET = os.getenv("SLACK_CLIENT_BOT_SECRET")
+SLACK_REDIRECT_BOT_URI = os.getenv("SLACK_REDIRECT_BOT_URI")
+
+# Stripe
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_PLANS = {
+    "basic": os.getenv("STRIPE_BASIC_PLAN"),
+    "pro": os.getenv("STRIPE_PRO_PLAN"),
+    "enterprise": os.getenv("STRIPE_ENTERPRISE_PLAN"),
+}
+TRIAL_PERIOD_DAYS = 14
+STRIPE_PROVIDER = StripeProvider(STRIPE_WEBHOOK_SECRET)
+
+DISABLE_BILLING = os.getenv("DISABLE_BILLING", "False").lower() == "true"
