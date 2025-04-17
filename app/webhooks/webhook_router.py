@@ -128,3 +128,38 @@ async def stripe_webhook(request: HttpRequest):
     except Exception as e:
         logger.error(f"Stripe webhook error: {str(e)}")
         return JsonResponse({"error": str(e)}, status=400)
+
+
+@webhook_router.get("/webhook/ephemeral/")
+async def ephemeral_webhook(request: HttpRequest):
+    try:
+        topic = request.headers.get("X-Shopify-Topic")
+        if topic is None:
+            signature = request.headers.get("Stripe-Signature")
+            if signature is None:
+                logger.error("Required header missing")
+                return JsonResponse({"error": "Required header missing"}, status=400)
+            provider = settings.STRIPE_PROVIDER
+        else:
+            provider = settings.SHOPIFY_PROVIDER
+
+        if not provider.validate_webhook(request):
+            return JsonResponse({"error": "Invalid webhook signature"}, status=401)
+
+        event_data = provider.parse_webhook(request)
+
+        customer_data = provider.get_customer_data(event_data["customer_id"])
+
+        notification = settings.EVENT_PROCESSOR.format_notification(
+            event_data, customer_data
+        )
+
+        settings.SLACK_CLIENT.send_notification(notification)
+
+        return JsonResponse(
+            {"status": "success", "message": "Webhook processed successfully"},
+            status=200,
+        )
+    except Exception as e:
+        logger.error(f"Ephemeral webhook error: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=400)
