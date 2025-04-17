@@ -10,6 +10,7 @@ from .base import (
 )
 from .chargify import ChargifyProvider
 from .shopify import ShopifyProvider
+from .stripe import StripeProvider
 
 __all__ = [
     "PaymentProvider",
@@ -22,4 +23,5 @@ __all__ = [
     "InvalidDataError",
     "ChargifyProvider",
     "ShopifyProvider",
+    "StripeProvider",
 ]
