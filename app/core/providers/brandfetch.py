@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class BrandfetchProvider(BaseEnrichmentProvider):
     def __init__(self, api_key=None, base_url="https://api.brandfetch.io/v2"):
-        self.api_key = api_key or getattr(settings, 'BRANDFETCH_API_KEY', None)
+        self.api_key = api_key or getattr(settings, "BRANDFETCH_API_KEY", None)
         self.base_url = base_url
 
     def enrich_domain(self, domain: str) -> dict:
@@ -22,11 +22,15 @@ class BrandfetchProvider(BaseEnrichmentProvider):
         }
 
         try:
-            response = requests.get(f"{self.base_url}/companies/{domain}", headers=headers)
+            response = requests.get(
+                f"{self.base_url}/companies/{domain}", headers=headers
+            )
             response.raise_for_status()
             brand_data = response.json()
 
-            logos_response = requests.get(f"{self.base_url}/companies/{domain}/logos", headers=headers)
+            logos_response = requests.get(
+                f"{self.base_url}/companies/{domain}/logos", headers=headers
+            )
             logos_response.raise_for_status()
             logos_data = logos_response.json()
 
@@ -39,7 +43,7 @@ class BrandfetchProvider(BaseEnrichmentProvider):
                     "year_founded": brand_data.get("yearFounded"),
                     "links": brand_data.get("links", []),
                     "colors": brand_data.get("colors", []),
-                }
+                },
             }
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching data from Brandfetch: {str(e)}")

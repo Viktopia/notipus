@@ -14,7 +14,7 @@ class DomainEnrichmentService:
         providers = []
 
         # Add Brandfetch provider if API key is configured
-        if hasattr(settings, 'BRANDFETCH_API_KEY') and settings.BRANDFETCH_API_KEY:
+        if hasattr(settings, "BRANDFETCH_API_KEY") and settings.BRANDFETCH_API_KEY:
             providers.append(BrandfetchProvider())
 
         return providers
@@ -32,9 +32,13 @@ class DomainEnrichmentService:
             try:
                 enriched_data = provider.enrich_domain(domain)
                 if enriched_data:
-                    self._update_company(company, enriched_data, provider.get_provider_name())
+                    self._update_company(
+                        company, enriched_data, provider.get_provider_name()
+                    )
             except Exception as e:
-                logger.error(f"Error enriching domain with {provider.get_provider_name()}: {str(e)}")
+                logger.error(
+                    f"Error enriching domain with {provider.get_provider_name()}: {str(e)}"
+                )
 
         return company
 

@@ -92,7 +92,9 @@ def slack_callback(request):
 
             if not organization.shop_domain:
                 organization.shop_domain = ShopifyAPI.get_shop_domain()
-                settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(organization.shop_domain)
+                settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(
+                    organization.shop_domain
+                )
                 organization.save()
 
         user_profile, created = UserProfile.objects.get_or_create(
