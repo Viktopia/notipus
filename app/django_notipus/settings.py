@@ -16,6 +16,8 @@ from pathlib import Path
 from django.utils.functional import SimpleLazyObject
 
 from dotenv import load_dotenv
+
+from core.services.enrichment import DomainEnrichmentService
 from webhooks.services.event_processor import EventProcessor
 from webhooks.providers.chargify import ChargifyProvider
 from webhooks.providers.shopify import ShopifyProvider
@@ -203,3 +205,7 @@ TRIAL_PERIOD_DAYS = 14
 STRIPE_PROVIDER = SimpleLazyObject(lambda: StripeProvider(STRIPE_WEBHOOK_SECRET))
 
 DISABLE_BILLING = os.getenv("DISABLE_BILLING", "False").lower() == "true"
+
+BRANDFETCH_API_KEY = os.getenv("BRANDFETCH_API_KEY")
+BRANDFETCH_BASE_URL = os.getenv("BRANDFETCH_BASE_URL")
+DOMAIN_ENRICHMENT_SERVICE = SimpleLazyObject(lambda: DomainEnrichmentService())

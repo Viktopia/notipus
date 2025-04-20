@@ -43,6 +43,18 @@ class Integration(models.Model):
     auth_data = JSONField(default=dict)
 
 
+class Company(models.Model):
+    domain = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
+    logo_url = models.URLField(blank=True, null=True)
+    brand_info = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.domain})" if self.name else self.domain
+
+
 class UsageLimit(models.Model):
     plan = models.CharField(max_length=20, choices=Organization.STRIPE_PLANS)
     max_monthly_registrations = models.IntegerField()
