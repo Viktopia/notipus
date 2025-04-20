@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional
 from django.http import HttpRequest
 from django.conf import settings
 
-# from core.models import Organization
 from .base import PaymentProvider, InvalidDataError
 
 logger = logging.getLogger(__name__)
@@ -106,14 +105,23 @@ class StripeProvider(PaymentProvider):
             raise InvalidDataError("Missing data parameter")
 
         try:
+            from ..services.billing import BillingService
+
             customer_id = str(data["customer"])
             if not customer_id:
                 raise InvalidDataError("Missing required fields")
 
             if event_type == "subscription_created":
                 amount = str(data["plan"]["amount"])
-            else:
+                BillingService.handle_subscription_created(data)
+            elif event_type == "payment_success":
                 amount = str(data["amount_due"])
+                BillingService.handle_payment_success(data)
+            elif event_type == "payment_failure":
+                amount = str(data["amount_due"])
+                BillingService.handle_payment_failed(data)
+            else:
+                amount = "0"
 
             event_data = {
                 "type": event_type,
@@ -129,23 +137,6 @@ class StripeProvider(PaymentProvider):
         except (KeyError, ValueError):
             raise InvalidDataError("Missing required fields")
 
-    # TODO: When an instance of the StripeProvider class is declared in settings.py, you cannot update the data in the database
-    # def _handle_subscription_created(self, subscription: dict):
-    #     Organization.objects.filter(stripe_customer_id=subscription["customer"]).update(
-    #         subscription_plan=subscription["items"]["data"][0]["plan"]["id"],
-    #         subscription_status="active",
-    #         billing_cycle_anchor=subscription["current_period_start"],
-    #     )
-    #
-    # def _handle_invoice_paid(self, invoice: dict):
-    #     Organization.objects.filter(stripe_customer_id=invoice["customer"]).update(
-    #         subscription_status="active", billing_cycle_anchor=invoice["period_end"]
-    #     )
-    #
-    # def _handle_payment_failed(self, invoice: dict):
-    #     Organization.objects.filter(stripe_customer_id=invoice["customer"]).update(
-    #         subscription_status="past_due"
-    #     )
 
     def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
         """Get customer data"""
@@ -155,3 +146,20 @@ class StripeProvider(PaymentProvider):
             "first_name": "<FIRST_NAME>",
             "last_name": "<LAST_NAME>",
         }
+
+    def _handle_subscription_created(self, subscription: dict):
+        Organization.objects.filter(stripe_customer_id=subscription["customer"]).update(
+            subscription_plan=subscription["items"]["data"][0]["plan"]["id"],
+            subscription_status="active",
+            billing_cycle_anchor=subscription["current_period_start"],
+        )
+
+    def _handle_invoice_paid(self, invoice: dict):
+        Organization.objects.filter(stripe_customer_id=invoice["customer"]).update(
+            subscription_status="active", billing_cycle_anchor=invoice["period_end"]
+        )
+
+    def _handle_payment_failed(self, invoice: dict):
+        Organization.objects.filter(stripe_customer_id=invoice["customer"]).update(
+            subscription_status="past_due"
+        )

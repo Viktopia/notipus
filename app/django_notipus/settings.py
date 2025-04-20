@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 
+from django.utils.functional import SimpleLazyObject
+
 from dotenv import load_dotenv
 from webhooks.services.event_processor import EventProcessor
 from webhooks.providers.chargify import ChargifyProvider
@@ -36,8 +38,7 @@ SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
 DEBUG = os.getenv("DEBUG", False)
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-# ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [f"{APP_NAME}.fly.dev"]
 
 # Application definition
 
@@ -199,6 +200,6 @@ STRIPE_PLANS = {
     "enterprise": os.getenv("STRIPE_ENTERPRISE_PLAN"),
 }
 TRIAL_PERIOD_DAYS = 14
-STRIPE_PROVIDER = StripeProvider(STRIPE_WEBHOOK_SECRET)
+STRIPE_PROVIDER = SimpleLazyObject(lambda: StripeProvider(STRIPE_WEBHOOK_SECRET))
 
 DISABLE_BILLING = os.getenv("DISABLE_BILLING", "False").lower() == "true"
