@@ -137,7 +137,6 @@ class StripeProvider(PaymentProvider):
         except (KeyError, ValueError):
             raise InvalidDataError("Missing required fields")
 
-
     def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
         """Get customer data"""
         return {
@@ -146,20 +145,3 @@ class StripeProvider(PaymentProvider):
             "first_name": "<FIRST_NAME>",
             "last_name": "<LAST_NAME>",
         }
-
-    def _handle_subscription_created(self, subscription: dict):
-        Organization.objects.filter(stripe_customer_id=subscription["customer"]).update(
-            subscription_plan=subscription["items"]["data"][0]["plan"]["id"],
-            subscription_status="active",
-            billing_cycle_anchor=subscription["current_period_start"],
-        )
-
-    def _handle_invoice_paid(self, invoice: dict):
-        Organization.objects.filter(stripe_customer_id=invoice["customer"]).update(
-            subscription_status="active", billing_cycle_anchor=invoice["period_end"]
-        )
-
-    def _handle_payment_failed(self, invoice: dict):
-        Organization.objects.filter(stripe_customer_id=invoice["customer"]).update(
-            subscription_status="past_due"
-        )
