@@ -71,9 +71,7 @@ class UserProfile(models.Model):
 
 class NotificationSettings(models.Model):
     organization = models.OneToOneField(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name='notification_settings'
+        Organization, on_delete=models.CASCADE, related_name="notification_settings"
     )
 
     # Payment events

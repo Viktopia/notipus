@@ -213,13 +213,15 @@ def get_notification_settings(request):
     try:
         user_profile = request.user.userprofile
         settings = user_profile.organization.notification_settings
-        return JsonResponse({
-            'notify_payment_success': settings.notify_payment_success,
-            'notify_payment_failure': settings.notify_payment_failure,
-            # Add all other settings fields
-        })
+        return JsonResponse(
+            {
+                "notify_payment_success": settings.notify_payment_success,
+                "notify_payment_failure": settings.notify_payment_failure,
+                # Add all other settings fields
+            }
+        )
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @login_required
@@ -230,10 +232,15 @@ def update_notification_settings(request):
 
         data = json.loads(request.body)
         for field in NotificationSettings._meta.get_fields():
-            if field.name in data and field.name not in ['id', 'organization', 'created_at', 'updated_at']:
+            if field.name in data and field.name not in [
+                "id",
+                "organization",
+                "created_at",
+                "updated_at",
+            ]:
                 setattr(settings, field.name, data[field.name])
 
         settings.save()
-        return JsonResponse({'status': 'success'})
+        return JsonResponse({"status": "success"})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        return JsonResponse({"error": str(e)}, status=400)
