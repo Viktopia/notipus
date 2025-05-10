@@ -1,3 +1,4 @@
+from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.contrib.auth import login
@@ -7,11 +8,12 @@ from django.conf import settings
 
 import requests
 import logging
+import json
 
-from core.models import UserProfile, Organization, Integration
-from core.services.stripe import StripeAPI
-from core.services.shopify import ShopifyAPI
-from webhooks.services.slack_client import SlackClient
+from .models import UserProfile, Organization, Integration, NotificationSettings
+from .services.stripe import StripeAPI
+from .services.shopify import ShopifyAPI
+from app.webhooks.services.slack_client import SlackClient
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,8 @@ def slack_callback(request):
     slack_domain = user_info.get("https://slack.com/team_domain")
     name = user_info.get("name")
 
+    settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(slack_domain)
+
     try:
         user_profile = UserProfile.objects.get(slack_user_id=slack_user_id)
         user = user_profile.user
@@ -90,6 +94,9 @@ def slack_callback(request):
 
             if not organization.shop_domain:
                 organization.shop_domain = ShopifyAPI.get_shop_domain()
+                settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(
+                    organization.shop_domain
+                )
                 organization.save()
 
         user_profile, created = UserProfile.objects.get_or_create(
@@ -199,3 +206,41 @@ def connect_stripe(request):
     except Exception as e:
         logging.error(f"Error connecting Stripe: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def get_notification_settings(request):
+    try:
+        user_profile = request.user.userprofile
+        settings = user_profile.organization.notification_settings
+        return JsonResponse(
+            {
+                "notify_payment_success": settings.notify_payment_success,
+                "notify_payment_failure": settings.notify_payment_failure,
+                # Add all other settings fields
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+def update_notification_settings(request):
+    try:
+        user_profile = request.user.userprofile
+        settings = user_profile.organization.notification_settings
+
+        data = json.loads(request.body)
+        for field in NotificationSettings._meta.get_fields():
+            if field.name in data and field.name not in [
+                "id",
+                "organization",
+                "created_at",
+                "updated_at",
+            ]:
+                setattr(settings, field.name, data[field.name])
+
+        settings.save()
+        return JsonResponse({"status": "success"})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
