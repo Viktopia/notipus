@@ -47,8 +47,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "webhooks",
-    "core",
+    "webhooks.apps.WebhooksConfig",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE = [
