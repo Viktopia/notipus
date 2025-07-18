@@ -6,15 +6,15 @@ authors = [
     {name = "Viktopia Studio",email = "info@viktopia.io"}
 ]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "django (>=5.1.5,<6.0.0)",
     "requests (>=2.32.3,<3.0.0)",
-    "python-dotenv (>=1.0.1,<2.0.0)",
     "gunicorn (>=23.0.0,<24.0.0)",
     "psycopg2 (>=2.9.10,<3.0.0)",
     "pre-commit (>=4.1.0,<5.0.0)",
     "django-ninja (>=1.4.0,<2.0.0)",
+    "stripe (>=12.3.0,<13.0.0)",
 ]
 
 [tool.poetry]
@@ -27,9 +27,6 @@ pytest = ">=8.3.4,<9.0.0"
 pytest-cov = "^6.0.0"
 ruff = "^0.8.4"
 pre-commit = "^4.0.1"
-black = "^24.2.0"
-isort = "^5.13.2"
-flake8 = "^7.0.0"
 mypy = "^1.8.0"
 types-requests = "^2.31.0.20240218"
 

@@ -13,7 +13,7 @@ import json
 from .models import UserProfile, Organization, Integration, NotificationSettings
 from .services.stripe import StripeAPI
 from .services.shopify import ShopifyAPI
-from app.webhooks.services.slack_client import SlackClient
+from webhooks.services.slack_client import SlackClient
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,14 @@ def slack_callback(request):
     slack_domain = user_info.get("https://slack.com/team_domain")
     name = user_info.get("name")
 
-    settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(slack_domain)
+    # Enrich domain if available
+    if slack_domain:
+        try:
+            settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(slack_domain)
+        except Exception as e:
+            logger.warning(f"Failed to enrich slack domain {slack_domain}: {str(e)}")
+    else:
+        logger.warning("No slack domain found in user info")
 
     try:
         user_profile = UserProfile.objects.get(slack_user_id=slack_user_id)
@@ -94,9 +101,15 @@ def slack_callback(request):
 
             if not organization.shop_domain:
                 organization.shop_domain = ShopifyAPI.get_shop_domain()
-                settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(
-                    organization.shop_domain
-                )
+                if organization.shop_domain:
+                    try:
+                        settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(
+                            organization.shop_domain
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to enrich shop domain {organization.shop_domain}: {str(e)}"
+                        )
                 organization.save()
 
         user_profile, created = UserProfile.objects.get_or_create(
@@ -215,32 +228,95 @@ def get_notification_settings(request):
         settings = user_profile.organization.notification_settings
         return JsonResponse(
             {
+                # Payment events
                 "notify_payment_success": settings.notify_payment_success,
                 "notify_payment_failure": settings.notify_payment_failure,
-                # Add all other settings fields
+                # Subscription events
+                "notify_subscription_created": settings.notify_subscription_created,
+                "notify_subscription_updated": settings.notify_subscription_updated,
+                "notify_subscription_canceled": settings.notify_subscription_canceled,
+                # Trial events
+                "notify_trial_ending": settings.notify_trial_ending,
+                "notify_trial_expired": settings.notify_trial_expired,
+                # Customer events
+                "notify_customer_updated": settings.notify_customer_updated,
+                "notify_signups": settings.notify_signups,
+                # Shopify events
+                "notify_shopify_order_created": settings.notify_shopify_order_created,
+                "notify_shopify_order_updated": settings.notify_shopify_order_updated,
+                "notify_shopify_order_paid": settings.notify_shopify_order_paid,
             }
         )
+    except UserProfile.DoesNotExist:
+        return JsonResponse({"error": "User profile not found"}, status=404)
+    except NotificationSettings.DoesNotExist:
+        return JsonResponse({"error": "Notification settings not found"}, status=404)
     except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        logger.error(f"Error getting notification settings: {str(e)}")
+        return JsonResponse({"error": "Internal server error"}, status=500)
 
 
 @login_required
 def update_notification_settings(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
     try:
         user_profile = request.user.userprofile
         settings = user_profile.organization.notification_settings
 
         data = json.loads(request.body)
-        for field in NotificationSettings._meta.get_fields():
-            if field.name in data and field.name not in [
-                "id",
-                "organization",
-                "created_at",
-                "updated_at",
-            ]:
-                setattr(settings, field.name, data[field.name])
 
-        settings.save()
-        return JsonResponse({"status": "success"})
+        # Define allowed fields for explicit validation
+        allowed_fields = {
+            # Payment events
+            "notify_payment_success",
+            "notify_payment_failure",
+            # Subscription events
+            "notify_subscription_created",
+            "notify_subscription_updated",
+            "notify_subscription_canceled",
+            # Trial events
+            "notify_trial_ending",
+            "notify_trial_expired",
+            # Customer events
+            "notify_customer_updated",
+            "notify_signups",
+            # Shopify events
+            "notify_shopify_order_created",
+            "notify_shopify_order_updated",
+            "notify_shopify_order_paid",
+        }
+
+        # Validate and update only allowed fields
+        updated_fields = []
+        for field_name, value in data.items():
+            if field_name in allowed_fields:
+                if isinstance(value, bool):
+                    setattr(settings, field_name, value)
+                    updated_fields.append(field_name)
+                else:
+                    return JsonResponse(
+                        {"error": f"Field '{field_name}' must be a boolean value"},
+                        status=400,
+                    )
+            elif field_name not in allowed_fields:
+                return JsonResponse(
+                    {"error": f"Field '{field_name}' is not allowed to be updated"},
+                    status=400,
+                )
+
+        if updated_fields:
+            settings.save(update_fields=updated_fields)
+
+        return JsonResponse({"status": "success", "updated_fields": updated_fields})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except UserProfile.DoesNotExist:
+        return JsonResponse({"error": "User profile not found"}, status=404)
+    except NotificationSettings.DoesNotExist:
+        return JsonResponse({"error": "Notification settings not found"}, status=404)
     except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        logger.error(f"Error updating notification settings: {str(e)}")
+        return JsonResponse({"error": "Internal server error"}, status=500)

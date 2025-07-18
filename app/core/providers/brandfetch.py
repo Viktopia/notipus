@@ -22,14 +22,19 @@ class BrandfetchProvider(BaseEnrichmentProvider):
         }
 
         try:
+            # Add timeout for reliability
+            timeout = 10  # seconds
+
             response = requests.get(
-                f"{self.base_url}/companies/{domain}", headers=headers
+                f"{self.base_url}/companies/{domain}", headers=headers, timeout=timeout
             )
             response.raise_for_status()
             brand_data = response.json()
 
             logos_response = requests.get(
-                f"{self.base_url}/companies/{domain}/logos", headers=headers
+                f"{self.base_url}/companies/{domain}/logos",
+                headers=headers,
+                timeout=timeout,
             )
             logos_response.raise_for_status()
             logos_data = logos_response.json()

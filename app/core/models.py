@@ -1,7 +1,9 @@
+import re
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.db.models import JSONField
+from django.core.exceptions import ValidationError
 
 
 class Organization(models.Model):
@@ -43,13 +45,39 @@ class Integration(models.Model):
     auth_data = JSONField(default=dict)
 
 
+def validate_domain(value):
+    """Validate domain format"""
+    # Remove protocol if present
+    domain = (
+        value.lower().replace("http://", "").replace("https://", "").replace("www.", "")
+    )
+
+    # Basic domain regex pattern
+    domain_pattern = r"^([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$"
+
+    if not re.match(domain_pattern, domain):
+        raise ValidationError(f'"{value}" is not a valid domain format')
+
+    return domain
+
+
 class Company(models.Model):
-    domain = models.CharField(max_length=255, unique=True)
+    domain = models.CharField(max_length=255, unique=True, validators=[validate_domain])
     name = models.CharField(max_length=255, blank=True, null=True)
     logo_url = models.URLField(blank=True, null=True)
     brand_info = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        """Additional validation and cleaning"""
+        if self.domain:
+            self.domain = validate_domain(self.domain)
+
+    def save(self, *args, **kwargs):
+        """Override save to ensure validation"""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.domain})" if self.name else self.domain
