@@ -270,6 +270,41 @@ def connect_stripe(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+@login_required
+def get_notification_settings(request):
+    try:
+        user_profile = request.user.userprofile
+        settings = user_profile.organization.notification_settings
+        return JsonResponse(
+            {
+                # Payment events
+                "notify_payment_success": settings.notify_payment_success,
+                "notify_payment_failure": settings.notify_payment_failure,
+                # Subscription events
+                "notify_subscription_created": settings.notify_subscription_created,
+                "notify_subscription_updated": settings.notify_subscription_updated,
+                "notify_subscription_canceled": settings.notify_subscription_canceled,
+                # Trial events
+                "notify_trial_ending": settings.notify_trial_ending,
+                "notify_trial_expired": settings.notify_trial_expired,
+                # Customer events
+                "notify_customer_updated": settings.notify_customer_updated,
+                "notify_signups": settings.notify_signups,
+                # Shopify events
+                "notify_shopify_order_created": settings.notify_shopify_order_created,
+                "notify_shopify_order_updated": settings.notify_shopify_order_updated,
+                "notify_shopify_order_paid": settings.notify_shopify_order_paid,
+            }
+        )
+    except UserProfile.DoesNotExist:
+        return JsonResponse({"error": "User profile not found"}, status=404)
+    except NotificationSettings.DoesNotExist:
+        return JsonResponse({"error": "Notification settings not found"}, status=404)
+    except Exception as e:
+        logger.error(f"Error getting notification settings: {str(e)}")
+        return JsonResponse({"error": "Internal server error"}, status=500)
+
+
 def _get_allowed_notification_fields():
     """Get the set of allowed notification fields"""
     return {
