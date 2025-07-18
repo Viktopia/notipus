@@ -1,4 +1,4 @@
-from .settings import *
+from .settings import *  # noqa: F403
 
 # Override database to use SQLite for tests
 DATABASES = {
@@ -8,6 +8,15 @@ DATABASES = {
     }
 }
 
+# Test-specific environment overrides
+SECRET_KEY = "test-secret-key-for-testing-only"
+DEBUG = True
+
+# Override settings for tests
+DISABLE_BILLING = True
+CHARGIFY_WEBHOOK_SECRET = "test-chargify-secret"
+SHOPIFY_WEBHOOK_SECRET = "test-shopify-secret"
+STRIPE_WEBHOOK_SECRET = "test-stripe-secret"
 
 # Disable migrations for faster tests
 class DisableMigrations:
@@ -34,3 +43,17 @@ CACHES = {
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]
+
+# Disable logging during tests
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "null": {
+            "class": "logging.NullHandler",
+        },
+    },
+    "root": {
+        "handlers": ["null"],
+    },
+}

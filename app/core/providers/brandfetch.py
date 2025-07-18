@@ -1,7 +1,9 @@
+import logging
+
 import requests
 from django.conf import settings
+
 from .base import BaseEnrichmentProvider
-import logging
 
 logger = logging.getLogger(__name__)
 

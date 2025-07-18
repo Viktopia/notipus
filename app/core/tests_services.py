@@ -1,7 +1,8 @@
-from django.test import TestCase
 from unittest.mock import Mock, patch
-from core.services.enrichment import DomainEnrichmentService
+
 from core.models import Company, Organization
+from core.services.enrichment import DomainEnrichmentService
+from django.test import TestCase
 from webhooks.services.billing import BillingService
 
 
@@ -233,7 +234,7 @@ class DomainEnrichmentServiceTest(TestCase):
 
         data = {"brand_info": {"industry": "Technology"}}
 
-        with patch.object(company, "save") as mock_save:
+        with patch.object(company, "save"):
             self.service._update_company(company, data, "testprovider")
 
             # Should merge brand info

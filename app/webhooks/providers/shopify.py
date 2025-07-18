@@ -29,45 +29,40 @@ class ShopifyProvider(PaymentProvider):
         super().__init__(webhook_secret)
         self._current_webhook_data = None
 
-    def parse_webhook(self, request: HttpRequest) -> Optional[Dict[str, Any]]:
-        """Parse Shopify webhook data"""
-        # Validate content type
+    def _validate_shopify_request(self, request: HttpRequest) -> str:
+        """Validate Shopify webhook request and return topic"""
         if request.content_type != "application/json":
             raise InvalidDataError("Invalid content type")
 
-        # Get webhook topic first
         topic = request.headers.get("X-Shopify-Topic")
         if not topic:
             raise InvalidDataError("Missing webhook topic")
 
-        # Parse JSON data
+        return topic
+
+    def _parse_shopify_json(self, request: HttpRequest) -> Dict[str, Any]:
+        """Parse and validate Shopify JSON data"""
         try:
             data = json.loads(request.data)
-        except (json.JSONDecodeError, AttributeError):
-            raise InvalidDataError("Invalid JSON data")
+        except (json.JSONDecodeError, AttributeError) as e:
+            raise InvalidDataError("Invalid JSON data") from e
 
-        # Store webhook data for later use
-        self._current_webhook_data = data
-
-        # Check for empty data
         if not isinstance(data, dict):
             raise InvalidDataError("Invalid JSON data")
         if not data:
             raise InvalidDataError("Missing required fields")
 
-        # Check for test webhook
-        if (
+        return data
+
+    def _is_test_webhook(self, topic: str, request: HttpRequest) -> bool:
+        """Check if this is a test webhook"""
+        return (
             topic == "test"
             or request.headers.get("X-Shopify-Test", "").lower() == "true"
-        ):
-            return None
+        )
 
-        # Map webhook topic to event type
-        event_type = self.EVENT_TYPE_MAPPING.get(topic)
-        if not event_type:
-            raise InvalidDataError(f"Unsupported webhook topic: {topic}")
-
-        # Extract customer ID and other required fields
+    def _extract_shopify_customer_id(self, data: Dict[str, Any]) -> str:
+        """Extract customer ID from Shopify webhook data"""
         try:
             if "customer" in data:
                 customer_id = str(data["customer"]["id"])
@@ -82,51 +77,85 @@ class ShopifyProvider(PaymentProvider):
             if not customer_id:
                 raise InvalidDataError("Missing required fields")
 
-            # Build event data
-            event_data = {
-                "type": event_type,
-                "customer_id": customer_id,
-                "provider": "shopify",
-                "created_at": data.get("created_at"),
-                "status": "success",  # Default status
-                "metadata": {
-                    "order_number": data.get("order_number"),
-                    "order_ref": (
-                        str(data.get("order_number"))
-                        if data.get("order_number")
-                        else None
-                    ),
-                    "financial_status": data.get("financial_status"),
-                    "fulfillment_status": data.get("fulfillment_status"),
-                },
+            return customer_id
+        except (KeyError, ValueError) as e:
+            raise InvalidDataError("Missing required fields") from e
+
+    def _build_shopify_event_data(
+        self,
+        event_type: str,
+        customer_id: str,
+        data: Dict[str, Any],
+        topic: str,
+    ) -> Dict[str, Any]:
+        """Build Shopify event data structure"""
+        event_data = {
+            "type": event_type,
+            "customer_id": customer_id,
+            "provider": "shopify",
+            "created_at": data.get("created_at"),
+            "status": "success",  # Default status
+            "metadata": {
+                "order_number": data.get("order_number"),
+                "order_ref": (
+                    str(data.get("order_number"))
+                    if data.get("order_number")
+                    else None
+                ),
+                "financial_status": data.get("financial_status"),
+                "fulfillment_status": data.get("fulfillment_status"),
+            },
+        }
+
+        # Add amount if present
+        if "total_price" in data:
+            try:
+                event_data["amount"] = float(data["total_price"])
+            except (ValueError, TypeError) as e:
+                raise InvalidDataError("Missing required fields") from e
+
+        # Add currency if present
+        if "currency" in data:
+            event_data["currency"] = data["currency"]
+
+        # For customer updates, include customer data
+        if topic == "customers/update":
+            event_data["customer_data"] = {
+                "company": data.get("company", ""),
+                "email": data.get("email", ""),
+                "first_name": data.get("first_name", ""),
+                "last_name": data.get("last_name", ""),
+                "orders_count": data.get("orders_count", 0),
+                "total_spent": data.get("total_spent", "0.00"),
             }
 
-            # Add amount if present
-            if "total_price" in data:
-                try:
-                    event_data["amount"] = float(data["total_price"])
-                except (ValueError, TypeError):
-                    raise InvalidDataError("Missing required fields")
+        return event_data
 
-            # Add currency if present
-            if "currency" in data:
-                event_data["currency"] = data["currency"]
+    def parse_webhook(self, request: HttpRequest) -> Optional[Dict[str, Any]]:
+        """Parse Shopify webhook data"""
+        # Validate request
+        topic = self._validate_shopify_request(request)
 
-            # For customer updates, include customer data
-            if topic == "customers/update":
-                event_data["customer_data"] = {
-                    "company": data.get("company", ""),
-                    "email": data.get("email", ""),
-                    "first_name": data.get("first_name", ""),
-                    "last_name": data.get("last_name", ""),
-                    "orders_count": data.get("orders_count", 0),
-                    "total_spent": data.get("total_spent", "0.00"),
-                }
+        # Parse JSON data
+        data = self._parse_shopify_json(request)
 
-            return event_data
+        # Store webhook data for later use
+        self._current_webhook_data = data
 
-        except (KeyError, ValueError):
-            raise InvalidDataError("Missing required fields")
+        # Check for test webhook
+        if self._is_test_webhook(topic, request):
+            return None
+
+        # Map webhook topic to event type
+        event_type = self.EVENT_TYPE_MAPPING.get(topic)
+        if not event_type:
+            raise InvalidDataError(f"Unsupported webhook topic: {topic}")
+
+        # Extract customer ID
+        customer_id = self._extract_shopify_customer_id(data)
+
+        # Build and return event data
+        return self._build_shopify_event_data(event_type, customer_id, data, topic)
 
     def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
         """Get customer data from stored webhook data"""

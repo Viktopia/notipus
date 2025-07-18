@@ -1,10 +1,10 @@
-from django.test import TestCase, Client
-from django.contrib.auth.models import User
-from django.urls import reverse
-from unittest.mock import patch
 import json
+from unittest.mock import patch
 
 from core.models import Organization, UserProfile
+from django.contrib.auth.models import User
+from django.test import Client, TestCase
+from django.urls import reverse
 
 
 class NotificationSettingsViewsTest(TestCase):
@@ -74,7 +74,7 @@ class NotificationSettingsViewsTest(TestCase):
     def test_get_notification_settings_no_user_profile(self):
         """Test getting settings for user without profile"""
         # Create user without profile
-        user_no_profile = User.objects.create_user(
+        User.objects.create_user(
             username="noprofile", password="testpass123"
         )
 
@@ -243,7 +243,7 @@ class NotificationSettingsViewsTest(TestCase):
     def test_update_notification_settings_no_user_profile(self):
         """Test update for user without profile"""
         # Create user without profile
-        user_no_profile = User.objects.create_user(
+        User.objects.create_user(
             username="noprofile", password="testpass123"
         )
 

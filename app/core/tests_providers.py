@@ -1,10 +1,10 @@
-from django.test import TestCase
 from unittest.mock import Mock, patch
-import requests
-from requests.exceptions import Timeout, HTTPError
 
-from core.providers.brandfetch import BrandfetchProvider
+import requests
 from core.providers.base import BaseEnrichmentProvider
+from core.providers.brandfetch import BrandfetchProvider
+from django.test import TestCase
+from requests.exceptions import HTTPError, Timeout
 
 
 class BaseEnrichmentProviderTest(TestCase):
@@ -50,7 +50,7 @@ class BrandfetchProviderTest(TestCase):
 
     def test_init_no_api_key_available(self):
         """Test provider initialization when no API key available"""
-        with patch("django.conf.settings", spec=[]) as mock_settings:
+        with patch("django.conf.settings", spec=[]):
             # Mock getattr to return None
             with patch("core.providers.brandfetch.getattr", return_value=None):
                 provider = BrandfetchProvider()

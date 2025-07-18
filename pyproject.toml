@@ -29,6 +29,46 @@ ruff = "^0.8.4"
 pre-commit = "^4.0.1"
 mypy = "^1.8.0"
 types-requests = "^2.31.0.20240218"
+pytest-django = "^4.11.1"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "C",   # flake8-comprehensions
+    "B",   # flake8-bugbear
+    "DJ",  # flake8-django
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+known-third-party = ["django"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "django_notipus.test_settings"
+testpaths = ["app"]
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+python_classes = ["Test*", "*Test", "*TestCase"]
+python_functions = ["test_*"]
+addopts = "--cov=app --cov-report=term-missing --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+pythonpath = ["app"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

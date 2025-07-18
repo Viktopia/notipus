@@ -1,12 +1,13 @@
-import hmac
 import hashlib
-import logging
+import hmac
 import json
+import logging
 from typing import Any, Dict, Optional
-from django.http import HttpRequest
-from django.conf import settings
 
-from .base import PaymentProvider, InvalidDataError
+from django.conf import settings
+from django.http import HttpRequest
+
+from .base import InvalidDataError, PaymentProvider
 
 logger = logging.getLogger(__name__)
 
@@ -69,29 +70,25 @@ class StripeProvider(PaymentProvider):
             logger.error(f"Stripe webhook error: {str(e)}")
             return False
 
-    def parse_webhook(self, request: HttpRequest) -> Optional[Dict[str, Any]]:
-        """Parse webhook data"""
-        logger.info(
-            "Parsing Stripe webhook data",
-            extra={
-                "content_type": request.content_type,
-                "form_data": (request.POST.dict() if request.POST else None),
-                "headers": dict(request.headers),
-            },
-        )
+    def _validate_stripe_request(self, request: HttpRequest) -> Dict[str, Any]:
+        """Validate Stripe webhook request and return parsed body"""
         if request.content_type != "application/json":
             raise InvalidDataError("Invalid content type")
 
         try:
             body = json.loads(request.body)
-        except (json.JSONDecodeError, AttributeError):
-            raise InvalidDataError("Invalid JSON data")
+        except (json.JSONDecodeError, AttributeError) as e:
+            raise InvalidDataError("Invalid JSON data") from e
 
         if not isinstance(body, dict):
             raise InvalidDataError("Invalid JSON data")
         if not body:
             raise InvalidDataError("Missing required fields")
 
+        return body
+
+    def _extract_stripe_event_info(self, body: Dict[str, Any]) -> tuple:
+        """Extract event type and data from Stripe webhook body"""
         body_event_type = body.get("type")
         if not body_event_type:
             raise InvalidDataError("Missing event type")
@@ -104,38 +101,73 @@ class StripeProvider(PaymentProvider):
         if not data:
             raise InvalidDataError("Missing data parameter")
 
-        try:
-            from ..services.billing import BillingService
+        return event_type, data
 
+    def _handle_stripe_billing(self, event_type: str, data: Dict[str, Any]) -> str:
+        """Handle billing service calls and return amount"""
+        from ..services.billing import BillingService
+
+        if event_type == "subscription_created":
+            amount = str(data["plan"]["amount"])
+            BillingService.handle_subscription_created(data)
+        elif event_type == "payment_success":
+            amount = str(data["amount_due"])
+            BillingService.handle_payment_success(data)
+        elif event_type == "payment_failure":
+            amount = str(data["amount_due"])
+            BillingService.handle_payment_failed(data)
+        else:
+            amount = "0"
+
+        return amount
+
+    def _build_stripe_event_data(
+        self,
+        event_type: str,
+        customer_id: str,
+        data: Dict[str, Any],
+        amount: str,
+    ) -> Dict[str, Any]:
+        """Build Stripe event data structure"""
+        return {
+            "type": event_type,
+            "customer_id": customer_id,
+            "status": data.get("status"),
+            "created_at": data.get("created"),
+            "currency": str(data["currency"]).upper(),
+            "amount": float(amount),
+        }
+
+    def parse_webhook(self, request: HttpRequest) -> Optional[Dict[str, Any]]:
+        """Parse webhook data"""
+        logger.info(
+            "Parsing Stripe webhook data",
+            extra={
+                "content_type": request.content_type,
+                "form_data": (request.POST.dict() if request.POST else None),
+                "headers": dict(request.headers),
+            },
+        )
+
+        # Validate request and get body
+        body = self._validate_stripe_request(request)
+
+        # Extract event info
+        event_type, data = self._extract_stripe_event_info(body)
+
+        try:
             customer_id = str(data["customer"])
             if not customer_id:
                 raise InvalidDataError("Missing required fields")
 
-            if event_type == "subscription_created":
-                amount = str(data["plan"]["amount"])
-                BillingService.handle_subscription_created(data)
-            elif event_type == "payment_success":
-                amount = str(data["amount_due"])
-                BillingService.handle_payment_success(data)
-            elif event_type == "payment_failure":
-                amount = str(data["amount_due"])
-                BillingService.handle_payment_failed(data)
-            else:
-                amount = "0"
+            # Handle billing and get amount
+            amount = self._handle_stripe_billing(event_type, data)
 
-            event_data = {
-                "type": event_type,
-                "customer_id": customer_id,
-                "status": data.get("status"),
-                "created_at": data.get("created"),
-                "currency": str(data["currency"]).upper(),
-                "amount": float(amount),
-            }
+            # Build and return event data
+            return self._build_stripe_event_data(event_type, customer_id, data, amount)
 
-            return event_data
-
-        except (KeyError, ValueError):
-            raise InvalidDataError("Missing required fields")
+        except (KeyError, ValueError) as e:
+            raise InvalidDataError("Missing required fields") from e
 
     def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
         """Get customer data"""

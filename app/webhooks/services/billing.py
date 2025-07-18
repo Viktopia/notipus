@@ -1,4 +1,5 @@
 import logging
+
 from core.models import Organization
 
 logger = logging.getLogger(__name__)
