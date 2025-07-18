@@ -17,9 +17,9 @@ class ChargifyWebhookTest(TestCase):
             "payload[transaction][amount_in_cents]": "1000",
         }
 
-    @patch('django.conf.settings.CHARGIFY_PROVIDER')
-    @patch('django.conf.settings.EVENT_PROCESSOR')
-    @patch('django.conf.settings.SLACK_CLIENT')
+    @patch("django.conf.settings.CHARGIFY_PROVIDER")
+    @patch("django.conf.settings.EVENT_PROCESSOR")
+    @patch("django.conf.settings.SLACK_CLIENT")
     def test_valid_webhook(
         self, mock_slack_client, mock_event_processor, mock_provider
     ):
@@ -27,7 +27,7 @@ class ChargifyWebhookTest(TestCase):
         mock_provider.validate_webhook.return_value = True
         mock_provider.parse_webhook.return_value = {
             "customer_id": "123",
-            "type": "payment_success"
+            "type": "payment_success",
         }
         mock_provider.get_customer_data.return_value = {"name": "Test Customer"}
 
@@ -50,7 +50,7 @@ class ChargifyWebhookTest(TestCase):
         mock_provider.validate_webhook.assert_called_once()
         mock_provider.parse_webhook.assert_called_once()
 
-    @patch('django.conf.settings.CHARGIFY_PROVIDER')
+    @patch("django.conf.settings.CHARGIFY_PROVIDER")
     def test_invalid_signature(self, mock_provider):
         # Mock invalid signature
         mock_provider.validate_webhook.return_value = False

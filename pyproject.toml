@@ -59,16 +59,15 @@ line-ending = "auto"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "django_notipus.test_settings"
-testpaths = ["app"]
+pythonpath = ["app"]
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 python_classes = ["Test*", "*Test", "*TestCase"]
 python_functions = ["test_*"]
-addopts = "--cov=app --cov-report=term-missing --strict-markers"
+addopts = "--strict-markers"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
 ]
-pythonpath = ["app"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

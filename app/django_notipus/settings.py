@@ -47,8 +47,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "webhooks.apps.WebhooksConfig",
-    "core.apps.CoreConfig",
+    "webhooks",
+    "core",
 ]
 
 MIDDLEWARE = [
@@ -210,5 +210,7 @@ STRIPE_PROVIDER = SimpleLazyObject(lambda: StripeProvider(STRIPE_WEBHOOK_SECRET)
 DISABLE_BILLING = os.environ.get("DISABLE_BILLING", "False").lower() == "true"
 
 BRANDFETCH_API_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
-BRANDFETCH_BASE_URL = os.environ.get("BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2")
+BRANDFETCH_BASE_URL = os.environ.get(
+    "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
+)
 DOMAIN_ENRICHMENT_SERVICE = SimpleLazyObject(lambda: DomainEnrichmentService())

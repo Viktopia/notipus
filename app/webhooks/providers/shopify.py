@@ -98,9 +98,7 @@ class ShopifyProvider(PaymentProvider):
             "metadata": {
                 "order_number": data.get("order_number"),
                 "order_ref": (
-                    str(data.get("order_number"))
-                    if data.get("order_number")
-                    else None
+                    str(data.get("order_number")) if data.get("order_number") else None
                 ),
                 "financial_status": data.get("financial_status"),
                 "fulfillment_status": data.get("fulfillment_status"),

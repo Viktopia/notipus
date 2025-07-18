@@ -74,9 +74,7 @@ class NotificationSettingsViewsTest(TestCase):
     def test_get_notification_settings_no_user_profile(self):
         """Test getting settings for user without profile"""
         # Create user without profile
-        User.objects.create_user(
-            username="noprofile", password="testpass123"
-        )
+        User.objects.create_user(username="noprofile", password="testpass123")
 
         self.client.login(username="noprofile", password="testpass123")
 
@@ -243,9 +241,7 @@ class NotificationSettingsViewsTest(TestCase):
     def test_update_notification_settings_no_user_profile(self):
         """Test update for user without profile"""
         # Create user without profile
-        User.objects.create_user(
-            username="noprofile", password="testpass123"
-        )
+        User.objects.create_user(username="noprofile", password="testpass123")
 
         self.client.login(username="noprofile", password="testpass123")
 

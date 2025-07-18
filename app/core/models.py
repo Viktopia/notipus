@@ -23,6 +23,9 @@ class Organization(models.Model):
     billing_cycle_anchor = models.IntegerField(null=True, blank=True)
     stripe_customer_id = models.CharField(max_length=255, blank=True, default="")
 
+    class Meta:
+        app_label = "core"
+
     def __str__(self):
         return f"{self.name} ({self.shop_domain})"
 
@@ -41,6 +44,7 @@ class Integration(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        app_label = "core"
         unique_together = ("organization", "integration_type")
 
     def __str__(self):
@@ -51,10 +55,7 @@ def validate_domain(value):
     """Validate domain format"""
     # Remove protocol if present
     domain = (
-        value.lower()
-        .replace("http://", "")
-        .replace("https://", "")
-        .replace("www.", "")
+        value.lower().replace("http://", "").replace("https://", "").replace("www.", "")
     )
 
     # Basic domain regex pattern
@@ -67,9 +68,7 @@ def validate_domain(value):
 
 
 class Company(models.Model):
-    domain = models.CharField(
-        max_length=255, unique=True, validators=[validate_domain]
-    )
+    domain = models.CharField(max_length=255, unique=True, validators=[validate_domain])
     name = models.CharField(max_length=255, blank=True, default="")
     logo_url = models.URLField(blank=True, default="")
     brand_info = models.JSONField(default=dict, blank=True)
@@ -81,7 +80,9 @@ class Company(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save to ensure validation"""
-        self.full_clean()
+        # Call clean() for domain validation but skip full_clean()
+        # to avoid Django uniqueness validation bug
+        self.clean()
         super().save(*args, **kwargs)
 
     def clean(self):

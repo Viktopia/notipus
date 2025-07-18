@@ -18,6 +18,7 @@ CHARGIFY_WEBHOOK_SECRET = "test-chargify-secret"
 SHOPIFY_WEBHOOK_SECRET = "test-shopify-secret"
 STRIPE_WEBHOOK_SECRET = "test-stripe-secret"
 
+
 # Disable migrations for faster tests
 class DisableMigrations:
     def __contains__(self, item):

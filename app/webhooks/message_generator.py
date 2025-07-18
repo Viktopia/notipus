@@ -27,9 +27,10 @@ class MessageGenerator:
 
     # Payment failure templates
     PAYMENT_FAILURE_TEMPLATES = [
-        "🚨 Oops! {customer_name}'s payment didn't go through.",
-        "💳 Heads up! {customer_name} needs payment help.",
-        "⚠️  Payment hiccup for {customer_name}! Time to lend a hand.",
+        "😅 Oops! {customer_name}'s payment didn't go through and needs attention.",
+        "🤔 Uh-oh! Looks like {customer_name}'s payment needs looking at.",
+        "👀 Seems like {customer_name} hit a snag and needs attention.",
+        "💭 Looks like {customer_name} hit a snag that needs looking at.",
     ]
 
     # Trial ending templates

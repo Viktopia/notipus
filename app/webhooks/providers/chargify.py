@@ -199,15 +199,13 @@ class ChargifyProvider(PaymentProvider):
 
         for key, value in data.items():
             if key.startswith("payload[subscription][customer]["):
-                field = key.replace(
-                    "payload[subscription][customer][", ""
-                ).replace("]", "")
+                field = key.replace("payload[subscription][customer][", "").replace(
+                    "]", ""
+                )
                 customer[field] = value
             elif key.startswith("payload[subscription]["):
                 if "customer" not in key:  # Skip customer fields handled above
-                    field = key.replace(
-                        "payload[subscription][", ""
-                    ).replace("]", "")
+                    field = key.replace("payload[subscription][", "").replace("]", "")
                     subscription[field] = value
             elif key.startswith("payload[transaction]["):
                 field = key.replace("payload[transaction][", "").replace("]", "")
@@ -318,8 +316,14 @@ class ChargifyProvider(PaymentProvider):
 
         # Build and return response
         return self._build_chargify_response(
-            event_type, customer_id, amount, status, data,
-            subscription, customer_data, failure_reason
+            event_type,
+            customer_id,
+            amount,
+            status,
+            data,
+            subscription,
+            customer_data,
+            failure_reason,
         )
 
     def _check_duplicate(self, customer_id: str, event_type: str) -> bool:

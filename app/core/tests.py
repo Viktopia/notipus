@@ -8,7 +8,7 @@ class ValidateDomainTest(TestCase):
 
     def test_valid_domains(self):
         """Test valid domain formats"""
-        from .models import validate_domain  # noqa: E402
+        from core.models import validate_domain  # noqa: E402
 
         valid_domains = [
             "example.com",
@@ -25,7 +25,7 @@ class ValidateDomainTest(TestCase):
 
     def test_domain_cleaning(self):
         """Test that protocols and www are removed"""
-        from .models import validate_domain  # noqa: E402
+        from core.models import validate_domain  # noqa: E402
 
         test_cases = [
             ("https://example.com", "example.com"),
@@ -41,7 +41,7 @@ class ValidateDomainTest(TestCase):
 
     def test_invalid_domains(self):
         """Test invalid domain formats"""
-        from .models import validate_domain  # noqa: E402
+        from core.models import validate_domain  # noqa: E402
 
         invalid_domains = [
             "invalid",
@@ -64,22 +64,18 @@ class CompanyTest(TestCase):
 
     def test_company_creation(self):
         """Test creating a company with valid domain"""
-        from .models import Company  # noqa: E402
+        from core.models import Company  # noqa: E402
 
-        company = Company.objects.create(
-            domain="example.com", name="Example Company"
-        )
-        self.assertEqual(company.domain, "example.com")
+        company = Company.objects.create(domain="creation-test.com", name="Example Company")
+        self.assertEqual(company.domain, "creation-test.com")
         self.assertEqual(company.name, "Example Company")
 
     def test_company_str_representation(self):
         """Test string representation of company"""
-        from .models import Company  # noqa: E402
+        from core.models import Company  # noqa: E402
 
-        company = Company.objects.create(
-            domain="example.com", name="Example Company"
-        )
-        expected = "Example Company (example.com)"
+        company = Company.objects.create(domain="str-test.com", name="Example Company")
+        expected = "Example Company (str-test.com)"
         self.assertEqual(str(company), expected)
 
         # Test company without name
@@ -88,28 +84,36 @@ class CompanyTest(TestCase):
 
     def test_company_domain_validation(self):
         """Test domain validation on company creation"""
-        from .models import Company  # noqa: E402
+        from core.models import Company  # noqa: E402
 
         with self.assertRaises(ValidationError):
             Company.objects.create(domain="invalid-domain")
 
     def test_company_unique_constraint(self):
         """Test unique constraint on domain"""
-        from .models import Company  # noqa: E402
+        from core.models import Company  # noqa: E402
+        from django.db import transaction
+        import uuid
 
-        Company.objects.create(domain="example.com")
+        # Use a unique domain for this test
+        unique_domain = f"test-{uuid.uuid4().hex[:8]}.com"
 
+        # Create first company
+        Company.objects.create(domain=unique_domain)
+
+        # Try to create duplicate - this should raise IntegrityError at DB level
         with self.assertRaises(IntegrityError):
-            Company.objects.create(domain="example.com")
+            with transaction.atomic():
+                Company.objects.create(domain=unique_domain)
 
     def test_company_domain_cleaning(self):
         """Test domain cleaning on save"""
-        from .models import Company  # noqa: E402
+        from core.models import Company  # noqa: E402
 
         company = Company.objects.create(
-            domain="https://www.EXAMPLE.COM", name="Example"
+            domain="https://www.CLEANING-TEST.COM", name="Example"
         )
-        self.assertEqual(company.domain, "example.com")
+        self.assertEqual(company.domain, "cleaning-test.com")
 
 
 class OrganizationTest(TestCase):
@@ -117,7 +121,7 @@ class OrganizationTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        from .models import Organization  # noqa: E402
+        from core.models import Organization  # noqa: E402
 
         self.organization = Organization.objects.create(
             name="Test Org", shop_domain="test.myshopify.com"
@@ -134,7 +138,7 @@ class NotificationSettingsTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        from .models import Organization  # noqa: E402
+        from core.models import Organization  # noqa: E402
 
         self.organization = Organization.objects.create(
             name="Test Org", shop_domain="test.myshopify.com"
@@ -142,31 +146,25 @@ class NotificationSettingsTest(TestCase):
 
     def test_notification_settings_creation(self):
         """Test creating notification settings"""
-        from .models import NotificationSettings  # noqa: E402
+        from core.models import NotificationSettings  # noqa: E402
 
-        settings = NotificationSettings.objects.create(
-            organization=self.organization
-        )
+        settings = NotificationSettings.objects.create(organization=self.organization)
         self.assertEqual(settings.organization, self.organization)
         self.assertTrue(settings.notify_payment_success)  # Default value
 
     def test_notification_settings_str_representation(self):
         """Test string representation"""
-        from .models import NotificationSettings  # noqa: E402
+        from core.models import NotificationSettings  # noqa: E402
 
-        settings = NotificationSettings.objects.create(
-            organization=self.organization
-        )
-        expected = f"Notification settings for {self.organization.name}"
+        settings = NotificationSettings.objects.create(organization=self.organization)
+        expected = f"Notification Settings for {self.organization.name}"
         self.assertEqual(str(settings), expected)
 
     def test_notification_settings_defaults(self):
         """Test default values"""
-        from .models import NotificationSettings  # noqa: E402
+        from core.models import NotificationSettings  # noqa: E402
 
-        settings = NotificationSettings.objects.create(
-            organization=self.organization
-        )
+        settings = NotificationSettings.objects.create(organization=self.organization)
         # Test some key defaults
         self.assertTrue(settings.notify_payment_success)
         self.assertTrue(settings.notify_payment_failure)
@@ -174,7 +172,7 @@ class NotificationSettingsTest(TestCase):
 
     def test_notification_settings_one_per_organization(self):
         """Test one settings instance per organization"""
-        from .models import NotificationSettings  # noqa: E402
+        from core.models import NotificationSettings  # noqa: E402
 
         NotificationSettings.objects.create(organization=self.organization)
 

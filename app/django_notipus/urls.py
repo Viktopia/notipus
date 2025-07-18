@@ -27,7 +27,7 @@ ninja_api = NinjaAPI(
 )
 
 # Add router only if not already attached (prevents test failures)
-if not hasattr(webhook_router, 'api') or webhook_router.api is None:
+if not hasattr(webhook_router, "api") or webhook_router.api is None:
     ninja_api.add_router("/", webhook_router, tags=["Webhooks"])
 
 urlpatterns = [
