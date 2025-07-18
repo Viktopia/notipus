@@ -43,6 +43,18 @@ class Integration(models.Model):
     auth_data = JSONField(default=dict)
 
 
+class Company(models.Model):
+    domain = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
+    logo_url = models.URLField(blank=True, null=True)
+    brand_info = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.domain})" if self.name else self.domain
+
+
 class UsageLimit(models.Model):
     plan = models.CharField(max_length=20, choices=Organization.STRIPE_PLANS)
     max_monthly_registrations = models.IntegerField()
@@ -55,3 +67,37 @@ class UserProfile(models.Model):
     slack_user_id = models.CharField(max_length=255, unique=True)
     slack_team_id = models.CharField(max_length=255)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+
+
+class NotificationSettings(models.Model):
+    organization = models.OneToOneField(
+        Organization, on_delete=models.CASCADE, related_name="notification_settings"
+    )
+
+    # Payment events
+    notify_payment_success = models.BooleanField(default=True)
+    notify_payment_failure = models.BooleanField(default=True)
+
+    # Subscription events
+    notify_subscription_created = models.BooleanField(default=True)
+    notify_subscription_updated = models.BooleanField(default=True)
+    notify_subscription_canceled = models.BooleanField(default=True)
+
+    # Trial events
+    notify_trial_ending = models.BooleanField(default=True)
+    notify_trial_expired = models.BooleanField(default=True)
+
+    # Customer events
+    notify_customer_updated = models.BooleanField(default=True)
+    notify_signups = models.BooleanField(default=True)
+
+    # Shopify events
+    notify_shopify_order_created = models.BooleanField(default=True)
+    notify_shopify_order_updated = models.BooleanField(default=True)
+    notify_shopify_order_paid = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Notification Settings for {self.organization.name}"
