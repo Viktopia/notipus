@@ -66,7 +66,9 @@ class CompanyTest(TestCase):
         """Test creating a company with valid domain"""
         from core.models import Company  # noqa: E402
 
-        company = Company.objects.create(domain="creation-test.com", name="Example Company")
+        company = Company.objects.create(
+            domain="creation-test.com", name="Example Company"
+        )
         self.assertEqual(company.domain, "creation-test.com")
         self.assertEqual(company.name, "Example Company")
 
@@ -91,9 +93,10 @@ class CompanyTest(TestCase):
 
     def test_company_unique_constraint(self):
         """Test unique constraint on domain"""
+        import uuid
+
         from core.models import Company  # noqa: E402
         from django.db import transaction
-        import uuid
 
         # Use a unique domain for this test
         unique_domain = f"test-{uuid.uuid4().hex[:8]}.com"
