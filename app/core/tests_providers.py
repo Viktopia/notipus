@@ -43,8 +43,8 @@ class BrandfetchProviderTest(TestCase):
 
     def test_init_without_api_key(self):
         """Test provider initialization without API key"""
-        with patch("django.conf.settings") as mock_settings:
-            mock_settings.BRANDFETCH_API_KEY = "settings_key"
+        with patch("core.providers.brandfetch.getattr") as mock_getattr:
+            mock_getattr.return_value = "settings_key"
             provider = BrandfetchProvider()
             self.assertEqual(provider.api_key, "settings_key")
 
@@ -81,6 +81,10 @@ class BrandfetchProviderTest(TestCase):
             "links": [{"url": "https://example.com"}],
             "colors": [{"hex": "#FF0000"}],
         }
+        mock_brand_response.headers = {
+            'x-api-key-quota': '1000',
+            'x-api-key-approximate-usage': '250'
+        }
         mock_brand_response.raise_for_status.return_value = None
 
         mock_logos_response = Mock()
@@ -115,12 +119,12 @@ class BrandfetchProviderTest(TestCase):
         }
 
         mock_get.assert_any_call(
-            f"{self.base_url}/companies/example.com",
+            f"{self.base_url}/brands/example.com",
             headers=expected_headers,
             timeout=10,
         )
         mock_get.assert_any_call(
-            f"{self.base_url}/companies/example.com/logos",
+            f"{self.base_url}/brands/example.com/logos",
             headers=expected_headers,
             timeout=10,
         )
@@ -247,3 +251,26 @@ class BrandfetchProviderTest(TestCase):
     def test_get_provider_name(self):
         """Test provider name"""
         self.assertEqual(self.provider.get_provider_name(), "brandfetchprovider")
+
+    @patch("core.providers.brandfetch.requests.get")
+    def test_enrich_domain_rate_limit(self, mock_get):
+        """Test rate limit handling"""
+        from requests.exceptions import HTTPError
+
+        # Mock rate limit response
+        mock_response = Mock()
+        mock_response.status_code = 429
+        mock_response.headers = {'Retry-After': '120'}
+
+        # Create HTTPError with the mock response
+        http_error = HTTPError()
+        http_error.response = mock_response
+        mock_get.side_effect = http_error
+
+        with patch("core.providers.brandfetch.logger") as mock_logger:
+            result = self.provider.enrich_domain("example.com")
+
+            self.assertEqual(result, {})
+            mock_logger.warning.assert_called_once_with(
+                "Brandfetch rate limit exceeded. Retry after 120 seconds"
+            )
