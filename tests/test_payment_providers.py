@@ -415,36 +415,24 @@ def test_chargify_webhook_deduplication():
     assert event1["type"] == "payment_success"
     assert event1["customer_id"] == "cust_123"
 
-    # Same customer within deduplication window should be considered duplicate
-    mock_request.headers["X-Chargify-Webhook-Id"] = "different_webhook_id"
+    # Same webhook ID should be considered duplicate
+    mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_1"  # Same webhook ID
     form_data["event"] = "renewal_success"  # change event type
     mock_request.POST.dict.return_value = form_data
-    with pytest.raises(InvalidDataError, match="Duplicate webhook for customer"):
+    with pytest.raises(InvalidDataError, match="Duplicate webhook"):
         provider.parse_webhook(mock_request)
 
-    # Different customer should process
-    mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_3"
+    # Different webhook ID should be allowed (proper idempotency)
+    mock_request.headers["X-Chargify-Webhook-Id"] = "different_webhook_id"
     form_data["event"] = "payment_success"
-    form_data["payload[subscription][customer][id]"] = "cust_456"
-    form_data["payload[subscription][customer][email]"] = "other@example.com"
+    form_data["payload[subscription][customer][id]"] = "cust_123"  # Same customer
     mock_request.POST.dict.return_value = form_data
-    event3 = provider.parse_webhook(mock_request)
-    assert event3 is not None
-    assert event3["type"] == "payment_success"
-    assert event3["customer_id"] == "cust_456"
 
-    # Test cache expiration - events outside deduplication window
-    provider._DEDUP_WINDOW_SECONDS = 0  # Force cache clearing
-    mock_request.headers["X-Chargify-Webhook-Id"] = "test_webhook_4"
-    form_data["payload[subscription][customer][id]"] = (
-        "cust_123"  # revert to first customer
-    )
-    form_data["payload[subscription][customer][email]"] = "test@example.com"
-    mock_request.POST.dict.return_value = form_data
-    event4 = provider.parse_webhook(mock_request)
-    assert event4 is not None
-    assert event4["type"] == "payment_success"
-    assert event4["customer_id"] == "cust_123"
+    # Should process successfully since it's a different webhook ID
+    event2 = provider.parse_webhook(mock_request)
+    assert event2 is not None
+    assert event2["type"] == "payment_success"
+    assert event2["customer_id"] == "cust_123"
 
 
 def test_event_processor_notification_formatting():
