@@ -117,7 +117,7 @@ class StripeProviderTest(TestCase):
 
         self.assertEqual(result, expected)
 
-        def test_handle_stripe_billing_unknown_event(self):
+    def test_handle_stripe_billing_unknown_event(self):
         """Test handling unknown billing event"""
         data = {"amount_due": 1500}
 
