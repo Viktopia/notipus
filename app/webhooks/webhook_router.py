@@ -3,7 +3,8 @@ from typing import Any
 
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
-from ninja import Router
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from .exceptions import (
     WebhookError,
@@ -13,10 +14,9 @@ from .exceptions import (
 )
 
 logger = logging.getLogger(__name__)
-webhook_router = Router()
 
 
-@webhook_router.get("/webhook/health_check/")
+@require_http_methods(["GET"])
 def health_check(request: HttpRequest) -> JsonResponse:
     """Health check endpoint for webhook service"""
     try:
@@ -76,8 +76,9 @@ def _process_webhook(
         return JsonResponse(error_response, status=500)
 
 
-@webhook_router.post("/webhook/shopify/")
-async def shopify_webhook(request: HttpRequest) -> JsonResponse:
+@csrf_exempt
+@require_http_methods(["POST"])
+def shopify_webhook(request: HttpRequest) -> JsonResponse:
     """Handle Shopify webhook requests"""
     logger.info(
         "Processing Shopify webhook",
@@ -87,8 +88,9 @@ async def shopify_webhook(request: HttpRequest) -> JsonResponse:
     return _process_webhook(request, settings.SHOPIFY_PROVIDER, "shopify")
 
 
-@webhook_router.post("/webhook/chargify/")
-async def chargify_webhook(request: HttpRequest) -> JsonResponse:
+@csrf_exempt
+@require_http_methods(["POST"])
+def chargify_webhook(request: HttpRequest) -> JsonResponse:
     """Handle Chargify webhook requests"""
     logger.info(
         "Processing Chargify webhook",
@@ -98,8 +100,9 @@ async def chargify_webhook(request: HttpRequest) -> JsonResponse:
     return _process_webhook(request, settings.CHARGIFY_PROVIDER, "chargify")
 
 
-@webhook_router.post("/webhook/stripe/")
-async def stripe_webhook(request: HttpRequest) -> JsonResponse:
+@csrf_exempt
+@require_http_methods(["POST"])
+def stripe_webhook(request: HttpRequest) -> JsonResponse:
     """Handle Stripe webhook requests"""
     logger.info(
         "Processing Stripe webhook",
@@ -109,8 +112,9 @@ async def stripe_webhook(request: HttpRequest) -> JsonResponse:
     return _process_webhook(request, settings.STRIPE_PROVIDER, "stripe")
 
 
-@webhook_router.get("/webhook/ephemeral/")
-async def ephemeral_webhook(request: HttpRequest) -> JsonResponse:
+@csrf_exempt
+@require_http_methods(["GET"])
+def ephemeral_webhook(request: HttpRequest) -> JsonResponse:
     """Handle ephemeral webhook requests that can be from multiple providers"""
     try:
         # Determine provider based on headers
