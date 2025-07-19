@@ -23,11 +23,11 @@ class ShopifyProvider(PaymentProvider):
         "test": "test",
     }
 
-    def __init__(self, webhook_secret: str):
+    def __init__(self, webhook_secret: str) -> None:
         """Initialize provider with webhook secret"""
 
         super().__init__(webhook_secret)
-        self._current_webhook_data = None
+        self._current_webhook_data: Optional[Dict[str, Any]] = None
 
     def _validate_shopify_request(self, request: HttpRequest) -> str:
         """Validate Shopify webhook request and return topic"""
@@ -179,7 +179,7 @@ class ShopifyProvider(PaymentProvider):
             },
         }
 
-    def validate_webhook(self, request):
+    def validate_webhook(self, request: HttpRequest) -> bool:
         """Validate the webhook signature"""
         hmac_header = request.headers.get("X-Shopify-Hmac-SHA256")
         if not hmac_header:

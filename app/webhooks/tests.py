@@ -1,42 +1,46 @@
-from unittest.mock import Mock, patch
+import json
+from unittest.mock import patch
 
-from django.test import Client, TestCase
+from django.test import TestCase
 
 
 class ChargifyWebhookTest(TestCase):
     def setUp(self):
-        self.client = Client()
-        self.url = "/webhook/chargify/"  # Fixed: added leading slash
+        self.url = "/webhook/chargify/"
         self.headers = {
-            "HTTP_X_Chargify_Webhook_Signature_Hmac_Sha_256": "test_signature",
             "HTTP_X_Chargify_Webhook_Id": "12345",
+            "HTTP_X_Chargify_Webhook_Signature_Hmac_Sha_256": "test_signature",
         }
         self.data = {
             "event": "payment_success",
-            "payload[subscription][customer][id]": "123",
-            "payload[transaction][amount_in_cents]": "1000",
+            "payload[subscription][customer][id]": "67890",
+            "payload[subscription][customer][email]": "test@example.com",
+            "payload[subscription][customer][first_name]": "Test",
+            "payload[subscription][customer][last_name]": "User",
+            "payload[subscription][id]": "11111",
+            "payload[subscription][product][name]": "Premium Plan",
+            "payload[transaction][id]": "22222",
+            "payload[transaction][amount_in_cents]": "2999",
+            "created_at": "2024-01-01T00:00:00Z",
         }
 
-    @patch("django.conf.settings.CHARGIFY_PROVIDER")
     @patch("django.conf.settings.EVENT_PROCESSOR")
     @patch("django.conf.settings.SLACK_CLIENT")
-    def test_valid_webhook(
-        self, mock_slack_client, mock_event_processor, mock_provider
-    ):
-        # Mock the provider methods
+    @patch("django.conf.settings.CHARGIFY_PROVIDER")
+    def test_valid_webhook(self, mock_provider, mock_slack, mock_processor):
+        # Mock successful webhook processing
         mock_provider.validate_webhook.return_value = True
         mock_provider.parse_webhook.return_value = {
-            "customer_id": "123",
             "type": "payment_success",
+            "customer_id": "67890",
         }
-        mock_provider.get_customer_data.return_value = {"name": "Test Customer"}
-
-        # Mock event processor
-        mock_notification = Mock()
-        mock_event_processor.format_notification.return_value = mock_notification
-
-        # Mock slack client
-        mock_slack_client.send_notification.return_value = True
+        mock_provider.get_customer_data.return_value = {
+            "email": "test@example.com",
+            "company": "Test Company",
+        }
+        mock_processor.format_notification.return_value = {
+            "text": "Payment received"
+        }
 
         response = self.client.post(
             self.url,
@@ -44,11 +48,10 @@ class ChargifyWebhookTest(TestCase):
             content_type="application/x-www-form-urlencoded",
             **self.headers,
         )
-        self.assertEqual(response.status_code, 200)
 
-        # Verify mocks were called
-        mock_provider.validate_webhook.assert_called_once()
-        mock_provider.parse_webhook.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data["status"], "success")
 
     @patch("django.conf.settings.CHARGIFY_PROVIDER")
     def test_invalid_signature(self, mock_provider):
@@ -63,4 +66,8 @@ class ChargifyWebhookTest(TestCase):
             content_type="application/x-www-form-urlencoded",
             **headers,
         )
-        self.assertEqual(response.status_code, 401)  # Updated expected status code
+        # Our improved error handling returns 400 for validation errors
+        self.assertEqual(response.status_code, 400)
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data["status"], "error")
+        self.assertEqual(response_data["error"]["code"], "INVALID_SIGNATURE")

@@ -1,66 +1,100 @@
 import logging
+from typing import Any, Dict, List, Optional
 
-from django.conf import settings
-
-from ..providers.brandfetch import BrandfetchProvider
+from core.models import Company
+from core.providers.brandfetch import BrandfetchProvider
 
 logger = logging.getLogger(__name__)
 
 
 class DomainEnrichmentService:
-    def __init__(self):
-        self.providers = self._initialize_providers()
+    """Service for enriching company domain data"""
 
-    def _initialize_providers(self):
-        """Initializing active providers"""
-        providers = []
+    def __init__(self) -> None:
+        """Initialize the enrichment service with available providers"""
+        self.providers: List[Any] = []
+        self._initialize_providers()
 
-        # Add Brandfetch provider if API key is configured
-        if hasattr(settings, "BRANDFETCH_API_KEY") and settings.BRANDFETCH_API_KEY:
-            providers.append(BrandfetchProvider())
+    def _initialize_providers(self) -> None:
+        """Initialize enrichment providers based on available API keys"""
+        try:
+            brandfetch_provider = BrandfetchProvider()
+            if brandfetch_provider.api_key:
+                self.providers.append(brandfetch_provider)
+                logger.info("Initialized Brandfetch provider for domain enrichment")
+            else:
+                logger.warning("Brandfetch API key not available, skipping provider")
+        except Exception as e:
+            logger.error(f"Failed to initialize Brandfetch provider: {str(e)}")
 
-        return providers
+        if not self.providers:
+            logger.warning("No domain enrichment providers available")
 
-    def enrich_domain(self, domain: str):
-        """Enriches domain data using all available providers"""
-        from core.models import Company
+    def enrich_domain(self, domain: str) -> Optional[Company]:
+        """Enrich a domain with company information"""
+        if not domain:
+            logger.warning("Empty domain provided for enrichment")
+            return None
 
-        company, created = Company.objects.get_or_create(domain=domain)
+        if not self.providers:
+            logger.warning("No providers available for domain enrichment")
+            return None
 
-        if not created and (company.name or company.logo_url):
+        try:
+            # Get or create company record
+            company, created = Company.objects.get_or_create(
+                domain=domain, defaults={"name": "", "logo_url": "", "brand_info": {}}
+            )
+
+            # Skip enrichment if we already have data and it's recent
+            if not created and company.brand_info and company.updated_at:
+                logger.debug(f"Company {domain} already has enrichment data")
+                return company
+
+            # Try to enrich with each provider
+            enrichment_data = {}
+            for provider in self.providers:
+                try:
+                    data = provider.enrich_domain(domain)
+                    if data:
+                        enrichment_data.update(data)
+                        logger.info(
+                            f"Successfully enriched {domain} with {provider.__class__.__name__}"
+                        )
+                        break  # Use first successful provider
+                except Exception as e:
+                    logger.error(
+                        f"Provider {provider.__class__.__name__} failed for {domain}: {str(e)}"
+                    )
+                    continue
+
+            # Update company with enrichment data
+            if enrichment_data:
+                self._update_company(company, enrichment_data)
+                logger.info(f"Updated company record for {domain}")
+            else:
+                logger.warning(f"No enrichment data found for {domain}")
+
             return company
 
-        for provider in self.providers:
-            try:
-                enriched_data = provider.enrich_domain(domain)
-                if enriched_data:
-                    self._update_company(
-                        company, enriched_data, provider.get_provider_name()
-                    )
-            except Exception as e:
-                logger.error(
-                    f"Error enriching domain with "
-                    f"{provider.get_provider_name()}: {str(e)}"
-                )
+        except Exception as e:
+            logger.error(f"Error enriching domain {domain}: {str(e)}", exc_info=True)
+            return None
 
-        return company
+    def _update_company(self, company: Company, data: Dict[str, Any]) -> None:
+        """Update company record with enrichment data"""
+        if not data:
+            return
 
-    def _update_company(self, company, data, provider_name):
-        update_fields = []
-
-        if data.get("name") and not company.name:
+        # Update basic fields
+        if "name" in data and data["name"]:
             company.name = data["name"]
-            update_fields.append("name")
 
-        if data.get("logo_url") and not company.logo_url:
+        if "logo_url" in data and data["logo_url"]:
             company.logo_url = data["logo_url"]
-            update_fields.append("logo_url")
 
-        if data.get("brand_info"):
-            if not company.brand_info:
-                company.brand_info = {}
-            company.brand_info[provider_name] = data["brand_info"]
-            update_fields.append("brand_info")
+        # Store all enrichment data in brand_info
+        company.brand_info = data
 
-        if update_fields:
-            company.save(update_fields=update_fields)
+        company.save()
+        logger.debug(f"Updated company {company.domain} with enrichment data")

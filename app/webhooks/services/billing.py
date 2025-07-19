@@ -1,4 +1,5 @@
 import logging
+from typing import Any, Dict
 
 from core.models import Organization
 
@@ -6,8 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class BillingService:
+    """Service for handling billing-related webhook events"""
+
     @staticmethod
-    def handle_subscription_created(subscription: dict):
+    def handle_subscription_created(subscription: Dict[str, Any]) -> None:
         """Handle subscription created event"""
         try:
             customer_id = subscription.get("customer")
@@ -46,7 +49,7 @@ class BillingService:
             logger.error(f"Error handling subscription created: {str(e)}")
 
     @staticmethod
-    def handle_payment_success(invoice: dict):
+    def handle_payment_success(invoice: Dict[str, Any]) -> None:
         """Handle successful payment event"""
         try:
             customer_id = invoice.get("customer")
@@ -54,16 +57,17 @@ class BillingService:
                 logger.error("Missing customer ID in invoice data")
                 return
 
+            subscription_id = invoice.get("subscription")
+            amount_paid = invoice.get("amount_paid", 0)
+
             updated_count = Organization.objects.filter(
                 stripe_customer_id=customer_id
-            ).update(
-                subscription_status="active",
-                billing_cycle_anchor=invoice.get("period_end"),
-            )
+            ).update(subscription_status="active")
 
             if updated_count > 0:
                 logger.info(
-                    f"Updated payment status to active for customer {customer_id}"
+                    f"Payment successful for customer {customer_id}, "
+                    f"amount: {amount_paid/100:.2f}, subscription: {subscription_id}"
                 )
             else:
                 logger.warning(f"No organization found for customer {customer_id}")
@@ -72,7 +76,7 @@ class BillingService:
             logger.error(f"Error handling payment success: {str(e)}")
 
     @staticmethod
-    def handle_payment_failed(invoice: dict):
+    def handle_payment_failed(invoice: Dict[str, Any]) -> None:
         """Handle failed payment event"""
         try:
             customer_id = invoice.get("customer")
@@ -80,13 +84,17 @@ class BillingService:
                 logger.error("Missing customer ID in invoice data")
                 return
 
+            subscription_id = invoice.get("subscription")
+            attempt_count = invoice.get("attempt_count", 0)
+
             updated_count = Organization.objects.filter(
                 stripe_customer_id=customer_id
             ).update(subscription_status="past_due")
 
             if updated_count > 0:
                 logger.warning(
-                    f"Updated payment status to past_due for customer {customer_id}"
+                    f"Payment failed for customer {customer_id}, "
+                    f"attempt: {attempt_count}, subscription: {subscription_id}"
                 )
             else:
                 logger.warning(f"No organization found for customer {customer_id}")

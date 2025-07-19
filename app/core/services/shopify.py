@@ -1,12 +1,19 @@
+import logging
+from typing import Optional
+
 import requests
 from django.conf import settings
 from requests.exceptions import RequestException
 
+logger = logging.getLogger(__name__)
+
 
 class ShopifyAPI:
+    """API client for Shopify operations"""
+
     @staticmethod
-    def get_shop_domain():
-        """Get shop_domain from Shopify API"""
+    def get_shop_domain() -> Optional[str]:
+        """Get shop domain from Shopify API"""
         try:
             headers = {
                 "X-Shopify-Access-Token": settings.SHOPIFY_ACCESS_TOKEN,
@@ -17,7 +24,8 @@ class ShopifyAPI:
                 headers=headers,
             )
             response.raise_for_status()
-            return response.json().get("shop", {}).get("myshopify_domain")
+            shop_data = response.json().get("shop", {})
+            return shop_data.get("myshopify_domain")
         except RequestException as e:
-            print(f"Error fetching Shopify shop data: {e}")
+            logger.error(f"Error fetching Shopify shop data: {str(e)}")
             return None
