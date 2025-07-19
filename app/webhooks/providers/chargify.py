@@ -19,13 +19,35 @@ class ChargifyProvider(PaymentProvider):
     """Chargify payment provider implementation"""
 
     EVENT_TYPE_MAPPING = {
+        # Payment events
         "payment_success": "payment_success",
         "payment_failure": "payment_failure",
+        "payment_refunded": "payment_refunded",
+        "renewal_success": "payment_success",
+        "renewal_failure": "payment_failure",
+        # Subscription events
         "subscription_state_change": "subscription_state_change",
         "subscription_product_change": "subscription_product_change",
         "subscription_billing_date_change": "subscription_billing_date_change",
-        "renewal_success": "payment_success",
-        "renewal_failure": "payment_failure",
+        "subscription_created": "subscription_created",
+        "subscription_updated": "subscription_updated",
+        "subscription_cancelled": "subscription_cancelled",
+        "subscription_reactivated": "subscription_reactivated",
+        "subscription_expired": "subscription_expired",
+        "subscription_renewed": "subscription_renewed",
+        # Customer events
+        "customer_created": "customer_created",
+        "customer_updated": "customer_updated",
+        "customer_deleted": "customer_deleted",
+        # Invoice events
+        "invoice_created": "invoice_created",
+        "invoice_updated": "invoice_updated",
+        "invoice_paid": "invoice_paid",
+        # Signup events
+        "signup_success": "signup_success",
+        "signup_failure": "signup_failure",
+        # Component events
+        "component_allocation_change": "component_allocation_change",
     }
 
     # Class-level cache for recently processed webhook IDs
@@ -73,7 +95,9 @@ class ChargifyProvider(PaymentProvider):
             return True
 
         try:
-            webhook_time = datetime.fromisoformat(timestamp_header.replace("Z", "+00:00"))
+            webhook_time = datetime.fromisoformat(
+                timestamp_header.replace("Z", "+00:00")
+            )
             current_time = datetime.now(timezone.utc)
             age_seconds = abs((current_time - webhook_time).total_seconds())
 
@@ -84,7 +108,7 @@ class ChargifyProvider(PaymentProvider):
                         "webhook_timestamp": timestamp_header,
                         "age_seconds": age_seconds,
                         "tolerance": self._TIMESTAMP_TOLERANCE_SECONDS,
-                    }
+                    },
                 )
                 return False
 
@@ -92,7 +116,7 @@ class ChargifyProvider(PaymentProvider):
         except (ValueError, TypeError) as e:
             logger.warning(
                 "Invalid webhook timestamp format",
-                extra={"timestamp": timestamp_header, "error": str(e)}
+                extra={"timestamp": timestamp_header, "error": str(e)},
             )
             return False
 
@@ -301,7 +325,7 @@ class ChargifyProvider(PaymentProvider):
         data: Dict[str, Any],
         subscription: Dict[str, Any],
         customer_data: Dict[str, Any],
-        failure_reason: str,
+        failure_reason: str | None,
     ) -> Dict[str, Any]:
         """Build final response structure"""
         return {
@@ -407,7 +431,21 @@ class ChargifyProvider(PaymentProvider):
         elif event_type == "renewal_success":
             # Renewal success is treated as payment success
             return self._parse_payment_success(data)
+        elif event_type == "renewal_failure":
+            # Renewal failure is treated as payment failure
+            return self._parse_payment_failure(data)
+        elif event_type in [
+            "subscription_product_change",
+            "subscription_billing_date_change",
+        ]:
+            # These are handled similarly to subscription state changes
+            return self._parse_subscription_state_change(data)
         else:
+            # For now, unsupported events are logged but don't cause failures
+            logger.warning(
+                f"Unsupported Chargify event type received: {event_type}",
+                extra={"event_type": event_type, "webhook_id": webhook_id},
+            )
             raise InvalidDataError(f"Unsupported event type: {event_type}")
 
     def parse_webhook(self, request: HttpRequest) -> Dict[str, Any]:
@@ -431,9 +469,11 @@ class ChargifyProvider(PaymentProvider):
         event_type, customer_id = self._get_chargify_event_info(data)
 
         # Handle the event
-        return self._handle_chargify_event(event_type, customer_id, data, request.headers.get("X-Chargify-Webhook-Id"))
+        return self._handle_chargify_event(
+            event_type, customer_id, data, request.headers.get("X-Chargify-Webhook-Id")
+        )
 
-    def _parse_shopify_order_ref(self, memo: str) -> str:
+    def _parse_shopify_order_ref(self, memo: str) -> str | None:
         """Extract Shopify order reference from transaction memo."""
         if not memo:
             return None
@@ -467,7 +507,9 @@ class ChargifyProvider(PaymentProvider):
         except (ValueError, TypeError) as e:
             raise InvalidDataError(f"Invalid amount format: {amount}") from e
 
-        customer_data = self.get_customer_data(data)
+        customer_data = self.get_customer_data(
+            data["payload[subscription][customer][id]"]
+        )
 
         # Extract Shopify order reference from memo
         memo = data.get("payload[transaction][memo]", "")
@@ -499,7 +541,9 @@ class ChargifyProvider(PaymentProvider):
         if not amount:
             raise InvalidDataError("Missing amount")
 
-        customer_data = self.get_customer_data(data)
+        customer_data = self.get_customer_data(
+            data["payload[subscription][customer][id]"]
+        )
         return {
             "type": "payment_failure",
             "customer_id": data["payload[subscription][customer][id]"],
@@ -519,7 +563,9 @@ class ChargifyProvider(PaymentProvider):
 
     def _parse_subscription_state_change(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse subscription_state_change webhook data"""
-        customer_data = self.get_customer_data(data)
+        customer_data = self.get_customer_data(
+            data["payload[subscription][customer][id]"]
+        )
         return {
             "type": "subscription_state_change",
             "customer_id": data["payload[subscription][customer][id]"],

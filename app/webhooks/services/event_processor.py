@@ -52,6 +52,18 @@ class EventProcessor:
         if not company_name:
             raise ValueError("Missing required customer data: company name")
 
+        # Validate amount if present
+        if "amount" in event_data:
+            amount = event_data["amount"]
+            if amount is not None and amount < 0:
+                raise ValueError("Amount cannot be negative")
+
+        # Validate currency if present
+        if "currency" in event_data:
+            currency = event_data["currency"]
+            if currency and currency not in ["USD", "EUR", "GBP", "CAD", "AUD"]:
+                raise ValueError("Invalid currency")
+
         # Store event data in database and perform cross-reference lookups
         enriched_event_data = self._enrich_with_cross_references(event_data)
 
@@ -104,7 +116,8 @@ class EventProcessor:
 
             if related_payment_ref:
                 logger.info(
-                    f"Found related Chargify payment {related_payment_ref} for Shopify order {order_ref}"
+                    f"Found related Chargify payment {related_payment_ref} for "
+                    f"Shopify order {order_ref}"
                 )
             else:
                 logger.debug(
@@ -121,11 +134,13 @@ class EventProcessor:
 
             if related_order_ref:
                 logger.info(
-                    f"Found related Shopify order {related_order_ref} for Chargify payment with order ref {order_ref}"
+                    f"Found related Shopify order {related_order_ref} for "
+                    f"Chargify payment with order ref {order_ref}"
                 )
             else:
                 logger.debug(
-                    f"No related Shopify order found for Chargify payment with order ref {order_ref}"
+                    f"No related Shopify order found for Chargify payment "
+                    f"with order ref {order_ref}"
                 )
 
         return enriched_data
@@ -182,6 +197,8 @@ class EventProcessor:
             fields["Subscription"] = f"#{metadata['subscription_id']}"
         if metadata.get("transaction_id"):
             fields["Transaction"] = f"#{metadata['transaction_id']}"
+        if metadata.get("failure_reason"):
+            fields["Failure Reason"] = f"❌ {metadata['failure_reason']}"
 
         return Section("📊 Event Details", fields)
 

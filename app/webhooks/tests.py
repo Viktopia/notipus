@@ -38,9 +38,7 @@ class ChargifyWebhookTest(TestCase):
             "email": "test@example.com",
             "company": "Test Company",
         }
-        mock_processor.format_notification.return_value = {
-            "text": "Payment received"
-        }
+        mock_processor.format_notification.return_value = {"text": "Payment received"}
 
         response = self.client.post(
             self.url,

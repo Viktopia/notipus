@@ -13,7 +13,7 @@ class DatabaseLookupService:
     def store_payment_record(self, event_data: Dict[str, Any]) -> bool:
         """Store a payment record from webhook data"""
         try:
-            provider = event_data.get('provider', '').lower()
+            provider = event_data.get("provider", "").lower()
             if not provider:
                 logger.warning("Missing provider in payment event data")
                 return False
@@ -35,8 +35,8 @@ class DatabaseLookupService:
     def store_order_record(self, event_data: Dict[str, Any]) -> bool:
         """Store an order record from webhook data"""
         try:
-            platform = event_data.get('provider', '').lower()
-            if platform not in ['shopify']:
+            platform = event_data.get("provider", "").lower()
+            if platform not in ["shopify"]:
                 logger.warning(f"Unsupported platform for order: {platform}")
                 return False
 
@@ -54,7 +54,9 @@ class DatabaseLookupService:
             logger.error(f"Error storing order record: {str(e)}", exc_info=True)
             return False
 
-    def lookup_chargify_payment_for_shopify_order(self, order_ref: str) -> Optional[str]:
+    def lookup_chargify_payment_for_shopify_order(
+        self, order_ref: str
+    ) -> Optional[str]:
         """Look up matching Chargify payment for a Shopify order reference"""
         try:
             # For now, return None since we don't have database storage
@@ -65,32 +67,46 @@ class DatabaseLookupService:
             # For demo purposes, we could return a mock payment ID
             if order_ref and order_ref.isdigit():
                 mock_payment_id = f"chargify_{order_ref}"
-                logger.info(f"Found mock Chargify payment {mock_payment_id} for order {order_ref}")
+                logger.info(
+                    f"Found mock Chargify payment {mock_payment_id} for "
+                    f"order {order_ref}"
+                )
                 return mock_payment_id
 
             logger.debug(f"No Chargify payment found for Shopify order {order_ref}")
             return None
 
         except Exception as e:
-            logger.error(f"Error looking up Chargify payment for order {order_ref}: {str(e)}")
+            logger.error(
+                f"Error looking up Chargify payment for order {order_ref}: {str(e)}"
+            )
             return None
 
-    def lookup_shopify_order_for_chargify_payment(self, shopify_order_ref: str) -> Optional[str]:
+    def lookup_shopify_order_for_chargify_payment(
+        self, shopify_order_ref: str
+    ) -> Optional[str]:
         """Look up matching Shopify order for a Chargify payment reference"""
         try:
             # For now, return None since we don't have database storage
             # In a full implementation, this would query the database
-            logger.info(f"Looking up Shopify order for Chargify payment ref {shopify_order_ref}")
+            logger.info(
+                f"Looking up Shopify order for Chargify payment ref {shopify_order_ref}"
+            )
 
             # Placeholder logic - in real implementation would query database
             if shopify_order_ref and shopify_order_ref.isdigit():
                 mock_order_id = f"shopify_{shopify_order_ref}"
-                logger.info(f"Found mock Shopify order {mock_order_id} for ref {shopify_order_ref}")
+                logger.info(
+                    f"Found mock Shopify order {mock_order_id} for "
+                    f"ref {shopify_order_ref}"
+                )
                 return mock_order_id
 
             logger.debug(f"No Shopify order found for reference {shopify_order_ref}")
             return None
 
         except Exception as e:
-            logger.error(f"Error looking up Shopify order for ref {shopify_order_ref}: {str(e)}")
+            logger.error(
+                f"Error looking up Shopify order for ref {shopify_order_ref}: {str(e)}"
+            )
             return None

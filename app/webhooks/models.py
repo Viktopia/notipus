@@ -1,4 +1,3 @@
-
 from django.db import models
 from django.utils import timezone
 
@@ -7,16 +6,16 @@ class PaymentRecord(models.Model):
     """Store payment records from various providers"""
 
     PROVIDER_CHOICES = [
-        ('chargify', 'Chargify'),
-        ('stripe', 'Stripe'),
-        ('shopify', 'Shopify'),
+        ("chargify", "Chargify"),
+        ("stripe", "Stripe"),
+        ("shopify", "Shopify"),
     ]
 
     STATUS_CHOICES = [
-        ('success', 'Success'),
-        ('failed', 'Failed'),
-        ('pending', 'Pending'),
-        ('cancelled', 'Cancelled'),
+        ("success", "Success"),
+        ("failed", "Failed"),
+        ("pending", "Pending"),
+        ("cancelled", "Cancelled"),
     ]
 
     # Provider and external IDs
@@ -26,13 +25,13 @@ class PaymentRecord(models.Model):
 
     # Payment details
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default='USD')
+    currency = models.CharField(max_length=3, default="USD")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
 
     # Cross-reference fields
-    shopify_order_ref = models.CharField(max_length=255, blank=True, default='')
-    chargify_transaction_id = models.CharField(max_length=255, blank=True, default='')
-    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, default='')
+    shopify_order_ref = models.CharField(max_length=255, blank=True, default="")
+    chargify_transaction_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, default="")
 
     # Metadata and timestamps
     metadata = models.JSONField(default=dict, blank=True)
@@ -41,13 +40,13 @@ class PaymentRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ['provider', 'external_id']
+        unique_together = ["provider", "external_id"]
         indexes = [
-            models.Index(fields=['customer_id']),
-            models.Index(fields=['shopify_order_ref']),
-            models.Index(fields=['chargify_transaction_id']),
-            models.Index(fields=['stripe_payment_intent_id']),
-            models.Index(fields=['processed_at']),
+            models.Index(fields=["customer_id"]),
+            models.Index(fields=["shopify_order_ref"]),
+            models.Index(fields=["chargify_transaction_id"]),
+            models.Index(fields=["stripe_payment_intent_id"]),
+            models.Index(fields=["processed_at"]),
         ]
 
     def __str__(self) -> str:
@@ -58,25 +57,25 @@ class OrderRecord(models.Model):
     """Store order records from e-commerce platforms"""
 
     PLATFORM_CHOICES = [
-        ('shopify', 'Shopify'),
+        ("shopify", "Shopify"),
     ]
 
     STATUS_CHOICES = [
-        ('paid', 'Paid'),
-        ('pending', 'Pending'),
-        ('cancelled', 'Cancelled'),
-        ('refunded', 'Refunded'),
+        ("paid", "Paid"),
+        ("pending", "Pending"),
+        ("cancelled", "Cancelled"),
+        ("refunded", "Refunded"),
     ]
 
     # Platform and external IDs
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
     external_id = models.CharField(max_length=255)  # Platform's order ID
-    order_number = models.CharField(max_length=255, blank=True, default='')
+    order_number = models.CharField(max_length=255, blank=True, default="")
     customer_id = models.CharField(max_length=255)  # Platform's customer ID
 
     # Order details
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default='USD')
+    currency = models.CharField(max_length=3, default="USD")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
 
     # Cross-reference to payments
@@ -85,7 +84,7 @@ class OrderRecord(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='related_orders'
+        related_name="related_orders",
     )
 
     # Metadata and timestamps
@@ -95,11 +94,11 @@ class OrderRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ['platform', 'external_id']
+        unique_together = ["platform", "external_id"]
         indexes = [
-            models.Index(fields=['customer_id']),
-            models.Index(fields=['order_number']),
-            models.Index(fields=['order_date']),
+            models.Index(fields=["customer_id"]),
+            models.Index(fields=["order_number"]),
+            models.Index(fields=["order_date"]),
         ]
 
     def __str__(self) -> str:
@@ -111,13 +110,13 @@ class CrossReferenceLog(models.Model):
     """Log cross-reference attempts for debugging and monitoring"""
 
     LOOKUP_TYPE_CHOICES = [
-        ('shopify_to_chargify', 'Shopify Order to Chargify Payment'),
-        ('chargify_to_shopify', 'Chargify Payment to Shopify Order'),
+        ("shopify_to_chargify", "Shopify Order to Chargify Payment"),
+        ("chargify_to_shopify", "Chargify Payment to Shopify Order"),
     ]
 
     lookup_type = models.CharField(max_length=30, choices=LOOKUP_TYPE_CHOICES)
     source_ref = models.CharField(max_length=255)
-    target_ref = models.CharField(max_length=255, blank=True, default='')
+    target_ref = models.CharField(max_length=255, blank=True, default="")
     success = models.BooleanField(default=False)
     error_message = models.TextField(blank=True)
 
@@ -125,8 +124,8 @@ class CrossReferenceLog(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['lookup_type', 'source_ref']),
-            models.Index(fields=['created_at']),
+            models.Index(fields=["lookup_type", "source_ref"]),
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self) -> str:

@@ -51,7 +51,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run tests
-        run: cd app && poetry run pytest --cov=. --cov-report=term-missing
+        run: poetry run pytest --cov=app --cov-report=term-missing
 
       - name: Run linting
         run: |

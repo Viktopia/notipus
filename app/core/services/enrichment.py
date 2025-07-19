@@ -59,12 +59,14 @@ class DomainEnrichmentService:
                     if data:
                         enrichment_data.update(data)
                         logger.info(
-                            f"Successfully enriched {domain} with {provider.__class__.__name__}"
+                            f"Successfully enriched {domain} with "
+                            f"{provider.__class__.__name__}"
                         )
                         break  # Use first successful provider
                 except Exception as e:
                     logger.error(
-                        f"Provider {provider.__class__.__name__} failed for {domain}: {str(e)}"
+                        f"Provider {provider.__class__.__name__} failed for "
+                        f"{domain}: {str(e)}"
                     )
                     continue
 

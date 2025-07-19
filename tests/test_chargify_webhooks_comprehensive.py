@@ -1,16 +1,16 @@
 """
 Comprehensive tests for Chargify webhook implementation
 """
-import json
+
 import time
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, Mock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import RequestFactory
 
 from app.webhooks.providers import ChargifyProvider
-from app.webhooks.providers.base import InvalidDataError, WebhookValidationError
+from app.webhooks.providers.base import InvalidDataError
 
 
 class TestChargifyWebhookValidation:
@@ -289,6 +289,7 @@ class TestChargifyWebhookDeduplication:
 
     def test_webhook_deduplication_cache_cleanup(self, provider):
         """Test that old webhook entries are cleaned up"""
+
         # Create a provider with very short dedup window for this test
         class QuickTestProvider(ChargifyProvider):
             _DEDUP_WINDOW_SECONDS = 1  # 1 second for quick testing
@@ -342,9 +343,7 @@ class TestChargifyWebhookTimestampValidation:
         timestamp = current_time.isoformat().replace("+00:00", "Z")
 
         mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Chargify-Webhook-Timestamp": timestamp
-        }
+        mock_request.headers = {"X-Chargify-Webhook-Timestamp": timestamp}
 
         assert provider._validate_webhook_timestamp(mock_request) is True
 
@@ -355,9 +354,7 @@ class TestChargifyWebhookTimestampValidation:
         timestamp = old_time.isoformat().replace("+00:00", "Z")
 
         mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Chargify-Webhook-Timestamp": timestamp
-        }
+        mock_request.headers = {"X-Chargify-Webhook-Timestamp": timestamp}
 
         assert provider._validate_webhook_timestamp(mock_request) is False
 
@@ -368,9 +365,7 @@ class TestChargifyWebhookTimestampValidation:
         timestamp = future_time.isoformat().replace("+00:00", "Z")
 
         mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Chargify-Webhook-Timestamp": timestamp
-        }
+        mock_request.headers = {"X-Chargify-Webhook-Timestamp": timestamp}
 
         assert provider._validate_webhook_timestamp(mock_request) is False
 
@@ -384,25 +379,25 @@ class TestChargifyWebhookTimestampValidation:
     def test_invalid_timestamp_format_rejected(self, provider, request_factory):
         """Test that invalid timestamp format is rejected"""
         mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Chargify-Webhook-Timestamp": "invalid-timestamp"
-        }
+        mock_request.headers = {"X-Chargify-Webhook-Timestamp": "invalid-timestamp"}
 
         assert provider._validate_webhook_timestamp(mock_request) is False
 
-    def test_timestamp_validation_in_webhook_validation(self, provider, request_factory):
+    def test_timestamp_validation_in_webhook_validation(
+        self, provider, request_factory
+    ):
         """Test that timestamp validation is called during webhook validation"""
         # Test that webhook validation includes timestamp check
         mock_request = MagicMock()
         mock_request.headers = {
             "X-Chargify-Webhook-Id": "webhook_123",
             "X-Chargify-Webhook-Signature-Hmac-Sha-256": "signature",
-            "X-Chargify-Webhook-Timestamp": "invalid-timestamp"
+            "X-Chargify-Webhook-Timestamp": "invalid-timestamp",
         }
         mock_request.body = b"test_body"
 
         # Should fail due to invalid timestamp
-        with patch.object(provider, 'webhook_secret', "test_secret"):
+        with patch.object(provider, "webhook_secret", "test_secret"):
             assert provider.validate_webhook(mock_request) is False
 
 
