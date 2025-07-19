@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import Organization, NotificationSettings
+
+from .models import NotificationSettings, Organization
 
 
 @receiver(post_save, sender=Organization)

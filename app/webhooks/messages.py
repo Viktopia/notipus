@@ -28,7 +28,10 @@ class MessageGenerator:
 
     FAILURE_MESSAGES = [
         "Oopsie! 😅 Looks like {customer}'s payment needs a little TLC",
-        "Houston, we have a tiny hiccup! 🚀 {customer}'s payment is playing hide and seek",
+        (
+            "Houston, we have a tiny hiccup! 🚀 {customer}'s payment is "
+            "playing hide and seek"
+        ),
         "Time for a payment adventure! 🗺️ {customer} needs our help",
         "Quick heads up! 🎯 {customer}'s payment is doing the moonwalk",
         "Payment party postponed! 🎪 {customer} needs a helping hand",
@@ -97,7 +100,10 @@ class MessageGenerator:
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"👤 <https://your-crm.com/customers/{customer.customer_id}|View Customer Profile>",
+                        "text": (
+                            f"👤 <https://your-crm.com/customers/"
+                            f"{customer.customer_id}|View Customer Profile>"
+                        ),
                     }
                 ],
             }

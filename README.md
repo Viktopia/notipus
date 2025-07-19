@@ -97,8 +97,7 @@ poetry run pytest
 
 3. Format code:
 ```bash
-poetry run black .
-poetry run isort .
+poetry run ruff format .
 ```
 
 4. Run linting:

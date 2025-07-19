@@ -187,18 +187,16 @@ class ChargifyProvider(PaymentProvider):
                 / 100,
             }
         except (KeyError, ValueError) as e:
-            raise CustomerNotFoundError(f"Failed to extract customer data: {str(e)}")
+            raise CustomerNotFoundError(
+                f"Failed to extract customer data: {str(e)}"
+            ) from e
 
-    def _parse_webhook_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse webhook data into standardized format"""
-        event_type = data.get("event")
-        if not event_type:
-            raise InvalidDataError("Missing event type")
-
-        # Extract subscription data
+    def _extract_chargify_fields(self, data: Dict[str, Any]) -> tuple:
+        """Extract subscription, customer, and transaction data from webhook"""
         subscription = {}
         customer = {}
         transaction = {}
+
         for key, value in data.items():
             if key.startswith("payload[subscription][customer]["):
                 field = key.replace("payload[subscription][customer][", "").replace(
@@ -206,38 +204,44 @@ class ChargifyProvider(PaymentProvider):
                 )
                 customer[field] = value
             elif key.startswith("payload[subscription]["):
-                if (
-                    "customer" not in key
-                ):  # Skip customer fields as they're handled above
+                if "customer" not in key:  # Skip customer fields handled above
                     field = key.replace("payload[subscription][", "").replace("]", "")
                     subscription[field] = value
             elif key.startswith("payload[transaction]["):
                 field = key.replace("payload[transaction][", "").replace("]", "")
                 transaction[field] = value
 
-        # Map status based on event type and subscription state
-        status = subscription.get("state", "unknown")
+        return subscription, customer, transaction
+
+    def _determine_chargify_status(
+        self, event_type: str, subscription: Dict[str, Any]
+    ) -> str:
+        """Determine status based on event type and subscription state"""
         if event_type == "payment_failure":
-            status = "failed"
+            return "failed"
         elif event_type == "payment_success":
-            status = "success"
+            return "success"
         elif event_type == "subscription_state_change":
-            status = subscription.get("state", "unknown")
+            return subscription.get("state", "unknown")
+        else:
+            return subscription.get("state", "unknown")
 
-        # Extract amount from transaction or subscription
-        amount = 0
+    def _extract_chargify_amount(
+        self, transaction: Dict[str, Any], subscription: Dict[str, Any]
+    ) -> float:
+        """Extract amount from transaction or subscription data"""
         if transaction.get("amount_in_cents"):
-            amount = float(transaction["amount_in_cents"]) / 100
+            return float(transaction["amount_in_cents"]) / 100
         elif subscription.get("total_revenue_in_cents"):
-            amount = float(subscription["total_revenue_in_cents"]) / 100
+            return float(subscription["total_revenue_in_cents"]) / 100
+        else:
+            return 0
 
-        # Extract failure reason if present
-        failure_reason = None
-        if event_type == "payment_failure":
-            failure_reason = transaction.get("failure_message")
-
-        # Build customer data
-        customer_data = {
+    def _build_chargify_customer_data(
+        self, customer: Dict[str, Any], subscription: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Build customer data structure"""
+        return {
             "id": customer.get("id"),
             "email": customer.get("email"),
             "first_name": customer.get("first_name"),
@@ -247,14 +251,18 @@ class ChargifyProvider(PaymentProvider):
             "plan_name": subscription.get("product", {}).get("name"),
         }
 
-        # Extract customer ID from the correct field
-        customer_id = customer.get("id")
-        if not customer_id:
-            raise InvalidDataError("Missing customer ID")
-
-        # Store webhook data for customer lookup
-        self._current_webhook_data = data
-
+    def _build_chargify_response(
+        self,
+        event_type: str,
+        customer_id: str,
+        amount: float,
+        status: str,
+        data: Dict[str, Any],
+        subscription: Dict[str, Any],
+        customer_data: Dict[str, Any],
+        failure_reason: str,
+    ) -> Dict[str, Any]:
+        """Build final response structure"""
         return {
             "type": self.EVENT_TYPE_MAPPING.get(event_type, event_type),
             "customer_id": str(customer_id),
@@ -267,12 +275,56 @@ class ChargifyProvider(PaymentProvider):
             "metadata": {
                 "subscription_id": subscription.get("id"),
                 "plan": subscription.get("product", {}).get("name"),
-                "cancel_at_period_end": subscription.get("cancel_at_end_of_period")
-                == "true",
+                "cancel_at_period_end": (
+                    subscription.get("cancel_at_end_of_period") == "true"
+                ),
                 "failure_reason": failure_reason,
             },
             "customer_data": customer_data,
         }
+
+    def _parse_webhook_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse webhook data into standardized format"""
+        event_type = data.get("event")
+        if not event_type:
+            raise InvalidDataError("Missing event type")
+
+        # Extract fields from nested form data
+        subscription, customer, transaction = self._extract_chargify_fields(data)
+
+        # Determine status
+        status = self._determine_chargify_status(event_type, subscription)
+
+        # Extract amount
+        amount = self._extract_chargify_amount(transaction, subscription)
+
+        # Extract failure reason if present
+        failure_reason = None
+        if event_type == "payment_failure":
+            failure_reason = transaction.get("failure_message")
+
+        # Build customer data
+        customer_data = self._build_chargify_customer_data(customer, subscription)
+
+        # Extract customer ID
+        customer_id = customer.get("id")
+        if not customer_id:
+            raise InvalidDataError("Missing customer ID")
+
+        # Store webhook data for customer lookup
+        self._current_webhook_data = data
+
+        # Build and return response
+        return self._build_chargify_response(
+            event_type,
+            customer_id,
+            amount,
+            status,
+            data,
+            subscription,
+            customer_data,
+            failure_reason,
+        )
 
     def _check_duplicate(self, customer_id: str, event_type: str) -> bool:
         """Check if this is a duplicate webhook for the customer"""
@@ -289,30 +341,19 @@ class ChargifyProvider(PaymentProvider):
         self._recent_webhooks[key] = now
         return False
 
-    def parse_webhook(self, request: HttpRequest) -> Dict[str, Any]:
-        """Parse Chargify webhook data"""
-        logger.info(
-            "Parsing Chargify webhook data",
-            extra={
-                "content_type": request.content_type,
-                "form_data": (request.POST.dict() if request.POST else None),
-                "headers": dict(request.headers),
-            },
-        )
-
-        # Validate content type
+    def _validate_chargify_request(self, request: HttpRequest) -> Dict[str, Any]:
+        """Validate Chargify webhook request and return form data"""
         if request.content_type != "application/x-www-form-urlencoded":
             raise InvalidDataError("Invalid content type")
 
-        # Parse form data
         data = request.POST.dict()
         if not data:
             raise InvalidDataError("Missing required fields")
 
-        # Store webhook data for customer lookup
-        self._current_webhook_data = data
+        return data
 
-        # Get event type and customer ID
+    def _get_chargify_event_info(self, data: Dict[str, Any]) -> tuple:
+        """Extract event type and customer ID from webhook data"""
         event_type = data.get("event")
         if not event_type:
             raise InvalidDataError("Missing event type")
@@ -321,11 +362,16 @@ class ChargifyProvider(PaymentProvider):
         if not customer_id:
             raise InvalidDataError("Missing customer ID")
 
+        return event_type, customer_id
+
+    def _handle_chargify_event(
+        self, event_type: str, customer_id: str, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Route webhook event to appropriate handler"""
         # Check for duplicates
         if self._check_duplicate(customer_id, event_type):
             raise InvalidDataError("Duplicate webhook for customer")
 
-        # Map webhook data to common format
         if event_type == "payment_success":
             return self._parse_payment_success(data)
         elif event_type == "payment_failure":
@@ -339,6 +385,29 @@ class ChargifyProvider(PaymentProvider):
             return self._parse_payment_success(data)
         else:
             raise InvalidDataError(f"Unsupported event type: {event_type}")
+
+    def parse_webhook(self, request: HttpRequest) -> Dict[str, Any]:
+        """Parse Chargify webhook data"""
+        logger.info(
+            "Parsing Chargify webhook data",
+            extra={
+                "content_type": request.content_type,
+                "form_data": (request.POST.dict() if request.POST else None),
+                "headers": dict(request.headers),
+            },
+        )
+
+        # Validate request and get data
+        data = self._validate_chargify_request(request)
+
+        # Store webhook data for customer lookup
+        self._current_webhook_data = data
+
+        # Get event info
+        event_type, customer_id = self._get_chargify_event_info(data)
+
+        # Handle the event
+        return self._handle_chargify_event(event_type, customer_id, data)
 
     def _parse_shopify_order_ref(self, memo: str) -> str:
         """Extract Shopify order reference from transaction memo."""

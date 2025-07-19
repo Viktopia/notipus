@@ -3,9 +3,9 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.webhooks.services.event_processor import EventProcessor
 from app.webhooks.providers import ChargifyProvider, PaymentProvider, ShopifyProvider
 from app.webhooks.providers.base import InvalidDataError
+from app.webhooks.services.event_processor import EventProcessor
 
 
 def test_payment_provider_interface():
@@ -448,7 +448,7 @@ def test_chargify_webhook_deduplication():
 
 
 def test_event_processor_notification_formatting():
-    """Verify EventProcessor formats notifications correctly for different event types"""
+    """Verify EventProcessor formats notifications correctly for different events"""
     processor = EventProcessor()
 
     # Test successful payment event
@@ -501,7 +501,8 @@ def test_chargify_memo_parsing():
     # Test different memo formats
     test_cases = [
         (
-            "Wire payment received for $233.76 24th December '24\n$228.90 allocated to Shopify Order 2067",
+            "Wire payment received for $233.76 24th December '24\n"
+            "$228.90 allocated to Shopify Order 2067",
             "2067",
         ),
         ("Payment for Shopify Order 1234", "1234"),
@@ -553,7 +554,9 @@ def test_chargify_payment_success_with_shopify_ref():
         "payload[subscription][product][name]": "Enterprise Plan",
         "payload[transaction][id]": "tr_123",
         "payload[transaction][amount_in_cents]": "10000",
-        "payload[transaction][memo]": "Wire payment received for $100.00\nAllocated to Shopify Order 1234",
+        "payload[transaction][memo]": (
+            "Wire payment received for $100.00\n" "Allocated to Shopify Order 1234"
+        ),
         "created_at": "2024-03-15T10:00:00Z",
     }
 

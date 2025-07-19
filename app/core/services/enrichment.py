@@ -1,6 +1,8 @@
-from django.conf import settings
-from ..providers.brandfetch import BrandfetchProvider
 import logging
+
+from django.conf import settings
+
+from ..providers.brandfetch import BrandfetchProvider
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,8 @@ class DomainEnrichmentService:
                     )
             except Exception as e:
                 logger.error(
-                    f"Error enriching domain with {provider.get_provider_name()}: {str(e)}"
+                    f"Error enriching domain with "
+                    f"{provider.get_provider_name()}: {str(e)}"
                 )
 
         return company

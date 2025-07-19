@@ -13,18 +13,12 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 
-from django.utils.functional import SimpleLazyObject
-
-from dotenv import load_dotenv
-
 from core.services.enrichment import DomainEnrichmentService
-from webhooks.services.event_processor import EventProcessor
+from django.utils.functional import SimpleLazyObject
 from webhooks.providers.chargify import ChargifyProvider
 from webhooks.providers.shopify import ShopifyProvider
 from webhooks.providers.stripe import StripeProvider
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))  # Load variables from .env
+from webhooks.services.event_processor import EventProcessor
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,10 +28,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_DJANGO_KEY")
+SECRET_KEY = os.environ.get(
+    "SECRET_DJANGO_KEY", "django-insecure-dev-key-change-in-production"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", False)
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
 ALLOWED_HOSTS = ["*"]
@@ -92,11 +88,11 @@ WSGI_APPLICATION = "django_notipus.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT"),
+        "NAME": os.environ.get("DB_NAME", "notipus"),
+        "USER": os.environ.get("DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "postgres"),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
     }
 }
 
@@ -106,7 +102,10 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        ),
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
@@ -167,16 +166,18 @@ LOGGING = {
 }
 
 
-CHARGIFY_WEBHOOK_SECRET = os.getenv("CHARGIFY_WEBHOOK_SECRET")
+CHARGIFY_WEBHOOK_SECRET = os.environ.get(
+    "CHARGIFY_WEBHOOK_SECRET", "dev-chargify-secret"
+)
 
 
 # Provider configurations
-SHOPIFY_SHOP_URL = os.getenv("SHOPIFY_SHOP_URL")
-SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-SHOPIFY_WEBHOOK_SECRET = os.getenv("SHOPIFY_WEBHOOK_SECRET")
+SHOPIFY_SHOP_URL = os.environ.get("SHOPIFY_SHOP_URL", "test.myshopify.com")
+SHOPIFY_ACCESS_TOKEN = os.environ.get("SHOPIFY_ACCESS_TOKEN", "dev-token")
+SHOPIFY_WEBHOOK_SECRET = os.environ.get("SHOPIFY_WEBHOOK_SECRET", "dev-shopify-secret")
 SHOPIFY_PROVIDER = ShopifyProvider(webhook_secret=SHOPIFY_WEBHOOK_SECRET)
 
-CHARGIFY_PROVIDER = ChargifyProvider(webhook_secret="your_chargify_webhook_secret")
+CHARGIFY_PROVIDER = ChargifyProvider(webhook_secret=CHARGIFY_WEBHOOK_SECRET)
 
 # Event processor configuration
 EVENT_PROCESSOR = EventProcessor()
@@ -185,27 +186,31 @@ EVENT_PROCESSOR = EventProcessor()
 # SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 SLACK_CLIENT = None
 
-SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID")
-SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET")
-SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI")
+SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", "")
+SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
+SLACK_REDIRECT_URI = os.environ.get("SLACK_REDIRECT_URI", "")
 
-SLACK_CLIENT_BOT_ID = os.getenv("SLACK_CLIENT_BOT_ID")
-SLACK_CLIENT_BOT_SECRET = os.getenv("SLACK_CLIENT_BOT_SECRET")
-SLACK_REDIRECT_BOT_URI = os.getenv("SLACK_REDIRECT_BOT_URI")
+SLACK_CLIENT_BOT_ID = os.environ.get("SLACK_CLIENT_BOT_ID", "")
+SLACK_CLIENT_BOT_SECRET = os.environ.get("SLACK_CLIENT_BOT_SECRET", "")
+SLACK_REDIRECT_BOT_URI = os.environ.get("SLACK_REDIRECT_BOT_URI", "")
 
 # Stripe
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "sk_test_dev_key")
+STRIPE_WEBHOOK_SECRET = os.environ.get(
+    "STRIPE_WEBHOOK_SECRET", "dev-stripe-webhook-secret"
+)
 STRIPE_PLANS = {
-    "basic": os.getenv("STRIPE_BASIC_PLAN"),
-    "pro": os.getenv("STRIPE_PRO_PLAN"),
-    "enterprise": os.getenv("STRIPE_ENTERPRISE_PLAN"),
+    "basic": os.environ.get("STRIPE_BASIC_PLAN", ""),
+    "pro": os.environ.get("STRIPE_PRO_PLAN", ""),
+    "enterprise": os.environ.get("STRIPE_ENTERPRISE_PLAN", ""),
 }
 TRIAL_PERIOD_DAYS = 14
 STRIPE_PROVIDER = SimpleLazyObject(lambda: StripeProvider(STRIPE_WEBHOOK_SECRET))
 
-DISABLE_BILLING = os.getenv("DISABLE_BILLING", "False").lower() == "true"
+DISABLE_BILLING = os.environ.get("DISABLE_BILLING", "False").lower() == "true"
 
-BRANDFETCH_API_KEY = os.getenv("BRANDFETCH_API_KEY")
-BRANDFETCH_BASE_URL = os.getenv("BRANDFETCH_BASE_URL")
+BRANDFETCH_API_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
+BRANDFETCH_BASE_URL = os.environ.get(
+    "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
+)
 DOMAIN_ENRICHMENT_SERVICE = SimpleLazyObject(lambda: DomainEnrichmentService())

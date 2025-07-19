@@ -2,7 +2,6 @@ import logging
 from typing import Any, Dict
 
 import requests
-
 from webhooks.models.notification import Notification
 
 logger = logging.getLogger(__name__)

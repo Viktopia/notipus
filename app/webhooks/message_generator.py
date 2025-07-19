@@ -13,34 +13,69 @@ class MessageGenerator:
     # Message templates with placeholders
     PAYMENT_SUCCESS_TEMPLATES = [
         "🎉 Woohoo! {customer_name} just dropped {amount} in our piggy bank!",
-        "💸 Ka-ching! {customer_name} keeps the lights on with a sweet {amount} payment!",
+        (
+            "💸 Ka-ching! {customer_name} keeps the lights on with a sweet "
+            "{amount} payment!"
+        ),
         "🎊 Awesome! {customer_name} just sent {amount} our way!",
         "🚀 Nice one! {customer_name} coming through with {amount}!",
-        "💪 Sweet! Look who's crushing it! {customer_name} with a solid {amount} payment!",
+        (
+            "💪 Sweet! Look who's crushing it! {customer_name} with a solid "
+            "{amount} payment!"
+        ),
     ]
 
+    # Payment failure templates
     PAYMENT_FAILURE_TEMPLATES = [
-        "😅 Oops! {customer_name}'s payment of {amount} needs attention!",
-        "🤔 Uh-oh! {customer_name}'s {amount} payment needs looking at!",
-        "👀 Looks like {customer_name}'s payment ({amount}) needs attention!",
-        "💭 Seems like {customer_name}'s {amount} payment needs looking at!",
-        "😅 Uh-oh! {customer_name}'s payment for {amount} needs attention!",
+        "😅 Oops! {customer_name}'s payment didn't go through and needs attention.",
+        "🤔 Uh-oh! Looks like {customer_name}'s payment needs looking at.",
+        "👀 Seems like {customer_name} hit a snag and needs attention.",
+        "💭 Looks like {customer_name} hit a snag that needs looking at.",
     ]
 
+    # Trial ending templates
     TRIAL_ENDING_TEMPLATES = [
-        "✨ {customer_name} is absolutely crushing it with {popular_features}! Time to level up!",
-        "🌟 Look who's having a blast! {customer_name}'s really getting into {popular_features}!",
+        (
+            "✨ {customer_name} is absolutely crushing it with "
+            "{popular_features}! Time to level up!"
+        ),
+        (
+            "🌟 Look who's having a blast! {customer_name}'s really getting "
+            "into {popular_features}!"
+        ),
         "💫 {customer_name}'s loving {popular_features}! Let's keep this going!",
-        "🚀 {customer_name}'s been rocking {popular_features}! Time to make it official!",
-        "✨ The way {customer_name}'s making the most of {popular_features} is amazing!",
+        (
+            "🚀 {customer_name}'s been rocking {popular_features}! "
+            "Time to make it official!"
+        ),
+        (
+            "✨ The way {customer_name}'s making the most of "
+            "{popular_features} is amazing!"
+        ),
     ]
 
+    # Upgrade templates
     UPGRADE_TEMPLATES = [
-        "🎉 🚀 Awesome upgrade! {customer_name} is growing fast, leveling up from {old_plan} to {new_plan}! Next level achieved! 💪",
-        "⭐️ 🌟 {customer_name} just supercharged to {new_plan}! They're scaling up and we're here for it! Power up! 🚀",
-        "🚀 💪 Power up! {customer_name}'s expanding rapidly to {new_plan} and we're absolutely thrilled! Leveled up! ⭐️",
-        "🎉 ⭐️ Next level! {customer_name}'s moving up to {new_plan}! Supercharged and growing strong! 🌟",
-        "🚀 🌟 Leveled up! {customer_name}'s growing with {new_plan} powers! Awesome upgrade! 💪",
+        (
+            "🎉 🚀 Awesome upgrade! {customer_name} is growing fast, "
+            "leveling up from {old_plan} to {new_plan}! Next level achieved! 💪"
+        ),
+        (
+            "⭐️ 🌟 {customer_name} just supercharged to {new_plan}! "
+            "They're scaling up and we're here for it! Power up! 🚀"
+        ),
+        (
+            "🚀 💪 Power up! {customer_name}'s expanding rapidly to {new_plan} "
+            "and we're absolutely thrilled! Leveled up! ⭐️"
+        ),
+        (
+            "🎉 ⭐️ Next level! {customer_name}'s moving up to {new_plan}! "
+            "Supercharged and growing strong! 🌟"
+        ),
+        (
+            "🚀 🌟 Leveled up! {customer_name}'s growing with {new_plan} "
+            "powers! Awesome upgrade! 💪"
+        ),
     ]
 
     def _format_features(self, features: List[str]) -> str:
@@ -114,4 +149,7 @@ class MessageGenerator:
         else:
             # Default to a generic but still fun message
             event = self._ensure_required_fields(event, ["customer_name"])
-            return f"✨ Hey! Something's happening with {event['customer_name']}! Take a look!"
+            return (
+                f"✨ Hey! Something's happening with {event['customer_name']}! "
+                "Take a look!"
+            )
