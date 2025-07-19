@@ -76,7 +76,8 @@ class DomainEnrichmentService:
             if enrichment_data:
                 provider_name = (
                     successful_provider.get_provider_name()
-                    if successful_provider else None
+                    if successful_provider
+                    else None
                 )
                 self._update_company(company, enrichment_data, provider_name)
                 logger.info(f"Updated company record for {domain}")
@@ -93,7 +94,7 @@ class DomainEnrichmentService:
         self,
         company: Company,
         data: Dict[str, Any],
-        provider_name: Optional[str] = None
+        provider_name: Optional[str] = None,
     ) -> None:
         """Update company record with enrichment data"""
         if not data:
@@ -124,10 +125,7 @@ class DomainEnrichmentService:
         return updated_fields
 
     def _store_brand_info(
-        self,
-        company: Company,
-        data: Dict[str, Any],
-        provider_name: Optional[str]
+        self, company: Company, data: Dict[str, Any], provider_name: Optional[str]
     ) -> None:
         """Store enrichment data in brand_info field"""
         if provider_name:
@@ -137,10 +135,7 @@ class DomainEnrichmentService:
             company.brand_info = data
 
     def _store_provider_specific_data(
-        self,
-        company: Company,
-        data: Dict[str, Any],
-        provider_name: str
+        self, company: Company, data: Dict[str, Any], provider_name: str
     ) -> None:
         """Store data under provider-specific key in brand_info"""
         if not company.brand_info:

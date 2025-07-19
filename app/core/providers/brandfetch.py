@@ -57,9 +57,12 @@ class BrandfetchProvider(BaseEnrichmentProvider):
             }
         except requests.exceptions.RequestException as e:
             # Handle rate limiting specifically
-            if (hasattr(e, 'response') and e.response is not None
-                and e.response.status_code == 429):
-                retry_after = e.response.headers.get('Retry-After', '60')
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code == 429
+            ):
+                retry_after = e.response.headers.get("Retry-After", "60")
                 logger.warning(
                     f"Brandfetch rate limit exceeded. Retry after {retry_after} seconds"
                 )
@@ -82,8 +85,8 @@ class BrandfetchProvider(BaseEnrichmentProvider):
     def _log_quota_usage(self, headers):
         """Log API quota usage from response headers"""
         try:
-            quota = headers.get('x-api-key-quota')
-            usage = headers.get('x-api-key-approximate-usage')
+            quota = headers.get("x-api-key-quota")
+            usage = headers.get("x-api-key-approximate-usage")
 
             if quota and usage and str(quota).isdigit() and str(usage).isdigit():
                 quota_int = int(quota)

@@ -82,8 +82,8 @@ class BrandfetchProviderTest(TestCase):
             "colors": [{"hex": "#FF0000"}],
         }
         mock_brand_response.headers = {
-            'x-api-key-quota': '1000',
-            'x-api-key-approximate-usage': '250'
+            "x-api-key-quota": "1000",
+            "x-api-key-approximate-usage": "250",
         }
         mock_brand_response.raise_for_status.return_value = None
 
@@ -260,7 +260,7 @@ class BrandfetchProviderTest(TestCase):
         # Mock rate limit response
         mock_response = Mock()
         mock_response.status_code = 429
-        mock_response.headers = {'Retry-After': '120'}
+        mock_response.headers = {"Retry-After": "120"}
 
         # Create HTTPError with the mock response
         http_error = HTTPError()

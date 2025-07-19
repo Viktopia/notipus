@@ -148,8 +148,9 @@ class DomainEnrichmentServiceTest(TestCase):
 
             # Should create company but not update it
             company = Company.objects.get(domain=domain)
-            self.assertEqual(company.name, "")  # Model default is empty string, not None
-            self.assertEqual(company.logo_url, "")  # Model default is empty string, not None
+            # Model default is empty string, not None
+            self.assertEqual(company.name, "")
+            self.assertEqual(company.logo_url, "")
             self.assertEqual(result, company)
 
             # Should log error
@@ -170,8 +171,9 @@ class DomainEnrichmentServiceTest(TestCase):
 
         # Should create company but not enrich it
         company = Company.objects.get(domain=domain)
-        self.assertEqual(company.name, "")  # Model default is empty string, not None
-        self.assertEqual(company.logo_url, "")  # Model default is empty string, not None
+        # Model default is empty string, not None
+        self.assertEqual(company.name, "")
+        self.assertEqual(company.logo_url, "")
         self.assertEqual(result, company)
 
     def test_update_company_all_fields(self):
