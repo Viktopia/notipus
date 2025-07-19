@@ -22,7 +22,7 @@ alwaysApply: true
 - Customize error pages (e.g., 404, 500) to improve user experience and provide helpful information.
 - Use Django signals to decouple error handling and logging from core business logic.
 
-## Djanog Dependencies
+## Django Dependencies
 - Django
 - Django Ninja (for API development)
 - PostgreSQL (preferred databases for production)
