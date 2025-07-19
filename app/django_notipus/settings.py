@@ -13,12 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 
-from core.services.enrichment import DomainEnrichmentService
 from django.utils.functional import SimpleLazyObject
-from webhooks.providers.chargify import ChargifyProvider
-from webhooks.providers.shopify import ShopifyProvider
-from webhooks.providers.stripe import StripeProvider
-from webhooks.services.event_processor import EventProcessor
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -166,21 +161,20 @@ LOGGING = {
 }
 
 
+# Webhook secrets configuration
 CHARGIFY_WEBHOOK_SECRET = os.environ.get(
     "CHARGIFY_WEBHOOK_SECRET", "dev-chargify-secret"
 )
 
+SHOPIFY_WEBHOOK_SECRET = os.environ.get("SHOPIFY_WEBHOOK_SECRET", "dev-shopify-secret")
+
+STRIPE_WEBHOOK_SECRET = os.environ.get(
+    "STRIPE_WEBHOOK_SECRET", "dev-stripe-webhook-secret"
+)
 
 # Provider configurations
 SHOPIFY_SHOP_URL = os.environ.get("SHOPIFY_SHOP_URL", "test.myshopify.com")
 SHOPIFY_ACCESS_TOKEN = os.environ.get("SHOPIFY_ACCESS_TOKEN", "dev-token")
-SHOPIFY_WEBHOOK_SECRET = os.environ.get("SHOPIFY_WEBHOOK_SECRET", "dev-shopify-secret")
-SHOPIFY_PROVIDER = ShopifyProvider(webhook_secret=SHOPIFY_WEBHOOK_SECRET)
-
-CHARGIFY_PROVIDER = ChargifyProvider(webhook_secret=CHARGIFY_WEBHOOK_SECRET)
-
-# Event processor configuration
-EVENT_PROCESSOR = EventProcessor()
 
 # Slack client configuration
 # SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
@@ -194,23 +188,65 @@ SLACK_CLIENT_BOT_ID = os.environ.get("SLACK_CLIENT_BOT_ID", "")
 SLACK_CLIENT_BOT_SECRET = os.environ.get("SLACK_CLIENT_BOT_SECRET", "")
 SLACK_REDIRECT_BOT_URI = os.environ.get("SLACK_REDIRECT_BOT_URI", "")
 
-# Stripe
+# Stripe configuration
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "sk_test_dev_key")
-STRIPE_WEBHOOK_SECRET = os.environ.get(
-    "STRIPE_WEBHOOK_SECRET", "dev-stripe-webhook-secret"
-)
 STRIPE_PLANS = {
     "basic": os.environ.get("STRIPE_BASIC_PLAN", ""),
     "pro": os.environ.get("STRIPE_PRO_PLAN", ""),
     "enterprise": os.environ.get("STRIPE_ENTERPRISE_PLAN", ""),
 }
 TRIAL_PERIOD_DAYS = 14
-STRIPE_PROVIDER = SimpleLazyObject(lambda: StripeProvider(STRIPE_WEBHOOK_SECRET))
 
 DISABLE_BILLING = os.environ.get("DISABLE_BILLING", "False").lower() == "true"
 
+# Brandfetch configuration
 BRANDFETCH_API_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
 BRANDFETCH_BASE_URL = os.environ.get(
     "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
 )
-DOMAIN_ENRICHMENT_SERVICE = SimpleLazyObject(lambda: DomainEnrichmentService())
+
+
+# Lazy-loaded provider and service instances to avoid circular imports
+def _get_shopify_provider():
+    """Lazy factory for Shopify provider"""
+    from webhooks.providers.shopify import ShopifyProvider
+
+    return ShopifyProvider(webhook_secret=SHOPIFY_WEBHOOK_SECRET)
+
+
+def _get_chargify_provider():
+    """Lazy factory for Chargify provider"""
+    from webhooks.providers.chargify import ChargifyProvider
+
+    return ChargifyProvider(webhook_secret=CHARGIFY_WEBHOOK_SECRET)
+
+
+def _get_stripe_provider():
+    """Lazy factory for Stripe provider"""
+    from webhooks.providers.stripe import StripeProvider
+
+    return StripeProvider(STRIPE_WEBHOOK_SECRET)
+
+
+def _get_event_processor():
+    """Lazy factory for event processor"""
+    from webhooks.services.event_processor import EventProcessor
+
+    return EventProcessor()
+
+
+def _get_domain_enrichment_service():
+    """Lazy factory for domain enrichment service"""
+    from core.services.enrichment import DomainEnrichmentService
+
+    return DomainEnrichmentService()
+
+
+# Provider instances using lazy loading
+SHOPIFY_PROVIDER = SimpleLazyObject(_get_shopify_provider)
+CHARGIFY_PROVIDER = SimpleLazyObject(_get_chargify_provider)
+STRIPE_PROVIDER = SimpleLazyObject(_get_stripe_provider)
+
+# Service instances using lazy loading
+EVENT_PROCESSOR = SimpleLazyObject(_get_event_processor)
+DOMAIN_ENRICHMENT_SERVICE = SimpleLazyObject(_get_domain_enrichment_service)

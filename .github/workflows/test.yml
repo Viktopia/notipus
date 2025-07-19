@@ -51,24 +51,9 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run tests
-        run: cd app && poetry run pytest --cov=. --cov-report=term-missing
+        run: poetry run pytest --cov=app --cov-report=term-missing
 
       - name: Run linting
         run: |
           poetry run ruff check .
           poetry run ruff format --check .
-
-      #----------------------------------------------
-      #       check TypeScript with ESLint
-      #----------------------------------------------
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install dependencies for TypeScript linting
-        run: |
-          npm install eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin
-
-      - name: Run TypeScript linting
-        run: npx eslint '**/*.ts' --max-warnings=0

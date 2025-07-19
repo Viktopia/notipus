@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from django.http import HttpRequest
@@ -19,28 +19,54 @@ class ChargifyProvider(PaymentProvider):
     """Chargify payment provider implementation"""
 
     EVENT_TYPE_MAPPING = {
+        # Payment events
         "payment_success": "payment_success",
         "payment_failure": "payment_failure",
+        "payment_refunded": "payment_refunded",
+        "renewal_success": "payment_success",
+        "renewal_failure": "payment_failure",
+        # Subscription events
         "subscription_state_change": "subscription_state_change",
         "subscription_product_change": "subscription_product_change",
         "subscription_billing_date_change": "subscription_billing_date_change",
-        "renewal_success": "payment_success",
-        "renewal_failure": "payment_failure",
+        "subscription_created": "subscription_created",
+        "subscription_updated": "subscription_updated",
+        "subscription_cancelled": "subscription_cancelled",
+        "subscription_reactivated": "subscription_reactivated",
+        "subscription_expired": "subscription_expired",
+        "subscription_renewed": "subscription_renewed",
+        # Customer events
+        "customer_created": "customer_created",
+        "customer_updated": "customer_updated",
+        "customer_deleted": "customer_deleted",
+        # Invoice events
+        "invoice_created": "invoice_created",
+        "invoice_updated": "invoice_updated",
+        "invoice_paid": "invoice_paid",
+        # Signup events
+        "signup_success": "signup_success",
+        "signup_failure": "signup_failure",
+        # Component events
+        "component_allocation_change": "component_allocation_change",
     }
 
     # Class-level cache for recently processed webhook IDs
     _webhook_cache = OrderedDict()
     _CACHE_MAX_SIZE = 1000
     _DEDUP_WINDOW_SECONDS = 300  # 5 minutes
+    _TIMESTAMP_TOLERANCE_SECONDS = 300  # 5 minutes tolerance for webhook timestamps
 
     def __init__(self, webhook_secret: str):
         """Initialize provider with webhook secret"""
         super().__init__(webhook_secret)
         self._current_webhook_data = None
-        self._recent_webhooks = {}
 
-    def _check_webhook_duplicate(self, customer_id: str) -> bool:
-        """Check if a webhook for this customer has been processed recently"""
+    def _check_webhook_duplicate(self, webhook_id: str) -> bool:
+        """Check if a webhook ID has been processed recently (proper idempotency)"""
+        if not webhook_id:
+            logger.warning("No webhook ID provided for deduplication check")
+            return False
+
         now = time.time()
 
         # Clean up old entries
@@ -49,24 +75,63 @@ class ChargifyProvider(PaymentProvider):
             (k, v) for k, v in self._webhook_cache.items() if v > cutoff
         )
 
-        # Check if customer has recent webhook
-        if customer_id in self._webhook_cache:
+        # Check if webhook ID has been processed
+        if webhook_id in self._webhook_cache:
+            logger.info(f"Duplicate webhook detected: {webhook_id}")
             return True
 
         # Add to cache
-        self._webhook_cache[customer_id] = now
+        self._webhook_cache[webhook_id] = now
         if len(self._webhook_cache) > self._CACHE_MAX_SIZE:
             self._webhook_cache.popitem(last=False)  # Remove oldest
 
         return False
 
+    def _validate_webhook_timestamp(self, request: HttpRequest) -> bool:
+        """Validate webhook timestamp to prevent replay attacks"""
+        timestamp_header = request.headers.get("X-Chargify-Webhook-Timestamp")
+        if not timestamp_header:
+            # Timestamp is optional, so continue if not present
+            return True
+
+        try:
+            webhook_time = datetime.fromisoformat(
+                timestamp_header.replace("Z", "+00:00")
+            )
+            current_time = datetime.now(timezone.utc)
+            age_seconds = abs((current_time - webhook_time).total_seconds())
+
+            if age_seconds > self._TIMESTAMP_TOLERANCE_SECONDS:
+                logger.warning(
+                    "Webhook timestamp outside tolerance window",
+                    extra={
+                        "webhook_timestamp": timestamp_header,
+                        "age_seconds": age_seconds,
+                        "tolerance": self._TIMESTAMP_TOLERANCE_SECONDS,
+                    },
+                )
+                return False
+
+            return True
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                "Invalid webhook timestamp format",
+                extra={"timestamp": timestamp_header, "error": str(e)},
+            )
+            return False
+
     def validate_webhook(self, request: HttpRequest) -> bool:
-        """Validate webhook signature"""
+        """Validate webhook signature and timestamp"""
         try:
             # If no webhook secret is configured, skip validation
             if not self.webhook_secret:
                 logger.info("No webhook secret configured, skipping validation")
                 return True
+
+            # Validate timestamp first
+            if not self._validate_webhook_timestamp(request):
+                logger.warning("Webhook timestamp validation failed")
+                return False
 
             # Try SHA-256 first, fall back to MD5
             signature = request.headers.get("X-Chargify-Webhook-Signature-Hmac-Sha-256")
@@ -260,7 +325,7 @@ class ChargifyProvider(PaymentProvider):
         data: Dict[str, Any],
         subscription: Dict[str, Any],
         customer_data: Dict[str, Any],
-        failure_reason: str,
+        failure_reason: str | None,
     ) -> Dict[str, Any]:
         """Build final response structure"""
         return {
@@ -326,21 +391,6 @@ class ChargifyProvider(PaymentProvider):
             failure_reason,
         )
 
-    def _check_duplicate(self, customer_id: str, event_type: str) -> bool:
-        """Check if this is a duplicate webhook for the customer"""
-        now = datetime.now()
-        key = f"{customer_id}:{event_type}"
-
-        # Check if we've seen this customer recently
-        if key in self._recent_webhooks:
-            last_seen = self._recent_webhooks[key]
-            if (now - last_seen).total_seconds() < self._DEDUP_WINDOW_SECONDS:
-                return True
-
-        # Update last seen time
-        self._recent_webhooks[key] = now
-        return False
-
     def _validate_chargify_request(self, request: HttpRequest) -> Dict[str, Any]:
         """Validate Chargify webhook request and return form data"""
         if request.content_type != "application/x-www-form-urlencoded":
@@ -365,12 +415,12 @@ class ChargifyProvider(PaymentProvider):
         return event_type, customer_id
 
     def _handle_chargify_event(
-        self, event_type: str, customer_id: str, data: Dict[str, Any]
+        self, event_type: str, customer_id: str, data: Dict[str, Any], webhook_id: str
     ) -> Dict[str, Any]:
-        """Route webhook event to appropriate handler"""
-        # Check for duplicates
-        if self._check_duplicate(customer_id, event_type):
-            raise InvalidDataError("Duplicate webhook for customer")
+        """Route webhook event to appropriate handler with proper deduplication"""
+        # Check for duplicates using webhook ID (proper idempotency)
+        if self._check_webhook_duplicate(webhook_id):
+            raise InvalidDataError(f"Duplicate webhook: {webhook_id}")
 
         if event_type == "payment_success":
             return self._parse_payment_success(data)
@@ -379,11 +429,23 @@ class ChargifyProvider(PaymentProvider):
         elif event_type == "subscription_state_change":
             return self._parse_subscription_state_change(data)
         elif event_type == "renewal_success":
-            # Check for duplicates with payment_success
-            if self._check_duplicate(customer_id, "payment_success"):
-                raise InvalidDataError("Duplicate webhook for customer")
+            # Renewal success is treated as payment success
             return self._parse_payment_success(data)
+        elif event_type == "renewal_failure":
+            # Renewal failure is treated as payment failure
+            return self._parse_payment_failure(data)
+        elif event_type in [
+            "subscription_product_change",
+            "subscription_billing_date_change",
+        ]:
+            # These are handled similarly to subscription state changes
+            return self._parse_subscription_state_change(data)
         else:
+            # For now, unsupported events are logged but don't cause failures
+            logger.warning(
+                f"Unsupported Chargify event type received: {event_type}",
+                extra={"event_type": event_type, "webhook_id": webhook_id},
+            )
             raise InvalidDataError(f"Unsupported event type: {event_type}")
 
     def parse_webhook(self, request: HttpRequest) -> Dict[str, Any]:
@@ -407,9 +469,11 @@ class ChargifyProvider(PaymentProvider):
         event_type, customer_id = self._get_chargify_event_info(data)
 
         # Handle the event
-        return self._handle_chargify_event(event_type, customer_id, data)
+        return self._handle_chargify_event(
+            event_type, customer_id, data, request.headers.get("X-Chargify-Webhook-Id")
+        )
 
-    def _parse_shopify_order_ref(self, memo: str) -> str:
+    def _parse_shopify_order_ref(self, memo: str) -> str | None:
         """Extract Shopify order reference from transaction memo."""
         if not memo:
             return None
@@ -437,22 +501,34 @@ class ChargifyProvider(PaymentProvider):
         if not amount:
             raise InvalidDataError("Missing amount")
 
-        customer_data = self.get_customer_data(data)
+        # Validate amount is a valid number
+        try:
+            amount_float = float(amount) / 100
+        except (ValueError, TypeError) as e:
+            raise InvalidDataError(f"Invalid amount format: {amount}") from e
+
+        customer_data = self.get_customer_data(
+            data["payload[subscription][customer][id]"]
+        )
 
         # Extract Shopify order reference from memo
         memo = data.get("payload[transaction][memo]", "")
         shopify_order_ref = self._parse_shopify_order_ref(memo)
 
+        # Safely get subscription data
+        subscription_id = data.get("payload[subscription][id]", "")
+        plan_name = data.get("payload[subscription][product][name]", "")
+
         return {
             "type": "payment_success",
             "customer_id": data["payload[subscription][customer][id]"],
-            "amount": float(amount) / 100,  # Convert cents to dollars
+            "amount": amount_float,
             "currency": "USD",  # Chargify amounts are in USD
             "status": "success",
             "metadata": {
-                "subscription_id": data["payload[subscription][id]"],
+                "subscription_id": subscription_id,
                 "transaction_id": data.get("payload[transaction][id]", ""),
-                "plan_name": data["payload[subscription][product][name]"],
+                "plan_name": plan_name,
                 "shopify_order_ref": shopify_order_ref,
                 "memo": memo,  # Include full memo for reference
             },
@@ -465,7 +541,9 @@ class ChargifyProvider(PaymentProvider):
         if not amount:
             raise InvalidDataError("Missing amount")
 
-        customer_data = self.get_customer_data(data)
+        customer_data = self.get_customer_data(
+            data["payload[subscription][customer][id]"]
+        )
         return {
             "type": "payment_failure",
             "customer_id": data["payload[subscription][customer][id]"],
@@ -485,7 +563,9 @@ class ChargifyProvider(PaymentProvider):
 
     def _parse_subscription_state_change(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse subscription_state_change webhook data"""
-        customer_data = self.get_customer_data(data)
+        customer_data = self.get_customer_data(
+            data["payload[subscription][customer][id]"]
+        )
         return {
             "type": "subscription_state_change",
             "customer_id": data["payload[subscription][customer][id]"],

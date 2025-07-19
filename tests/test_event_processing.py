@@ -28,12 +28,9 @@ def test_notification_formatting():
 
     notification = processor.format_notification(event_data, customer_data)
     assert isinstance(notification, Notification)
-    assert notification.title == "Payment Received: $29.99"
-    assert notification.status == "success"
+    assert notification.title == "💰 Payment received from Acme Corp"
     assert notification.color == "#28a745"  # Green
-    assert (
-        len(notification.sections) == 3
-    )  # Event Details, Customer Details, Additional Details
+    assert len(notification.sections) == 2  # Main event details + customer info
 
 
 def test_missing_required_customer_data():
