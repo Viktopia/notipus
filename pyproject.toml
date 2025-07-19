@@ -15,6 +15,7 @@ dependencies = [
     "pre-commit (>=4.1.0,<5.0.0)",
     "django-ninja (>=1.4.0,<2.0.0)",
     "stripe (>=12.3.0,<13.0.0)",
+    "shopifyapi (>=12.7.0,<13.0.0)",
 ]
 
 [tool.poetry]
