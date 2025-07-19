@@ -28,13 +28,16 @@ class BrandfetchProvider(BaseEnrichmentProvider):
             timeout = 10  # seconds
 
             response = requests.get(
-                f"{self.base_url}/companies/{domain}", headers=headers, timeout=timeout
+                f"{self.base_url}/brands/{domain}", headers=headers, timeout=timeout
             )
             response.raise_for_status()
             brand_data = response.json()
 
+            # Check quota usage from response headers
+            self._log_quota_usage(response.headers)
+
             logos_response = requests.get(
-                f"{self.base_url}/companies/{domain}/logos",
+                f"{self.base_url}/brands/{domain}/logos",
                 headers=headers,
                 timeout=timeout,
             )
@@ -53,7 +56,18 @@ class BrandfetchProvider(BaseEnrichmentProvider):
                 },
             }
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching data from Brandfetch: {str(e)}")
+            # Handle rate limiting specifically
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code == 429
+            ):
+                retry_after = e.response.headers.get("Retry-After", "60")
+                logger.warning(
+                    f"Brandfetch rate limit exceeded. Retry after {retry_after} seconds"
+                )
+            else:
+                logger.error(f"Error fetching data from Brandfetch: {str(e)}")
             return {}
 
     def _get_primary_logo(self, logos_data):
@@ -67,3 +81,24 @@ class BrandfetchProvider(BaseEnrichmentProvider):
                     if format.get("src"):
                         return format["src"]
         return None
+
+    def _log_quota_usage(self, headers):
+        """Log API quota usage from response headers"""
+        try:
+            quota = headers.get("x-api-key-quota")
+            usage = headers.get("x-api-key-approximate-usage")
+
+            if quota and usage and str(quota).isdigit() and str(usage).isdigit():
+                quota_int = int(quota)
+                usage_int = int(usage)
+                usage_pct = (usage_int / quota_int) * 100
+                logger.info(f"Brandfetch API usage: {usage}/{quota} ({usage_pct:.1f}%)")
+
+                if usage_pct > 80:
+                    logger.warning(f"Brandfetch API usage high: {usage_pct:.1f}%")
+            elif quota and str(quota).isdigit():
+                logger.debug(f"Brandfetch API quota: {quota}")
+            elif usage and str(usage).isdigit():
+                logger.debug(f"Brandfetch API usage: {usage}")
+        except (ValueError, TypeError, ZeroDivisionError) as e:
+            logger.debug(f"Could not parse quota headers: {e}")

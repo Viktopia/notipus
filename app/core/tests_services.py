@@ -148,14 +148,15 @@ class DomainEnrichmentServiceTest(TestCase):
 
             # Should create company but not update it
             company = Company.objects.get(domain=domain)
-            self.assertIsNone(company.name)
-            self.assertIsNone(company.logo_url)
+            # Model default is empty string, not None
+            self.assertEqual(company.name, "")
+            self.assertEqual(company.logo_url, "")
             self.assertEqual(result, company)
 
             # Should log error
             mock_logger.error.assert_called_once()
             self.assertIn(
-                "Error enriching domain with testprovider",
+                "Provider Mock failed for example.com: API Error",
                 mock_logger.error.call_args[0][0],
             )
 
@@ -170,8 +171,9 @@ class DomainEnrichmentServiceTest(TestCase):
 
         # Should create company but not enrich it
         company = Company.objects.get(domain=domain)
-        self.assertIsNone(company.name)
-        self.assertIsNone(company.logo_url)
+        # Model default is empty string, not None
+        self.assertEqual(company.name, "")
+        self.assertEqual(company.logo_url, "")
         self.assertEqual(result, company)
 
     def test_update_company_all_fields(self):
