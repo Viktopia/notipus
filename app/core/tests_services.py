@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 from core.models import Company, Organization
 from core.services.enrichment import DomainEnrichmentService
+from core.services.stripe import StripeAPI
 from django.test import TestCase
 from webhooks.services.billing import BillingService
 
@@ -251,9 +252,8 @@ class BillingServiceTest(TestCase):
     def setUp(self):
         """Set up test data"""
         self.organization = Organization.objects.create(
-            slack_team_id="T123456",
-            slack_domain="test.slack.com",
             name="Test Organization",
+            shop_domain="test.myshopify.com",
             stripe_customer_id="cus_test123",
         )
 
@@ -416,3 +416,61 @@ class BillingServiceTest(TestCase):
         mock_logger.error.assert_called_once_with(
             "Error handling payment failure: Database error"
         )
+
+
+class StripeAPITest(TestCase):
+    """Test StripeAPI service"""
+
+    @patch("core.services.stripe.stripe.Customer.create")
+    def test_create_stripe_customer_success(self, mock_create):
+        """Test successful customer creation"""
+        # Mock successful customer creation
+        mock_customer = Mock()
+        mock_customer.to_dict.return_value = {
+            "id": "cus_test123",
+            "email": "test@example.com",
+            "name": "Test Customer",
+        }
+        mock_create.return_value = mock_customer
+
+        customer_data = {
+            "email": "test@example.com",
+            "name": "Test Customer",
+            "metadata": {"source": "test"},
+        }
+
+        result = StripeAPI.create_stripe_customer(customer_data)
+
+        expected = {
+            "id": "cus_test123",
+            "email": "test@example.com",
+            "name": "Test Customer",
+        }
+
+        self.assertEqual(result, expected)
+        mock_create.assert_called_once_with(**customer_data)
+
+    @patch("core.services.stripe.stripe.Customer.create")
+    def test_create_stripe_customer_stripe_error(self, mock_create):
+        """Test customer creation with Stripe error"""
+        # Mock Stripe error using the actual stripe library structure
+        mock_create.side_effect = Exception("Test Stripe error")
+
+        customer_data = {"email": "test@example.com", "name": "Test Customer"}
+
+        result = StripeAPI.create_stripe_customer(customer_data)
+
+        self.assertIsNone(result)
+
+    @patch("core.services.stripe.stripe.Customer.create")
+    def test_create_stripe_customer_empty_data(self, mock_create):
+        """Test customer creation with empty data"""
+        # Mock successful creation with empty data
+        mock_customer = Mock()
+        mock_customer.to_dict.return_value = {"id": "cus_empty"}
+        mock_create.return_value = mock_customer
+
+        result = StripeAPI.create_stripe_customer({})
+
+        self.assertEqual(result, {"id": "cus_empty"})
+        mock_create.assert_called_once_with()

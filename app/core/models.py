@@ -22,6 +22,11 @@ class Organization(models.Model):
     )
     billing_cycle_anchor = models.IntegerField(null=True, blank=True)
     stripe_customer_id = models.CharField(max_length=255, blank=True, default="")
+    subscription_plan = models.CharField(
+        max_length=20, choices=STRIPE_PLANS, default="trial"
+    )
+    subscription_status = models.CharField(max_length=20, default="active")
+    payment_method_added = models.BooleanField(default=False)
 
     class Meta:
         app_label = "core"

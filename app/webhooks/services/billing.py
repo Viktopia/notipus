@@ -57,17 +57,20 @@ class BillingService:
                 logger.error("Missing customer ID in invoice data")
                 return
 
-            subscription_id = invoice.get("subscription")
-            amount_paid = invoice.get("amount_paid", 0)
+            period_end = invoice.get("period_end")
+
+            # Prepare update data
+            update_data = {"subscription_status": "active"}
+            if period_end:
+                update_data["billing_cycle_anchor"] = period_end
 
             updated_count = Organization.objects.filter(
                 stripe_customer_id=customer_id
-            ).update(subscription_status="active")
+            ).update(**update_data)
 
             if updated_count > 0:
                 logger.info(
-                    f"Payment successful for customer {customer_id}, "
-                    f"amount: {amount_paid/100:.2f}, subscription: {subscription_id}"
+                    f"Updated payment status to active for customer {customer_id}"
                 )
             else:
                 logger.warning(f"No organization found for customer {customer_id}")
@@ -84,17 +87,13 @@ class BillingService:
                 logger.error("Missing customer ID in invoice data")
                 return
 
-            subscription_id = invoice.get("subscription")
-            attempt_count = invoice.get("attempt_count", 0)
-
             updated_count = Organization.objects.filter(
                 stripe_customer_id=customer_id
             ).update(subscription_status="past_due")
 
             if updated_count > 0:
                 logger.warning(
-                    f"Payment failed for customer {customer_id}, "
-                    f"attempt: {attempt_count}, subscription: {subscription_id}"
+                    f"Updated payment status to past_due for customer {customer_id}"
                 )
             else:
                 logger.warning(f"No organization found for customer {customer_id}")
