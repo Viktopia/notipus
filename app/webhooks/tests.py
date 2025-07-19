@@ -96,11 +96,7 @@ class StripeProviderTest(TestCase):
 
     def test_build_stripe_event_data(self):
         """Test building Stripe event data structure"""
-        data = {
-            "status": "succeeded",
-            "created": 1234567890,
-            "currency": "usd"
-        }
+        data = {"status": "succeeded", "created": 1234567890, "currency": "usd"}
 
         result = self.provider._build_stripe_event_data(
             "payment_success", "cus_123", data, "2000"
