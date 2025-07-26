@@ -1,7 +1,7 @@
 [project]
 name = "notipus"
 version = "0.1.0"
-description = "A webhook service that sends enriched Shopify and Chargify notifications to Slack"
+description = "A webhook service that sends enriched Shopify, Stripe and Chargify notifications to Slack"
 authors = [
     {name = "Viktopia Studio",email = "info@viktopia.io"}
 ]
@@ -15,6 +15,10 @@ dependencies = [
     "pre-commit (>=4.1.0,<5.0.0)",
     "stripe (>=12.3.0,<13.0.0)",
     "shopifyapi (>=12.7.0,<13.0.0)",
+    "django-allauth (>=65.10.0,<66.0.0)",
+    "webauthn (>=2.6.0,<3.0.0)",
+    "django-extensions (>=4.1,<5.0)",
+    "redis (>=5.2.0,<6.0.0)",
 ]
 
 [tool.poetry]
@@ -30,6 +34,7 @@ pre-commit = "^4.0.1"
 mypy = "^1.8.0"
 types-requests = "^2.31.0.20240218"
 pytest-django = "^4.11.1"
+djlint = "^1.36.4"
 
 [tool.ruff]
 line-length = 88

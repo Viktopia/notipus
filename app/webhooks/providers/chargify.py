@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChargifyProvider(PaymentProvider):
-    """Chargify payment provider implementation"""
+    """Chargify (Maxio Advanced Billing) payment provider implementation"""
 
     EVENT_TYPE_MAPPING = {
         # Payment events
@@ -123,9 +123,13 @@ class ChargifyProvider(PaymentProvider):
     def validate_webhook(self, request: HttpRequest) -> bool:
         """Validate webhook signature and timestamp"""
         try:
-            # If no webhook secret is configured, skip validation
+            # For development/testing: allow bypassing validation when webhook
+            # secret is empty
             if not self.webhook_secret:
-                logger.info("No webhook secret configured, skipping validation")
+                logger.info(
+                    "Webhook secret not configured - bypassing validation for "
+                    "development"
+                )
                 return True
 
             # Validate timestamp first

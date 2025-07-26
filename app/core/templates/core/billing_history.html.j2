@@ -1,0 +1,242 @@
+{% extends "core/base.html.j2" %}
+{% load humanize %}
+
+{% block title %}Billing History - Notipus{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div class="md:flex md:items-center md:justify-between">
+                <div class="flex-1 min-w-0">
+                    <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate">
+                        📄 Billing History
+                    </h2>
+                    <p class="mt-1 text-lg text-gray-600">View your invoices, payments, and billing activity</p>
+                </div>
+                <div class="mt-4 flex md:mt-0 md:ml-4">
+                    <a href="{% url 'core:billing_dashboard' %}"
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200">
+                        ← Back to Billing
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="max-w-6xl mx-auto py-8 sm:px-6 lg:px-8">
+        {% if invoices %}
+            <!-- Invoices Table -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Invoices & Payments</h3>
+                    <p class="text-sm text-gray-600">Your complete billing history and downloadable invoices</p>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Invoice
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Date
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Amount
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for invoice in invoices %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="ml-3">
+                                                <div class="text-sm font-medium text-gray-900">{{ invoice.number }}</div>
+                                                <div class="text-sm text-gray-500">{{ invoice.description }}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {{ invoice.date|date:"M j, Y" }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        ${{ invoice.amount|floatformat:2|intcomma }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        {% if invoice.status == "paid" %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                ✅ Paid
+                                            </span>
+                                        {% elif invoice.status == "pending" %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                ⏳ Pending
+                                            </span>
+                                        {% elif invoice.status == "failed" %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                ❌ Failed
+                                            </span>
+                                        {% else %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                {{ invoice.status|title }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <div class="flex items-center space-x-3">
+                                            <a href="#" onclick="downloadInvoice('{{ invoice.id }}')"
+                                               class="text-primary-600 hover:text-primary-900">
+                                                Download
+                                            </a>
+                                            <a href="#" onclick="viewInvoice('{{ invoice.id }}')"
+                                               class="text-primary-600 hover:text-primary-900">
+                                                View
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% else %}
+            <!-- No Billing History -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 text-center">
+                <div class="mx-auto h-24 w-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                    <svg class="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">No billing history yet</h3>
+                <p class="text-gray-600 mb-6">
+                    {% if organization.subscription_status == "trial" %}
+                        You're currently on a free trial. Your billing history will appear here once you upgrade to a paid plan.
+                    {% else %}
+                        Your invoices and payment history will appear here.
+                    {% endif %}
+                </p>
+
+                {% if organization.subscription_status == "trial" %}
+                    <a href="{% url 'core:upgrade_plan' %}"
+                       class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all duration-200">
+                        <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                        Upgrade to Paid Plan
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <!-- Billing Summary Cards -->
+        <div class="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <!-- This Month -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-6">
+                <div class="flex items-center">
+                    <div class="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-lg font-semibold text-gray-900">This Month</h3>
+                        <p class="text-2xl font-bold text-gray-900">
+                            ${{ current_month_amount|floatformat:2|intcomma }}
+                        </p>
+                        <p class="text-sm text-gray-500">Current billing</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Next Payment -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-6">
+                <div class="flex items-center">
+                    <div class="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-lg font-semibold text-gray-900">Next Payment</h3>
+                        <p class="text-2xl font-bold text-gray-900">
+                            {% if organization.subscription_status == "trial" %}
+                                {{ trial_days_remaining }}
+                            {% else %}
+                                {{ rate_limit_info.reset_time|date:"j" }}
+                            {% endif %}
+                        </p>
+                        <p class="text-sm text-gray-500">
+                            {% if organization.subscription_status == "trial" %}
+                                days until trial ends
+                            {% else %}
+                                days until billing
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Help Section -->
+        <div class="mt-8 bg-blue-50 rounded-xl p-6 border border-blue-200">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">
+                        Need help with billing?
+                    </h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <p class="mb-2">
+                            If you have questions about your bill or need assistance with payments, we're here to help.
+                        </p>
+                        <div class="flex flex-wrap gap-4">
+                            <a href="mailto:billing@notipus.com" class="text-blue-800 hover:text-blue-900 font-medium">
+                                📧 Email Support
+                            </a>
+                            <a href="#" class="text-blue-800 hover:text-blue-900 font-medium">
+                                📞 Call Us
+                            </a>
+                            <a href="#" class="text-blue-800 hover:text-blue-900 font-medium">
+                                💬 Live Chat
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript for invoice actions -->
+<script>
+function downloadInvoice(invoiceId) {
+    // In a real implementation, this would download the PDF invoice
+    alert('This would download the invoice PDF.\n\nInvoice ID: ' + invoiceId + '\n\nIn a real implementation, you would:\n1. Make an API call to generate/fetch the PDF\n2. Trigger a download');
+}
+
+function viewInvoice(invoiceId) {
+    // In a real implementation, this would open the invoice in a new tab or modal
+    alert('This would open the invoice for viewing.\n\nInvoice ID: ' + invoiceId + '\n\nIn a real implementation, you would:\n1. Open the invoice in a new tab\n2. Or show it in a modal overlay');
+}
+</script>
+{% endblock %}

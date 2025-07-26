@@ -1,0 +1,303 @@
+{% extends "core/base.html.j2" %}
+{% load socialaccount %}
+
+{% block title %}Sign In - Notipus{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="text-center">
+            <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
+                Sign in to your account
+            </h2>
+            <p class="mt-2 text-sm text-gray-600">
+                Welcome back to Notipus
+            </p>
+        </div>
+    </div>
+
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="bg-white py-8 px-4 shadow-lg sm:rounded-lg sm:px-10">
+            <!-- Passkey Login Option -->
+            <div class="mb-6">
+                <button id="passkey-login"
+                        class="group relative w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 12H9v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-3c0-1.042.018-2.042.057-3H4zm7-4a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                    Continue with Passkey
+                </button>
+            </div>
+
+            <!-- Divider -->
+            <div class="mb-6">
+                <div class="relative">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-gray-300"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-2 bg-white text-gray-500">Or sign in with password</span>
+                    </div>
+                </div>
+            </div>
+
+            <form class="space-y-6" method="post">
+                {% csrf_token %}
+
+                <!-- Username/Email Field -->
+                <div>
+                    <label for="id_login" class="block text-sm font-medium text-gray-700">
+                        Username or Email
+                    </label>
+                    <div class="mt-1">
+                        <input id="id_login" name="login" type="text" required
+                               class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                               value="{{ form.login.value|default_if_none:'' }}">
+                    </div>
+                    {% if form.login.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.login.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Password Field -->
+                <div>
+                    <label for="id_password" class="block text-sm font-medium text-gray-700">
+                        Password
+                    </label>
+                    <div class="mt-1">
+                        <input id="id_password" name="password" type="password" required
+                               class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                    </div>
+                    {% if form.password.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.password.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Remember Me -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <input id="id_remember" name="remember" type="checkbox"
+                               class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="id_remember" class="ml-2 block text-sm text-gray-900">
+                            Remember me
+                        </label>
+                    </div>
+
+                    <div class="text-sm">
+                        <a href="{% url 'account_reset_password' %}" class="font-medium text-primary-600 hover:text-primary-500">
+                            Forgot your password?
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div>
+                    <button type="submit"
+                            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        Sign In
+                    </button>
+                </div>
+
+                <!-- Divider -->
+                <div class="mt-6">
+                    <div class="relative">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-gray-300"></div>
+                        </div>
+                        <div class="relative flex justify-center text-sm">
+                            <span class="px-2 bg-white text-gray-500">Or continue with</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OAuth Buttons -->
+                <div class="mt-6 grid grid-cols-1 gap-3">
+                    <a href="{% provider_login_url 'slack' %}"
+                       class="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                        <i class="fas fa-comments w-5 h-5 mr-2"></i>
+                        Continue with Slack
+                    </a>
+                </div>
+            </form>
+
+            <!-- Signup Link -->
+            <div class="mt-6">
+                <div class="text-center">
+                    <span class="text-sm text-gray-600">
+                        Don't have an account?
+                        <a href="{% url 'account_signup' %}" class="font-medium text-primary-600 hover:text-primary-500">
+                            Create one now
+                        </a>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// WebAuthn passkey authentication
+document.getElementById('passkey-login').addEventListener('click', async function() {
+    const button = this;
+    const originalText = button.innerHTML;
+
+    try {
+        // Disable button and show loading state
+        button.disabled = true;
+        button.innerHTML = `
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Authenticating...
+        `;
+
+        // Step 1: Get authentication options from server
+        const beginResponse = await fetch('/webauthn/authenticate/begin/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({})
+        });
+
+        if (!beginResponse.ok) {
+            throw new Error('Failed to start authentication');
+        }
+
+        const beginData = await beginResponse.json();
+        if (!beginData.success) {
+            throw new Error(beginData.error || 'Failed to start authentication');
+        }
+
+        const options = beginData.options;
+
+        // Convert base64url strings to ArrayBuffers for WebAuthn API
+        options.challenge = base64urlToArrayBuffer(options.challenge);
+        if (options.allowCredentials) {
+            options.allowCredentials = options.allowCredentials.map(cred => ({
+                ...cred,
+                id: base64urlToArrayBuffer(cred.id)
+            }));
+        }
+
+        // Step 2: Use WebAuthn API to get credential
+        const credential = await navigator.credentials.get({
+            publicKey: options
+        });
+
+        if (!credential) {
+            throw new Error('No credential returned');
+        }
+
+        // Step 3: Send credential to server for verification
+        const credentialData = {
+            id: credential.id,
+            rawId: arrayBufferToBase64url(credential.rawId),
+            response: {
+                authenticatorData: arrayBufferToBase64url(credential.response.authenticatorData),
+                clientDataJSON: arrayBufferToBase64url(credential.response.clientDataJSON),
+                signature: arrayBufferToBase64url(credential.response.signature),
+                userHandle: credential.response.userHandle ? arrayBufferToBase64url(credential.response.userHandle) : null
+            },
+            type: credential.type,
+            challenge: beginData.options.challenge
+        };
+
+        const completeResponse = await fetch('/webauthn/authenticate/complete/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ credential: credentialData })
+        });
+
+        if (!completeResponse.ok) {
+            throw new Error('Authentication failed');
+        }
+
+        const completeData = await completeResponse.json();
+        if (completeData.success) {
+            // Redirect to dashboard
+            window.location.href = completeData.redirect_url || '/dashboard/';
+        } else {
+            throw new Error(completeData.error || 'Authentication failed');
+        }
+
+    } catch (error) {
+        console.error('WebAuthn error:', error);
+
+        // Show user-friendly error message
+        let errorMessage = 'Passkey authentication failed. ';
+
+        if (error.name === 'NotSupportedError') {
+            errorMessage += 'Passkeys are not supported on this device.';
+        } else if (error.name === 'NotAllowedError') {
+            errorMessage += 'Authentication was cancelled or timed out.';
+        } else if (error.name === 'SecurityError') {
+            errorMessage += 'Security error occurred.';
+        } else {
+            errorMessage += 'Please try again or use password login.';
+        }
+
+        alert(errorMessage);
+    } finally {
+        // Restore button state
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+});
+
+// Utility functions for base64url encoding/decoding
+function base64urlToArrayBuffer(base64url) {
+    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+function arrayBufferToBase64url(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// Check if WebAuthn is supported
+function checkWebAuthnSupport() {
+    const button = document.getElementById('passkey-login');
+
+    if (!window.PublicKeyCredential) {
+        // Check if it's a very old browser
+        const isOldBrowser = /MSIE|Trident/.test(navigator.userAgent) ||
+                            (navigator.userAgent.includes('Chrome/') &&
+                             parseInt(navigator.userAgent.match(/Chrome\/(\d+)/)[1]) < 67);
+
+        if (isOldBrowser) {
+            button.style.display = 'none';
+        }
+        return false;
+    }
+
+    if (!navigator.credentials || !navigator.credentials.get) {
+        return false;
+    }
+
+    return true;
+}
+
+// Run the check when DOM is loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkWebAuthnSupport);
+} else {
+    checkWebAuthnSupport();
+}
+</script>
+{% endblock %}

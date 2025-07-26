@@ -23,15 +23,36 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    "SECRET_DJANGO_KEY", "django-insecure-dev-key-change-in-production"
-)
+_default_secret_key = "django-insecure-dev-key-change-in-production"
+SECRET_KEY = os.environ.get("SECRET_DJANGO_KEY", _default_secret_key)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
+
+# Security validation: Ensure secret key is secure in production
+if not DEBUG and SECRET_KEY == _default_secret_key:
+    raise ValueError(
+        "SECURITY ERROR: Default secret key detected in production. "
+        "Set SECRET_DJANGO_KEY environment variable to a secure random value."
+    )
 
 APP_NAME = os.environ.get("FLY_APP_NAME")
-ALLOWED_HOSTS = ["*"]
+
+# Security: Restrict allowed hosts to prevent Host header attacks
+if DEBUG:
+    # Allow all hosts in development for easier testing with different domains
+    # CodeQL[SM02124]: Wildcard ALLOWED_HOSTS acceptable in development only
+    ALLOWED_HOSTS = ["*"]
+else:
+    # Production: Use environment variable or secure defaults
+    allowed_hosts_env = os.environ.get("ALLOWED_HOSTS", "")
+    if allowed_hosts_env:
+        ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(",")]
+    else:
+        # Secure default for production
+        ALLOWED_HOSTS = ["notipus.com", "www.notipus.com"]
+        if APP_NAME:
+            ALLOWED_HOSTS.append(f"{APP_NAME}.fly.dev")
 
 # Application definition
 
@@ -42,6 +63,16 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "django.contrib.humanize",
+    # Third-party apps
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.slack",
+    "allauth.socialaccount.providers.shopify",
+    "django_extensions",
+    # Local apps
     "webhooks",
     "core",
 ]
@@ -54,6 +85,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "django_notipus.urls"
@@ -61,7 +93,7 @@ ROOT_URLCONF = "django_notipus.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "core" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -70,12 +102,77 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],
+            # Security: Only enable template debug in development
+            "debug": DEBUG,
         },
     },
 ]
 
 WSGI_APPLICATION = "django_notipus.wsgi.application"
 
+# Authentication configuration
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# Django-allauth configuration
+SITE_ID = 1
+
+# Email configuration
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
+
+# SMTP settings for production (when EMAIL_BACKEND is smtp)
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@notipus.com")
+
+# Email and verification
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
+
+# Login methods (replaces ACCOUNT_AUTHENTICATION_METHOD = "username_email")
+ACCOUNT_LOGIN_METHODS = {"username", "email"}
+
+# Signup fields (replaces ACCOUNT_EMAIL_REQUIRED = True
+# and ACCOUNT_USERNAME_REQUIRED = True)
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+
+# Rate limiting (replaces ACCOUNT_LOGIN_ATTEMPTS_LIMIT = 5
+# and ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT = 300)
+ACCOUNT_RATE_LIMITS = {"login_failed": "5/300s"}
+
+# Session and logout settings
+ACCOUNT_LOGOUT_ON_GET = True
+ACCOUNT_SESSION_REMEMBER = True
+
+# Login/logout URLs
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/"
+
+# Social account providers
+SOCIALACCOUNT_PROVIDERS = {
+    "slack": {
+        "APP": {
+            "client_id": os.environ.get("SLACK_CLIENT_ID", ""),
+            "secret": os.environ.get("SLACK_CLIENT_SECRET", ""),
+        },
+        "SCOPE": ["openid", "profile", "email"],
+        "AUTH_PARAMS": {"approval_prompt": "force"},
+    },
+    "shopify": {
+        "APP": {
+            "client_id": os.environ.get("SHOPIFY_CLIENT_ID", ""),
+            "secret": os.environ.get("SHOPIFY_CLIENT_SECRET", ""),
+        },
+        "SCOPE": ["read_orders", "read_products", "read_customers"],
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -91,6 +188,76 @@ DATABASES = {
     }
 }
 
+# Cache configuration for Redis
+if "REDIS_URL" in os.environ:
+    redis_config_dict = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ["REDIS_URL"],
+        "KEY_PREFIX": "notipus",
+        "TIMEOUT": 300,  # Default timeout of 5 minutes
+    }
+else:
+    REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
+    REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
+    REDIS_DB = os.environ.get("REDIS_DB", "0")
+    REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
+
+    # Build Redis URL from individual components
+    if REDIS_PASSWORD:
+        redis_location = (
+            f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+        )
+    else:
+        redis_location = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+    redis_config_dict = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": redis_location,
+        "KEY_PREFIX": "notipus",
+        "TIMEOUT": 300,  # Default timeout of 5 minutes
+    }
+
+CACHES = {"default": redis_config_dict}
+
+# Security Headers and HTTPS Configuration
+if not DEBUG:
+    # Force HTTPS in production
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Security headers
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = "DENY"
+
+    # Cookie security
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+
+# CSRF Protection
+CSRF_TRUSTED_ORIGINS = []
+if not DEBUG:
+    csrf_origins_env = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+    if csrf_origins_env:
+        CSRF_TRUSTED_ORIGINS = [
+            origin.strip() for origin in csrf_origins_env.split(",")
+        ]
+    else:
+        # Default trusted origins for production
+        CSRF_TRUSTED_ORIGINS = [
+            "https://notipus.com",
+            "https://www.notipus.com",
+        ]
+        if APP_NAME:
+            CSRF_TRUSTED_ORIGINS.append(f"https://{APP_NAME}.fly.dev")
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -104,6 +271,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {
+            "min_length": 12,  # Increased minimum length for better security
+        },
     },
     {
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
@@ -138,6 +308,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
@@ -155,40 +327,50 @@ LOGGING = {
     "loggers": {
         "webhooks": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": "DEBUG" if DEBUG else "INFO",
         },
+        "core": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+        },
+        "django": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "WARNING",
+        },
+        "django.contrib.staticfiles": {
+            "handlers": ["console"],
+            "level": "ERROR",  # Always silence static file duplicate warnings
+        },
+    },
+    # Set root logger level based on DEBUG
+    "root": {
+        "handlers": ["console"],
+        "level": "DEBUG" if DEBUG else "INFO",
     },
 }
 
 
-# Webhook secrets configuration
-CHARGIFY_WEBHOOK_SECRET = os.environ.get(
-    "CHARGIFY_WEBHOOK_SECRET", "dev-chargify-secret"
-)
-
-SHOPIFY_WEBHOOK_SECRET = os.environ.get("SHOPIFY_WEBHOOK_SECRET", "dev-shopify-secret")
-
-STRIPE_WEBHOOK_SECRET = os.environ.get(
-    "STRIPE_WEBHOOK_SECRET", "dev-stripe-webhook-secret"
-)
+# Note: Webhook secrets are now managed per-tenant in the database
+# Global webhook secrets removed after multi-tenancy refactoring
 
 # Provider configurations
-SHOPIFY_SHOP_URL = os.environ.get("SHOPIFY_SHOP_URL", "test.myshopify.com")
-SHOPIFY_ACCESS_TOKEN = os.environ.get("SHOPIFY_ACCESS_TOKEN", "dev-token")
+# Note: Shopify configurations removed - now handled per-tenant via Integration model
+# Individual organizations configure their own Shopify credentials through the
+# web interface
 
-# Slack client configuration
-# SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
-SLACK_CLIENT = None
-
+# Slack OAuth configuration (global for app-level authentication)
+# Note: Individual Slack webhooks are configured per-tenant via Integration model
+SLACK_CLIENT = None  # Kept for test compatibility
 SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", "")
 SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
 SLACK_REDIRECT_URI = os.environ.get("SLACK_REDIRECT_URI", "")
+SLACK_CONNECT_REDIRECT_URI = os.environ.get("SLACK_CONNECT_REDIRECT_URI", "")
 
 SLACK_CLIENT_BOT_ID = os.environ.get("SLACK_CLIENT_BOT_ID", "")
 SLACK_CLIENT_BOT_SECRET = os.environ.get("SLACK_CLIENT_BOT_SECRET", "")
 SLACK_REDIRECT_BOT_URI = os.environ.get("SLACK_REDIRECT_BOT_URI", "")
 
-# Stripe configuration
+# Stripe configuration for Notipus billing (our revenue)
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "sk_test_dev_key")
 STRIPE_PLANS = {
     "basic": os.environ.get("STRIPE_BASIC_PLAN", ""),
@@ -196,6 +378,11 @@ STRIPE_PLANS = {
     "enterprise": os.environ.get("STRIPE_ENTERPRISE_PLAN", ""),
 }
 TRIAL_PERIOD_DAYS = 14
+
+# Notipus billing webhook secret (for processing our own Stripe webhooks)
+NOTIPUS_STRIPE_WEBHOOK_SECRET = os.environ.get(
+    "NOTIPUS_STRIPE_WEBHOOK_SECRET", "whsec_dev_notipus_billing"
+)
 
 DISABLE_BILLING = os.environ.get("DISABLE_BILLING", "False").lower() == "true"
 
@@ -206,26 +393,10 @@ BRANDFETCH_BASE_URL = os.environ.get(
 )
 
 
-# Lazy-loaded provider and service instances to avoid circular imports
-def _get_shopify_provider():
-    """Lazy factory for Shopify provider"""
-    from webhooks.providers.shopify import ShopifyProvider
-
-    return ShopifyProvider(webhook_secret=SHOPIFY_WEBHOOK_SECRET)
+# Note: Provider factories removed - now handled per-tenant
 
 
-def _get_chargify_provider():
-    """Lazy factory for Chargify provider"""
-    from webhooks.providers.chargify import ChargifyProvider
-
-    return ChargifyProvider(webhook_secret=CHARGIFY_WEBHOOK_SECRET)
-
-
-def _get_stripe_provider():
-    """Lazy factory for Stripe provider"""
-    from webhooks.providers.stripe import StripeProvider
-
-    return StripeProvider(STRIPE_WEBHOOK_SECRET)
+# Note: Provider factories removed - now handled per-tenant in multi-tenant architecture
 
 
 def _get_event_processor():
@@ -242,10 +413,7 @@ def _get_domain_enrichment_service():
     return DomainEnrichmentService()
 
 
-# Provider instances using lazy loading
-SHOPIFY_PROVIDER = SimpleLazyObject(_get_shopify_provider)
-CHARGIFY_PROVIDER = SimpleLazyObject(_get_chargify_provider)
-STRIPE_PROVIDER = SimpleLazyObject(_get_stripe_provider)
+# Note: Provider instances removed - now handled per-tenant
 
 # Service instances using lazy loading
 EVENT_PROCESSOR = SimpleLazyObject(_get_event_processor)

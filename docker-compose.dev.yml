@@ -1,0 +1,25 @@
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# This file provides development-specific overrides for the multi-container setup
+
+services:
+  # Override migration service for development
+  migration:
+    volumes:
+      - ./app:/app  # Live code reloading for migration files
+
+  # Override Django service for development
+  django:
+    # Use development server instead of gunicorn for auto-reload
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      - DEBUG=True
+    # Enable live code reloading for development
+    volumes:
+      - ./app:/app
+      - static_volume:/app/staticfiles
+
+  # Disable nginx healthcheck for faster development startup
+  nginx:
+    healthcheck:
+      disable: true
