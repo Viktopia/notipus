@@ -17,7 +17,7 @@ RUN pip install --upgrade pip && \
     pip install poetry && \
     poetry config virtualenvs.create false
 
-RUN apt-get update && apt-get install -y libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libpq-dev gcc redis-cli && rm -rf /var/lib/apt/lists/*
 
 # Install project dependencies
 RUN poetry install --no-root --no-interaction --no-ansi
