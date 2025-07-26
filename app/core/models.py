@@ -335,3 +335,64 @@ class Plan(models.Model):
 
     def __str__(self):
         return self.display_name
+
+
+class WebAuthnCredential(models.Model):
+    """
+    Store WebAuthn credentials for passwordless authentication.
+    """
+
+    user = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="webauthn_credentials"
+    )
+
+    # WebAuthn credential data
+    credential_id = models.TextField(unique=True)  # Base64 encoded credential ID
+    public_key = models.TextField()  # Base64 encoded public key
+    sign_count = models.BigIntegerField(default=0)  # Authentication counter
+
+    # Credential metadata
+    name = models.CharField(
+        max_length=100, help_text="User-friendly name for this credential"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(null=True, blank=True)
+
+    # Device info (optional)
+    user_agent = models.TextField(blank=True)
+
+    class Meta:
+        app_label = "core"
+        verbose_name = "WebAuthn Credential"
+        verbose_name_plural = "WebAuthn Credentials"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.name}"
+
+
+class WebAuthnChallenge(models.Model):
+    """
+    Temporary storage for WebAuthn challenges during authentication flow.
+    """
+
+    challenge = models.CharField(max_length=255, unique=True)  # Base64 encoded
+    user = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, null=True, blank=True
+    )  # Null for registration challenges
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Challenge type
+    CHALLENGE_TYPES = (
+        ("registration", "Registration"),
+        ("authentication", "Authentication"),
+    )
+    challenge_type = models.CharField(max_length=20, choices=CHALLENGE_TYPES)
+
+    class Meta:
+        app_label = "core"
+        verbose_name = "WebAuthn Challenge"
+        verbose_name_plural = "WebAuthn Challenges"
+
+    def __str__(self):
+        user_str = self.user.username if self.user else "Anonymous"
+        return f"{self.challenge_type} challenge for {user_str}"

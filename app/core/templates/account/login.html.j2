@@ -136,9 +136,144 @@
 </div>
 
 <script>
-// Placeholder for passkey authentication
-document.getElementById('passkey-login').addEventListener('click', function() {
-    alert('Passkey authentication will be implemented in the next step. For now, please use password login.');
+// WebAuthn passkey authentication
+document.getElementById('passkey-login').addEventListener('click', async function() {
+    const button = this;
+    const originalText = button.innerHTML;
+
+    try {
+        // Disable button and show loading state
+        button.disabled = true;
+        button.innerHTML = `
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Authenticating...
+        `;
+
+        // Step 1: Get authentication options from server
+        const beginResponse = await fetch('/webauthn/authenticate/begin/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({})
+        });
+
+        if (!beginResponse.ok) {
+            throw new Error('Failed to start authentication');
+        }
+
+        const beginData = await beginResponse.json();
+        if (!beginData.success) {
+            throw new Error(beginData.error || 'Failed to start authentication');
+        }
+
+        const options = beginData.options;
+
+        // Convert base64url strings to ArrayBuffers for WebAuthn API
+        options.challenge = base64urlToArrayBuffer(options.challenge);
+        if (options.allowCredentials) {
+            options.allowCredentials = options.allowCredentials.map(cred => ({
+                ...cred,
+                id: base64urlToArrayBuffer(cred.id)
+            }));
+        }
+
+        // Step 2: Use WebAuthn API to get credential
+        const credential = await navigator.credentials.get({
+            publicKey: options
+        });
+
+        if (!credential) {
+            throw new Error('No credential returned');
+        }
+
+        // Step 3: Send credential to server for verification
+        const credentialData = {
+            id: credential.id,
+            rawId: arrayBufferToBase64url(credential.rawId),
+            response: {
+                authenticatorData: arrayBufferToBase64url(credential.response.authenticatorData),
+                clientDataJSON: arrayBufferToBase64url(credential.response.clientDataJSON),
+                signature: arrayBufferToBase64url(credential.response.signature),
+                userHandle: credential.response.userHandle ? arrayBufferToBase64url(credential.response.userHandle) : null
+            },
+            type: credential.type,
+            challenge: beginData.options.challenge
+        };
+
+        const completeResponse = await fetch('/webauthn/authenticate/complete/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ credential: credentialData })
+        });
+
+        if (!completeResponse.ok) {
+            throw new Error('Authentication failed');
+        }
+
+        const completeData = await completeResponse.json();
+        if (completeData.success) {
+            // Redirect to dashboard
+            window.location.href = completeData.redirect_url || '/dashboard/';
+        } else {
+            throw new Error(completeData.error || 'Authentication failed');
+        }
+
+    } catch (error) {
+        console.error('WebAuthn error:', error);
+
+        // Show user-friendly error message
+        let errorMessage = 'Passkey authentication failed. ';
+
+        if (error.name === 'NotSupportedError') {
+            errorMessage += 'Passkeys are not supported on this device.';
+        } else if (error.name === 'NotAllowedError') {
+            errorMessage += 'Authentication was cancelled or timed out.';
+        } else if (error.name === 'SecurityError') {
+            errorMessage += 'Security error occurred.';
+        } else {
+            errorMessage += 'Please try again or use password login.';
+        }
+
+        alert(errorMessage);
+    } finally {
+        // Restore button state
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
 });
+
+// Utility functions for base64url encoding/decoding
+function base64urlToArrayBuffer(base64url) {
+    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+function arrayBufferToBase64url(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// Check if WebAuthn is supported
+if (!window.PublicKeyCredential) {
+    document.getElementById('passkey-login').style.display = 'none';
+    console.log('WebAuthn not supported');
+}
 </script>
 {% endblock %}

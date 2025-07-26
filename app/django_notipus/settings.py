@@ -189,14 +189,33 @@ DATABASES = {
 }
 
 # Cache configuration for Redis
-CACHES = {
-    "default": {
+if "REDIS_URL" in os.environ:
+    redis_config_dict = {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        "LOCATION": os.environ["REDIS_URL"],
         "KEY_PREFIX": "notipus",
         "TIMEOUT": 300,  # Default timeout of 5 minutes
     }
-}
+else:
+    REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
+    REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
+    REDIS_DB = os.environ.get("REDIS_DB", "0")
+    REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
+
+    # Build Redis URL from individual components
+    if REDIS_PASSWORD:
+        redis_location = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    else:
+        redis_location = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+    redis_config_dict = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": redis_location,
+        "KEY_PREFIX": "notipus",
+        "TIMEOUT": 300,  # Default timeout of 5 minutes
+    }
+
+CACHES = {"default": redis_config_dict}
 
 # Security Headers and HTTPS Configuration
 if not DEBUG:

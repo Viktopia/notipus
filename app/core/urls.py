@@ -44,8 +44,34 @@ urlpatterns = [
         views.slack_connect_callback,
         name="slack_connect_callback",
     ),
-    path("api/connect/shopify/", views.connect_shopify, name="connect_shopify"),
+
     path("api/connect/stripe/", views.connect_stripe, name="connect_stripe"),
+    # WebAuthn endpoints
+    path(
+        "webauthn/register/begin/",
+        views.webauthn_register_begin,
+        name="webauthn_register_begin",
+    ),
+    path(
+        "webauthn/register/complete/",
+        views.webauthn_register_complete,
+        name="webauthn_register_complete",
+    ),
+    path(
+        "webauthn/authenticate/begin/",
+        views.webauthn_authenticate_begin,
+        name="webauthn_authenticate_begin",
+    ),
+    path(
+        "webauthn/authenticate/complete/",
+        views.webauthn_authenticate_complete,
+        name="webauthn_authenticate_complete",
+    ),
+    path(
+        "webauthn/credentials/",
+        views.webauthn_credentials,
+        name="webauthn_credentials",
+    ),
     path(
         "api/notification-settings/",
         views.get_notification_settings,

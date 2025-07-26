@@ -10,6 +10,8 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 # Import services for Redis-based webhook activity
 from webhooks.services.database_lookup import DatabaseLookupService
@@ -18,6 +20,7 @@ from webhooks.services.rate_limiter import rate_limiter
 from .models import Integration, NotificationSettings, Organization, UserProfile
 from .services.shopify import ShopifyAPI
 from .services.stripe import StripeAPI
+from .services.webauthn import WebAuthnService
 
 logger = logging.getLogger(__name__)
 
@@ -1016,3 +1019,148 @@ def checkout_cancel(request):
     request.session.pop("checkout_plan", None)
 
     return render(request, "core/checkout_cancel.html.j2")
+
+
+# === WEBAUTHN VIEWS ===
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def webauthn_register_begin(request):
+    """Start WebAuthn registration flow for adding a passkey."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    try:
+        webauthn_service = WebAuthnService()
+        options = webauthn_service.generate_registration_options(request.user)
+        return JsonResponse({"success": True, "options": options})
+    except Exception as e:
+        logger.error(f"WebAuthn registration begin error: {e}")
+        return JsonResponse({"error": "Failed to start registration"}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def webauthn_register_complete(request):
+    """Complete WebAuthn registration and store the credential."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    try:
+        data = json.loads(request.body)
+        credential_data = data.get("credential")
+        credential_name = data.get("name", "Passkey")
+
+        if not credential_data:
+            return JsonResponse({"error": "Missing credential data"}, status=400)
+
+        webauthn_service = WebAuthnService()
+        success = webauthn_service.verify_registration(
+            request.user, credential_data, credential_name
+        )
+
+        if success:
+            return JsonResponse({
+                "success": True,
+                "message": "Passkey registered successfully"
+            })
+        else:
+            return JsonResponse({
+                "error": "Registration verification failed"
+            }, status=400)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"WebAuthn registration complete error: {e}")
+        return JsonResponse({"error": "Failed to complete registration"}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def webauthn_authenticate_begin(request):
+    """Start WebAuthn authentication flow for passkey login."""
+    try:
+        data = json.loads(request.body)
+        username = data.get("username")  # Optional for usernameless flow
+
+        webauthn_service = WebAuthnService()
+        options = webauthn_service.generate_authentication_options(username)
+        return JsonResponse({"success": True, "options": options})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"WebAuthn authentication begin error: {e}")
+        return JsonResponse({"error": "Failed to start authentication"}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def webauthn_authenticate_complete(request):
+    """Complete WebAuthn authentication and log the user in."""
+    try:
+        data = json.loads(request.body)
+        credential_data = data.get("credential")
+
+        if not credential_data:
+            return JsonResponse({"error": "Missing credential data"}, status=400)
+
+        webauthn_service = WebAuthnService()
+        user = webauthn_service.verify_authentication(credential_data)
+
+        if user:
+            # Log the user in
+            login(request, user)
+            return JsonResponse({
+                "success": True,
+                "message": "Authentication successful",
+                "redirect_url": "/dashboard/"
+            })
+        else:
+            return JsonResponse({
+                "error": "Authentication verification failed"
+            }, status=401)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"WebAuthn authentication complete error: {e}")
+        return JsonResponse({"error": "Failed to complete authentication"}, status=500)
+
+
+@login_required
+def webauthn_credentials(request):
+    """View and manage user's WebAuthn credentials."""
+    if request.method == "GET":
+        # Return user's existing credentials
+        from .models import WebAuthnCredential
+        credentials = WebAuthnCredential.objects.filter(user=request.user).values(
+            'id', 'name', 'created_at', 'last_used'
+        )
+        return JsonResponse({"credentials": list(credentials)})
+
+    elif request.method == "DELETE":
+        # Delete a specific credential
+        try:
+            data = json.loads(request.body)
+            credential_id = data.get("credential_id")
+
+            if not credential_id:
+                return JsonResponse({"error": "Missing credential_id"}, status=400)
+
+            from .models import WebAuthnCredential
+            WebAuthnCredential.objects.filter(
+                id=credential_id, user=request.user
+            ).delete()
+
+            return JsonResponse({"success": True, "message": "Credential deleted"})
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data"}, status=400)
+        except Exception as e:
+            logger.error(f"WebAuthn credential deletion error: {e}")
+            return JsonResponse({"error": "Failed to delete credential"}, status=500)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)

@@ -11,7 +11,7 @@
 
 # YAML Anchors for reusable configurations
 x-common-variables: &common-variables
-  # Database
+    # Database
   DB_HOST: db
   DB_PORT: 5432
   DB_NAME: ${DB_NAME:-notipus_dev}
