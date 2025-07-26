@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Notipus - Smart Webhook Notifications{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full">
+    <div class="min-h-full">
+        <!-- Navigation -->
+        <nav class="bg-white shadow-sm border-b border-gray-200">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <div class="flex-shrink-0 flex items-center">
+                            <a href="/" class="text-2xl font-bold text-primary-600">
+                                Notipus
+                            </a>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        {% if user.is_authenticated %}
+                            <div class="flex items-center space-x-4">
+                                <span class="text-sm text-gray-700">Welcome, {{ user.username }}</span>
+                                <a href="/accounts/logout/" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">
+                                    Logout
+                                </a>
+                            </div>
+                        {% else %}
+                            <a href="/accounts/login/" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">
+                                Login
+                            </a>
+                            <a href="/accounts/signup/" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                                Sign Up
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Flash Messages -->
+        {% if messages %}
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-4">
+                {% for message in messages %}
+                    <div class="rounded-md {% if message.tags == 'error' %}bg-red-50 border border-red-200{% elif message.tags == 'success' %}bg-green-50 border border-green-200{% else %}bg-blue-50 border border-blue-200{% endif %} p-4 mb-4">
+                        <div class="flex">
+                            <div class="ml-3">
+                                <p class="text-sm {% if message.tags == 'error' %}text-red-800{% elif message.tags == 'success' %}text-green-800{% else %}text-blue-800{% endif %}">
+                                    {{ message }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <!-- Main Content -->
+        <main>
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white border-t border-gray-200 mt-12">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+                <div class="text-center text-sm text-gray-500">
+                    <p>&copy; 2024 Notipus. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

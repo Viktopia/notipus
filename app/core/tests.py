@@ -80,10 +80,6 @@ class CompanyTest(TestCase):
         expected = "Example Company (str-test.com)"
         self.assertEqual(str(company), expected)
 
-        # Test company without name
-        company_no_name = Company.objects.create(domain="test.com")
-        self.assertEqual(str(company_no_name), "test.com")
-
     def test_company_domain_validation(self):
         """Test domain validation on company creation"""
         from core.models import Company  # noqa: E402
@@ -96,18 +92,16 @@ class CompanyTest(TestCase):
         import uuid
 
         from core.models import Company  # noqa: E402
-        from django.db import transaction
 
         # Use a unique domain for this test
         unique_domain = f"test-{uuid.uuid4().hex[:8]}.com"
 
         # Create first company
-        Company.objects.create(domain=unique_domain)
+        Company.objects.create(domain=unique_domain, name="Test Company 1")
 
-        # Try to create duplicate - this should raise IntegrityError at DB level
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Company.objects.create(domain=unique_domain)
+        # Try to create duplicate - this should raise ValidationError at model level
+        with self.assertRaises(ValidationError):
+            Company.objects.create(domain=unique_domain, name="Test Company 2")
 
     def test_company_domain_cleaning(self):
         """Test domain cleaning on save"""

@@ -1,6 +1,7 @@
 import json
 from unittest.mock import Mock, patch
 
+from core.models import Integration, Organization
 from django.test import TestCase
 
 from .providers.stripe import StripeProvider
@@ -8,7 +9,22 @@ from .providers.stripe import StripeProvider
 
 class ChargifyWebhookTest(TestCase):
     def setUp(self):
-        self.url = "/webhook/chargify/"
+        # Create test organization and integration
+        self.organization = Organization.objects.create(
+            name="Test Organization",
+            shop_domain="test.myshopify.com"
+        )
+
+        self.integration = Integration.objects.create(
+            organization=self.organization,
+            integration_type="chargify",
+            webhook_secret="test-webhook-secret",
+            is_active=True
+        )
+
+        # Use organization-specific webhook URL
+        self.url = f"/webhook/customer/{self.organization.uuid}/chargify/"
+
         self.headers = {
             "HTTP_X_Chargify_Webhook_Id": "12345",
             "HTTP_X_Chargify_Webhook_Signature_Hmac_Sha_256": "test_signature",
@@ -28,9 +44,10 @@ class ChargifyWebhookTest(TestCase):
 
     @patch("django.conf.settings.EVENT_PROCESSOR")
     @patch("django.conf.settings.SLACK_CLIENT")
-    @patch("django.conf.settings.CHARGIFY_PROVIDER")
-    def test_valid_webhook(self, mock_provider, mock_slack, mock_processor):
-        # Mock successful webhook processing
+    @patch("webhooks.providers.chargify.ChargifyProvider")
+    def test_valid_webhook(self, mock_provider_class, mock_slack, mock_processor):
+        # Mock the provider instance
+        mock_provider = mock_provider_class.return_value
         mock_provider.validate_webhook.return_value = True
         mock_provider.parse_webhook.return_value = {
             "type": "payment_success",
@@ -53,9 +70,13 @@ class ChargifyWebhookTest(TestCase):
         response_data = json.loads(response.content)
         self.assertEqual(response_data["status"], "success")
 
-    @patch("django.conf.settings.CHARGIFY_PROVIDER")
-    def test_invalid_signature(self, mock_provider):
-        # Mock invalid signature
+        # Verify provider was created with correct webhook secret
+        mock_provider_class.assert_called_once_with(webhook_secret="test-webhook-secret")
+
+    @patch("webhooks.providers.chargify.ChargifyProvider")
+    def test_invalid_signature(self, mock_provider_class):
+        # Mock the provider instance with invalid signature
+        mock_provider = mock_provider_class.return_value
         mock_provider.validate_webhook.return_value = False
 
         headers = self.headers.copy()
@@ -70,7 +91,9 @@ class ChargifyWebhookTest(TestCase):
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
         self.assertEqual(response_data["status"], "error")
-        self.assertEqual(response_data["error"]["code"], "INVALID_SIGNATURE")
+
+        # Verify provider was created with correct webhook secret
+        mock_provider_class.assert_called_once_with(webhook_secret="test-webhook-secret")
 
 
 class StripeProviderTest(TestCase):

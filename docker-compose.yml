@@ -1,69 +1,133 @@
+# Notipus Docker Compose Configuration
+#
+# DEVELOPMENT:
+#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   (Uses development overrides from docker-compose.dev.yml)
+#
+# PRODUCTION:
+#   1. Copy this file to docker-compose.prod.yml
+#   2. Update environment variables for production
+#   3. Set proper secrets, database passwords, etc.
+#   4. docker-compose -f docker-compose.prod.yml up
+
 services:
   db:
-    image: postgres:13
-    container_name: postgres_db
+    image: postgres:17
+    container_name: notipus_db
     environment:
-      POSTGRES_DB: {DB_NAME}
-      POSTGRES_USER: {DB_USER}
-      POSTGRES_PASSWORD: {DB_PASSWORD}
+      POSTGRES_DB: notipus_dev
+      POSTGRES_USER: notipus_user
+      POSTGRES_PASSWORD: dev_password_123
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - app_network
-    env_file:
-      - app/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notipus_user -d notipus_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notipus_migration
+    command: ["python", "manage.py", "migrate"]
+    environment: &django_env
+      # Database
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=notipus_dev
+      - DB_USER=notipus_user
+      - DB_PASSWORD=dev_password_123
+
+      # Django (development defaults)
+      - SECRET_DJANGO_KEY=django-dev-key-not-for-production-use
+      - DEBUG=True
+      - ALLOWED_HOSTS=localhost,127.0.0.1,django,notipus_django
+
+      # === GLOBAL AUTHENTICATION (Notipus's OAuth apps) ===
+      # For users logging into Notipus platform
+      - SLACK_CLIENT_ID=your_slack_auth_client_id
+      - SLACK_CLIENT_SECRET=your_slack_auth_client_secret
+      - SLACK_REDIRECT_URI=http://localhost/accounts/slack/login/callback/
+      - SLACK_CONNECT_REDIRECT_URI=http://localhost/api/connect/slack/callback/
+      - SHOPIFY_CLIENT_ID=your_shopify_auth_client_id
+      - SHOPIFY_CLIENT_SECRET=your_shopify_auth_client_secret
+      - SHOPIFY_REDIRECT_URI=http://localhost/integrate/shopify/callback/
+
+      # === GLOBAL BILLING (Notipus's revenue) ===
+      # For workspace owners paying Notipus
+      - NOTIPUS_STRIPE_SECRET_KEY=sk_test_notipus_billing_key
+      - NOTIPUS_STRIPE_WEBHOOK_SECRET=whsec_notipus_billing_secret
+
+      # === WORKSPACE-SPECIFIC INTEGRATIONS ===
+      # These are stored in Integration model per organization:
+      # - slack_notifications: Each workspace's Slack for receiving notifications
+      # - stripe_customer: Each workspace's Stripe for receiving customer payments
+      # - shopify: Each workspace's Shopify store
+      # - chargify: Each workspace's Chargify billing
+
+      # External Services
+      - BRANDFETCH_API_KEY=dev_brandfetch_key
+      - BRANDFETCH_BASE_URL=https://api.brandfetch.io/v2
+      - DISABLE_BILLING=True
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: "no"  # Migration should run once and exit
 
   django:
-    build: .
-    container_name: django_app
-    command: gunicorn --bind 0.0.0.0:8000 django_notipus.wsgi:application
-
-    environment:
-      - DB_HOST={DB_HOST}
-      - DB_PORT={DB_PORT}
-      - DB_NAME={DB_NAME}
-      - DB_USER={DB_USER}
-      - DB_PASSWORD={DB_PASSWORD}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notipus_django
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "django_notipus.wsgi:application"]
+    environment: *django_env
+    volumes:
+      - static_volume:/app/staticfiles
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - nginx
-      - migrations
+      migration:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
     networks:
       - app_network
-    env_file:
-      - app/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   nginx:
-    image: nginx:latest
-    container_name: nginx_server
+    image: nginx:alpine
+    container_name: notipus_nginx
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - static_volume:/app/static
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
-    networks:
-      - app_network
-
-  migrations:
-    build: .
-    container_name: django_migrations
-    command: poetry run python manage.py migrate
-    environment:
-      - DB_HOST={DB_HOST}
-      - DB_PORT={DB_PORT}
-      - DB_NAME={DB_NAME}
-      - DB_USER={DB_USER}
-      - DB_PASSWORD={DB_PASSWORD}
+      - static_volume:/app/staticfiles:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - db
+      django:
+        condition: service_healthy
     networks:
       - app_network
-    env_file:
-      - app/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:

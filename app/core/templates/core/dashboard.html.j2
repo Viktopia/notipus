@@ -1,0 +1,198 @@
+{% extends "core/base.html.j2" %}
+
+{% block title %}Dashboard - {{ organization.name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div class="md:flex md:items-center md:justify-between">
+                <div class="flex-1 min-w-0">
+                    <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
+                        {{ organization.name }}
+                    </h2>
+                    <div class="mt-1 flex flex-col sm:flex-row sm:flex-wrap sm:mt-0 sm:space-x-6">
+                        <div class="mt-2 flex items-center text-sm text-gray-500">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {{ organization.subscription_plan|title }} Plan
+                            </span>
+                        </div>
+                        <div class="mt-2 flex items-center text-sm text-gray-500">
+                            <svg class="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
+                            </svg>
+                            Created {{ organization.created_at|date:"M j, Y" }}
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 flex md:mt-0 md:ml-4">
+                    <a href="{% url 'core:organization_settings' %}"
+                       class="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                        Settings
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <!-- Integration Status Cards -->
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-8">
+            <!-- Slack Integration -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <svg class="h-8 w-8 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52-2.523A2.528 2.528 0 0 1 5.042 10.12h2.52v2.522a2.528 2.528 0 0 1-2.52 2.523Zm0-6.802A2.528 2.528 0 0 1 2.522 5.84a2.528 2.528 0 0 1 2.52-2.523 2.528 2.528 0 0 1 2.52 2.523v2.523H5.042Zm6.802 0a2.528 2.528 0 0 1-2.523-2.523A2.528 2.528 0 0 1 11.844 3.317a2.528 2.528 0 0 1 2.523 2.523v2.523h-2.523Zm0 6.802a2.528 2.528 0 0 1 2.523 2.523 2.528 2.528 0 0 1-2.523 2.523 2.528 2.528 0 0 1-2.523-2.523v-2.523h2.523Z"/>
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Slack</dt>
+                                <dd class="flex items-baseline">
+                                    {% if has_slack %}
+                                        <div class="text-lg font-semibold text-green-600">Connected</div>
+                                        <div class="ml-2 flex items-baseline text-sm font-semibold text-green-600">
+                                            <svg class="flex-shrink-0 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-lg font-semibold text-gray-400">Not connected</div>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                        <div class="flex-shrink-0">
+                            {% if has_slack %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Active
+                                </span>
+                            {% else %}
+                                <a href="{% url 'core:integrate_slack' %}"
+                                   class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700">
+                                    Connect
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shopify Integration -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <svg class="h-8 w-8 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M15.337 6.534c0-.203-.135-.271-.203-.271-.068 0-.068 0-.135.068l-.881.949c-.406-.271-.949-.474-1.559-.474-1.898 0-2.98 1.966-2.98 3.864 0 1.22.541 1.966 1.356 1.966.813 0 1.559-.61 2.034-1.22v1.763c0 .677-.271 1.085-.813 1.085-.609 0-.813-.542-.813-1.288h-1.831c.068 1.966 1.085 2.847 2.644 2.847 1.695 0 2.71-1.017 2.71-3.051V6.534h-.068z"/>
+                                <path d="M8.542 8.5c-.813-.271-1.356-.474-1.356-.949 0-.339.271-.61.746-.61.542 0 .949.339.949.88h1.763c-.068-1.356-.949-2.373-2.644-2.373-1.424 0-2.576.88-2.576 2.237 0 1.153.813 1.627 1.898 1.966.813.271 1.356.474 1.356.949 0 .406-.339.678-.813.678-.61 0-1.017-.406-1.017-.949H4.085c.068 1.492 1.085 2.441 2.78 2.441 1.559 0 2.644-.88 2.644-2.305 0-1.221-.881-1.695-1.966-1.965z"/>
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Shopify</dt>
+                                <dd class="flex items-baseline">
+                                    {% if has_shopify %}
+                                        <div class="text-lg font-semibold text-green-600">Connected</div>
+                                        <div class="ml-2 flex items-baseline text-sm font-semibold text-green-600">
+                                            <svg class="flex-shrink-0 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-lg font-semibold text-gray-400">Not connected</div>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                        <div class="flex-shrink-0">
+                            {% if has_shopify %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Active
+                                </span>
+                            {% else %}
+                                <a href="{% url 'core:integrate_shopify' %}"
+                                   class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700">
+                                    Connect
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
+                    <div class="space-y-3">
+                        <a href="{% url 'core:integrations' %}"
+                           class="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+                            Manage integrations
+                        </a>
+                        <a href="{% url 'core:organization_settings' %}"
+                           class="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+                            Organization settings
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Getting Started -->
+        {% if not has_slack and not has_shopify %}
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">
+                        Get started by connecting your first integration
+                    </h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <p>
+                            Connect Slack to start receiving intelligent notifications about your business events.
+                        </p>
+                    </div>
+                    <div class="mt-4">
+                        <div class="-mx-2 -my-1.5 flex">
+                            <a href="{% url 'core:integrate_slack' %}"
+                               class="bg-blue-50 px-2 py-1.5 rounded-md text-sm font-medium text-blue-800 hover:bg-blue-100">
+                                Connect Slack
+                            </a>
+                            <a href="{% url 'core:integrations' %}"
+                               class="ml-3 bg-blue-50 px-2 py-1.5 rounded-md text-sm font-medium text-blue-800 hover:bg-blue-100">
+                                View all integrations
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Activity (placeholder) -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Recent Activity</h3>
+                <div class="mt-5">
+                    <div class="text-center text-gray-500 py-12">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <p class="mt-4 text-sm">No recent activity yet</p>
+                        <p class="text-sm text-gray-400">Connect your integrations to see activity here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

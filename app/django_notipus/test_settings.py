@@ -19,16 +19,8 @@ SHOPIFY_WEBHOOK_SECRET = "test-shopify-secret"
 STRIPE_WEBHOOK_SECRET = "test-stripe-secret"
 
 
-# Disable migrations for faster tests
-class DisableMigrations:
-    def __contains__(self, item):
-        return True
-
-    def __getitem__(self, item):
-        return None
-
-
-MIGRATION_MODULES = DisableMigrations()
+# Enable migrations for testing - we need to test migrations on in-memory SQL
+# MIGRATION_MODULES removed to enable migrations
 
 # Use console email backend for tests
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

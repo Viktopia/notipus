@@ -3,13 +3,12 @@ import logging
 
 import requests
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import redirect
-from webhooks.services.slack_client import SlackClient
+from django.shortcuts import redirect, render
 
 from .models import Integration, NotificationSettings, Organization, UserProfile
 from .services.shopify import ShopifyAPI
@@ -45,333 +44,505 @@ def _get_slack_token(code):
     return data
 
 
-def _get_slack_user_info(token_data):
+def _get_slack_user_info(access_token):
     """Get user information from Slack"""
-    user_info_response = requests.get(
+    response = requests.get(
         "https://slack.com/api/openid.connect.userInfo",
-        headers={
-            "Authorization": f"{token_data.get('token_type')} "
-            f"{token_data.get('access_token')}"
-        },
+        headers={"Authorization": f"Bearer {access_token}"},
     )
-    user_info = user_info_response.json()
-    if not user_info.get("ok"):
+    data = response.json()
+    if not data.get("ok"):
         return None
-    return user_info
+    return data
 
 
-def _enrich_domain_safely(domain):
-    """Safely enrich domain with error handling"""
-    if not domain:
-        return
-    try:
-        settings.DOMAIN_ENRICHMENT_SERVICE.enrich_domain(domain)
-    except Exception as e:
-        logger.warning(f"Failed to enrich domain {domain}: {str(e)}")
-
-
-def _get_or_create_user_and_profile(user_info):
-    """Get or create user and profile from Slack user info"""
-    slack_user_id = user_info.get("sub")
-    email = user_info.get("email")
-    name = user_info.get("name")
-
-    try:
-        user_profile = UserProfile.objects.get(slack_user_id=slack_user_id)
-        return user_profile.user, user_profile
-    except UserProfile.DoesNotExist:
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            user = User.objects.create_user(username=name, email=email)
-            user.set_unusable_password()
-            user.save()
-        return user, None
-
-
-def _get_or_create_organization(user_info, user):
-    """Get or create organization from Slack team info"""
-    slack_team_id = user_info.get("https://slack.com/team_id")
-    slack_domain = user_info.get("https://slack.com/team_domain")
-    name = user_info.get("name")
-
-    try:
-        organization = Organization.objects.get(
-            Q(slack_team_id=slack_team_id) | Q(slack_domain=slack_domain)
-        )
-    except Organization.DoesNotExist:
-        organization = Organization.objects.create(
-            slack_team_id=slack_team_id, slack_domain=slack_domain, name=name
-        )
-        _setup_new_organization(organization, user)
-
-    return organization
-
-
-def _setup_new_organization(organization, user):
-    """Set up a newly created organization"""
-    if not organization.stripe_customer_id:
-        customer_data = {
-            "email": user.email,
-            "name": organization.name,
-            "metadata": {"slack_team_id": organization.slack_team_id},
-        }
-        stripe_customer_data = StripeAPI.create_stripe_customer(customer_data)
-        organization.stripe_customer_id = stripe_customer_data["id"]
-        organization.save()
-
-    if not organization.shop_domain:
-        organization.shop_domain = ShopifyAPI.get_shop_domain()
-        if organization.shop_domain:
-            _enrich_domain_safely(organization.shop_domain)
-        organization.save()
-
-
-def slack_callback(request):
+def slack_auth_callback(request):
     code = request.GET.get("code")
+    if not code:
+        return HttpResponse("Authorization failed: No code provided", status=400)
 
-    # Get access token
+    # Exchange code for token
     token_data = _get_slack_token(code)
     if not token_data:
-        return HttpResponse("Authentication failed", status=400)
+        return HttpResponse("Failed to get access token", status=400)
 
     # Get user info
-    user_info = _get_slack_user_info(token_data)
+    user_info = _get_slack_user_info(token_data["access_token"])
     if not user_info:
-        return HttpResponse("Get user info failed", status=400)
+        return HttpResponse("Failed to get user information", status=400)
 
-    # Enrich Slack domain
-    slack_domain = user_info.get("https://slack.com/team_domain")
-    _enrich_domain_safely(slack_domain)
+    # Extract user details
+    slack_id = user_info.get("sub")
+    email = user_info.get("email")
+    name = user_info.get("name", "")
 
-    # Get or create user and profile
-    user, existing_profile = _get_or_create_user_and_profile(user_info)
+    if not slack_id or not email:
+        return HttpResponse("Invalid user data from Slack", status=400)
 
-    # Get or create organization
-    organization = _get_or_create_organization(user_info, user)
-
-    # Handle user profile
-    slack_user_id = user_info.get("sub")
-    slack_team_id = user_info.get("https://slack.com/team_id")
-
-    if existing_profile:
-        user_profile = existing_profile
-        user_profile.slack_user_id = slack_user_id
-        user_profile.slack_team_id = slack_team_id
-        user_profile.organization = organization
-        user_profile.save()
-    else:
-        user_profile, created = UserProfile.objects.get_or_create(
-            user=user,
-            defaults={
-                "slack_user_id": slack_user_id,
-                "slack_team_id": slack_team_id,
-                "organization": organization,
-            },
-        )
-        if not created:
-            user_profile.slack_user_id = slack_user_id
-            user_profile.slack_team_id = slack_team_id
-            user_profile.organization = organization
-            user_profile.save()
-
-    login(request, user)
-    return JsonResponse(
-        {
-            "slack_user_id": user_profile.slack_user_id,
-            "email": user.email,
-            "slack_team_id": user_profile.slack_team_id,
-            "slack_domain": user_profile.organization.slack_team_id,
-            "name": user.username,
-        },
-        status=200,
+    # Find or create user
+    user, created = User.objects.get_or_create(
+        email=email, defaults={"username": email, "first_name": name}
     )
+
+    if created:
+        logger.info(f"Created new user: {email}")
+
+    # Try to find existing UserProfile
+    try:
+        profile = UserProfile.objects.get(slack_user_id=slack_id)
+        if profile.user != user:
+            # Link existing profile to this user account
+            profile.user = user
+            profile.save()
+        user = profile.user
+    except UserProfile.DoesNotExist:
+        # Check if user already has a profile with different slack_id
+        try:
+            profile = UserProfile.objects.get(user=user)
+            profile.slack_user_id = slack_id
+            profile.save()
+        except UserProfile.DoesNotExist:
+            # No profile exists - this is handled later when joining a team
+            pass
+
+    # Log the user in
+    login(request, user)
+
+    return redirect("core:dashboard")
 
 
 def slack_connect(request):
-    scopes = "incoming-webhook,commands"
-    auth_url = f"https://slack.com/oauth/authorize?client_id={settings.SLACK_CLIENT_BOT_ID}&scope={scopes}&redirect_uri={settings.SLACK_REDIRECT_BOT_URI}"
+    """Initialize Slack connection for workspace notifications"""
+    scopes = "incoming-webhook,chat:write,channels:read"
+    auth_url = f"https://slack.com/oauth/v2/authorize?client_id={settings.SLACK_CLIENT_ID}&scope={scopes}&redirect_uri={settings.SLACK_CONNECT_REDIRECT_URI}&response_type=code"
     return redirect(auth_url)
 
 
 def slack_connect_callback(request):
+    """Handle Slack OAuth callback for workspace notifications"""
     code = request.GET.get("code")
+    if not code:
+        return HttpResponse("Authorization failed: No code provided", status=400)
+
+    # Exchange code for token
     response = requests.post(
-        "https://slack.com/api/oauth.access",
+        "https://slack.com/api/oauth.v2.access",
         data={
-            "client_id": settings.SLACK_CLIENT_BOT_ID,
-            "client_secret": settings.SLACK_CLIENT_BOT_SECRET,
+            "client_id": settings.SLACK_CLIENT_ID,
+            "client_secret": settings.SLACK_CLIENT_SECRET,
             "code": code,
-            "redirect_uri": settings.SLACK_REDIRECT_BOT_URI,
+            "redirect_uri": settings.SLACK_CONNECT_REDIRECT_URI,
         },
     )
     data = response.json()
+
     if not data.get("ok"):
-        return HttpResponse("Authentication failed", status=400)
+        return HttpResponse(f"Slack connection failed: {data.get('error')}", status=400)
 
-    settings.SLACK_CLIENT = SlackClient(webhook_url=data["incoming_webhook"]["url"])
+    # Get user's organization
+    if not request.user.is_authenticated:
+        return redirect("account_login")
 
-    return JsonResponse({"success": True}, status=200)
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+    except UserProfile.DoesNotExist:
+        return HttpResponse("User profile not found", status=400)
+
+    # Store or update Slack integration
+    integration, created = Integration.objects.get_or_create(
+        organization=organization,
+        integration_type="slack_notifications",
+        defaults={
+            "oauth_credentials": {
+                "access_token": data["access_token"],
+                "team": data["team"],
+                "incoming_webhook": data.get("incoming_webhook", {}),
+            },
+            "integration_settings": {
+                "channel": data.get("incoming_webhook", {}).get("channel", "#general"),
+                "team_id": data["team"]["id"],
+            },
+            "is_active": True,
+        }
+    )
+
+    if not created:
+        # Update existing integration
+        integration.oauth_credentials = {
+            "access_token": data["access_token"],
+            "team": data["team"],
+            "incoming_webhook": data.get("incoming_webhook", {}),
+        }
+        integration.integration_settings = {
+            "channel": data.get("incoming_webhook", {}).get("channel", "#general"),
+            "team_id": data["team"]["id"],
+        }
+        integration.is_active = True
+        integration.save()
+
+    messages.success(request, "Slack connected successfully!")
+    return redirect("core:integrations")
 
 
 def connect_shopify(request):
-    try:
-        user_profile = request.user.userprofile
-        organization = user_profile.organization
+    if request.method == "POST":
+        data = json.loads(request.body)
+        access_token = data.get("access_token")
+        shop_url = data.get("shop_url")
 
+        if not access_token or not shop_url:
+            return JsonResponse({"error": "Missing access token or shop URL"}, status=400)
+
+        # Get user's organization
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "User not authenticated"}, status=401)
+
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            organization = user_profile.organization
+        except UserProfile.DoesNotExist:
+            return JsonResponse({"error": "User profile not found"}, status=400)
+
+        # Test the Shopify connection
+        shopify_api = ShopifyAPI(access_token, shop_url)
+        shop_domain = shopify_api.get_shop_domain()
+
+        if not shop_domain:
+            return JsonResponse({"error": "Invalid Shopify credentials"}, status=400)
+
+        # Store or update Shopify integration
         integration, created = Integration.objects.get_or_create(
             organization=organization,
             integration_type="shopify",
-            defaults={"auth_data": {"access_token": settings.SHOPIFY_ACCESS_TOKEN}},
+            defaults={
+                "oauth_credentials": {"access_token": access_token},
+                "integration_settings": {
+                    "shop_url": shop_url,
+                    "shop_domain": shop_domain,
+                },
+                "is_active": True,
+            }
         )
 
         if not created:
-            integration.auth_data = {"access_token": settings.SHOPIFY_ACCESS_TOKEN}
+            # Update existing integration
+            integration.oauth_credentials = {"access_token": access_token}
+            integration.integration_settings = {
+                "shop_url": shop_url,
+                "shop_domain": shop_domain,
+            }
+            integration.is_active = True
             integration.save()
 
-        return JsonResponse(
-            {
-                "status": "success",
-                "message": "Shopify connected successfully",
-                "shop_domain": organization.shop_domain,
-            },
-            status=200,
-        )
-    except Exception as e:
-        logging.error(f"Error connecting Shopify: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"success": True, "shop_domain": shop_domain})
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
 
 
 def connect_stripe(request):
-    try:
-        user_profile = request.user.userprofile
-        organization = user_profile.organization
+    if request.method == "POST":
+        data = json.loads(request.body)
+        api_key = data.get("api_key")
 
+        if not api_key:
+            return JsonResponse({"error": "Missing API key"}, status=400)
+
+        # Get user's organization
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "User not authenticated"}, status=401)
+
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            organization = user_profile.organization
+        except UserProfile.DoesNotExist:
+            return JsonResponse({"error": "User profile not found"}, status=400)
+
+        # Test the Stripe connection
+        stripe_api = StripeAPI(api_key)
+        account_info = stripe_api.get_account_info()
+
+        if not account_info:
+            return JsonResponse({"error": "Invalid Stripe API key"}, status=400)
+
+        # Store or update Stripe integration
         integration, created = Integration.objects.get_or_create(
             organization=organization,
-            integration_type="stripe",
-            defaults={"auth_data": {"secret_key": settings.STRIPE_SECRET_KEY}},
+            integration_type="stripe_customer",
+            defaults={
+                "oauth_credentials": {"api_key": api_key},
+                "integration_settings": {
+                    "account_id": account_info.get("id"),
+                    "business_profile": account_info.get("business_profile", {}),
+                },
+                "is_active": True,
+            }
         )
 
         if not created:
-            integration.auth_data = {"secret_key": settings.STRIPE_SECRET_KEY}
+            # Update existing integration
+            integration.oauth_credentials = {"api_key": api_key}
+            integration.integration_settings = {
+                "account_id": account_info.get("id"),
+                "business_profile": account_info.get("business_profile", {}),
+            }
+            integration.is_active = True
             integration.save()
 
-        return JsonResponse(
-            {
-                "status": "success",
-                "message": "Stripe connected successfully",
-                "customer_id": organization.stripe_customer_id,
-            },
-            status=200,
-        )
-    except Exception as e:
-        logging.error(f"Error connecting Stripe: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"success": True, "account_id": account_info.get("id")})
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
 
 
 @login_required
 def get_notification_settings(request):
     try:
-        user_profile = request.user.userprofile
-        settings = user_profile.organization.notification_settings
-        return JsonResponse(
-            {
-                # Payment events
-                "notify_payment_success": settings.notify_payment_success,
-                "notify_payment_failure": settings.notify_payment_failure,
-                # Subscription events
-                "notify_subscription_created": settings.notify_subscription_created,
-                "notify_subscription_updated": settings.notify_subscription_updated,
-                "notify_subscription_canceled": settings.notify_subscription_canceled,
-                # Trial events
-                "notify_trial_ending": settings.notify_trial_ending,
-                "notify_trial_expired": settings.notify_trial_expired,
-                # Customer events
-                "notify_customer_updated": settings.notify_customer_updated,
-                "notify_signups": settings.notify_signups,
-                # Shopify events
-                "notify_shopify_order_created": settings.notify_shopify_order_created,
-                "notify_shopify_order_updated": settings.notify_shopify_order_updated,
-                "notify_shopify_order_paid": settings.notify_shopify_order_paid,
-            }
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+        settings_obj, created = NotificationSettings.objects.get_or_create(
+            organization=organization
         )
+
+        settings_data = {
+            "notify_payment_success": settings_obj.notify_payment_success,
+            "notify_payment_failure": settings_obj.notify_payment_failure,
+            "notify_subscription_created": settings_obj.notify_subscription_created,
+            "notify_subscription_updated": settings_obj.notify_subscription_updated,
+            "notify_subscription_canceled": settings_obj.notify_subscription_canceled,
+            "notify_trial_ending": settings_obj.notify_trial_ending,
+            "notify_trial_expired": settings_obj.notify_trial_expired,
+            "notify_customer_updated": settings_obj.notify_customer_updated,
+            "notify_signups": settings_obj.notify_signups,
+            "notify_shopify_order_created": settings_obj.notify_shopify_order_created,
+            "notify_shopify_order_updated": settings_obj.notify_shopify_order_updated,
+            "notify_shopify_order_paid": settings_obj.notify_shopify_order_paid,
+        }
+
+        return JsonResponse(settings_data)
+
     except UserProfile.DoesNotExist:
         return JsonResponse({"error": "User profile not found"}, status=404)
-    except NotificationSettings.DoesNotExist:
-        return JsonResponse({"error": "Notification settings not found"}, status=404)
     except Exception as e:
-        logger.error(f"Error getting notification settings: {str(e)}")
-        return JsonResponse({"error": "Internal server error"}, status=500)
-
-
-def _get_allowed_notification_fields():
-    """Get the set of allowed notification fields"""
-    return {
-        # Payment events
-        "notify_payment_success",
-        "notify_payment_failure",
-        # Subscription events
-        "notify_subscription_created",
-        "notify_subscription_updated",
-        "notify_subscription_canceled",
-        # Trial events
-        "notify_trial_ending",
-        "notify_trial_expired",
-        # Customer events
-        "notify_customer_updated",
-        "notify_signups",
-        # Shopify events
-        "notify_shopify_order_created",
-        "notify_shopify_order_updated",
-        "notify_shopify_order_paid",
-    }
-
-
-def _validate_and_update_field(settings, field_name, value, allowed_fields):
-    """Validate and update a single notification field"""
-    if field_name not in allowed_fields:
-        return {"error": f"Field '{field_name}' is not allowed to be updated"}
-
-    if not isinstance(value, bool):
-        return {"error": f"Field '{field_name}' must be a boolean value"}
-
-    setattr(settings, field_name, value)
-    return None  # No error
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @login_required
 def update_notification_settings(request):
     if request.method != "POST":
-        return JsonResponse({"error": "Method not allowed"}, status=405)
+        return JsonResponse({"error": "Invalid request method"}, status=405)
 
     try:
-        user_profile = request.user.userprofile
-        settings = user_profile.organization.notification_settings
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+        settings_obj, created = NotificationSettings.objects.get_or_create(
+            organization=organization
+        )
+
         data = json.loads(request.body)
-        allowed_fields = _get_allowed_notification_fields()
 
-        # Validate and update fields
-        updated_fields = []
-        for field_name, value in data.items():
-            error = _validate_and_update_field(
-                settings, field_name, value, allowed_fields
-            )
-            if error:
-                return JsonResponse(error, status=400)
-            updated_fields.append(field_name)
+        # Update settings
+        for field, value in data.items():
+            if hasattr(settings_obj, field) and isinstance(value, bool):
+                setattr(settings_obj, field, value)
 
-        if updated_fields:
-            settings.save(update_fields=updated_fields)
+        settings_obj.save()
 
-        return JsonResponse({"status": "success", "updated_fields": updated_fields})
+        return JsonResponse({"success": True})
 
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON data"}, status=400)
     except UserProfile.DoesNotExist:
         return JsonResponse({"error": "User profile not found"}, status=404)
-    except NotificationSettings.DoesNotExist:
-        return JsonResponse({"error": "Notification settings not found"}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
     except Exception as e:
-        logger.error(f"Error updating notification settings: {str(e)}")
-        return JsonResponse({"error": "Internal server error"}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# === NEW USER FLOW VIEWS ===
+
+def landing(request):
+    """Landing page for new users"""
+    if request.user.is_authenticated:
+        return redirect("core:dashboard")
+    return render(request, "core/landing.html.j2")
+
+
+@login_required
+def dashboard(request):
+    """Main dashboard for authenticated users"""
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+
+        # Get organization's integrations
+        integrations = Integration.objects.filter(organization=organization, is_active=True)
+
+        context = {
+            "organization": organization,
+            "integrations": integrations,
+            "user_profile": user_profile,
+        }
+        return render(request, "core/dashboard.html.j2", context)
+
+    except UserProfile.DoesNotExist:
+        # User doesn't have a profile yet - redirect to organization creation
+        return redirect("core:create_organization")
+
+
+def select_plan(request):
+    """Plan selection page"""
+    if request.method == "POST":
+        selected_plan = request.POST.get("plan")
+        if selected_plan in ["trial", "basic", "pro", "enterprise"]:
+            request.session["selected_plan"] = selected_plan
+            return redirect("core:plan_selected")
+
+    plans = [
+        {
+            "name": "trial",
+            "display_name": "14-Day Trial",
+            "price": "Free",
+            "features": ["Up to 1,000 notifications", "Basic integrations", "Email support"],
+        },
+        {
+            "name": "basic",
+            "display_name": "Basic Plan",
+            "price": "$29/month",
+            "features": ["Up to 10,000 notifications", "All integrations", "Priority support"],
+        },
+        {
+            "name": "pro",
+            "display_name": "Pro Plan",
+            "price": "$99/month",
+            "features": ["Up to 100,000 notifications", "Advanced analytics", "Phone support"],
+        },
+        {
+            "name": "enterprise",
+            "display_name": "Enterprise Plan",
+            "price": "$299/month",
+            "features": ["Unlimited notifications", "Custom integrations", "Dedicated support"],
+        },
+    ]
+
+    return render(request, "core/select_plan.html.j2", {"plans": plans})
+
+
+def plan_selected(request):
+    """Plan confirmation page"""
+    selected_plan = request.session.get("selected_plan")
+    if not selected_plan:
+        return redirect("core:select_plan")
+
+    return render(request, "core/plan_selected.html.j2", {"selected_plan": selected_plan})
+
+
+@login_required
+def create_organization(request):
+    """Organization creation page"""
+    if request.method == "POST":
+        name = request.POST.get("name")
+        shop_domain = request.POST.get("shop_domain")
+        selected_plan = request.session.get("selected_plan", "trial")
+
+        if name:
+            # Create organization
+            organization = Organization.objects.create(
+                name=name,
+                shop_domain=shop_domain or "",  # Allow empty domain
+                subscription_plan=selected_plan,
+            )
+
+            # Create user profile
+            UserProfile.objects.create(
+                user=request.user,
+                organization=organization,
+                slack_user_id="",  # Will be set when connecting Slack
+            )
+
+            messages.success(request, f"Organization '{name}' created successfully!")
+            return redirect("core:dashboard")
+
+    return render(request, "core/create_organization.html.j2")
+
+
+@login_required
+def organization_settings(request):
+    """Organization settings page"""
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+
+        if request.method == "POST":
+            organization.name = request.POST.get("name", organization.name)
+            organization.shop_domain = request.POST.get("shop_domain", organization.shop_domain)
+            organization.save()
+            messages.success(request, "Organization settings updated!")
+            return redirect("core:organization_settings")
+
+        context = {"organization": organization}
+        return render(request, "core/organization_settings.html.j2", context)
+
+    except UserProfile.DoesNotExist:
+        return redirect("core:create_organization")
+
+
+@login_required
+def integrations(request):
+    """Integrations overview page"""
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+
+        # Get current integrations
+        current_integrations = Integration.objects.filter(organization=organization, is_active=True)
+
+        # Available integrations
+        available_integrations = [
+            {
+                "type": "slack_notifications",
+                "name": "Slack Notifications",
+                "description": "Send notifications to your Slack workspace",
+                "connected": current_integrations.filter(integration_type="slack_notifications").exists(),
+            },
+            {
+                "type": "shopify",
+                "name": "Shopify",
+                "description": "Receive webhooks from your Shopify store",
+                "connected": current_integrations.filter(integration_type="shopify").exists(),
+            },
+            {
+                "type": "stripe_customer",
+                "name": "Stripe Payments",
+                "description": "Receive customer payment webhooks",
+                "connected": current_integrations.filter(integration_type="stripe_customer").exists(),
+            },
+        ]
+
+        context = {
+            "organization": organization,
+            "available_integrations": available_integrations,
+            "current_integrations": current_integrations,
+        }
+        return render(request, "core/integrations.html.j2", context)
+
+    except UserProfile.DoesNotExist:
+        return redirect("core:create_organization")
+
+
+@login_required
+def integrate_slack(request):
+    """Start Slack integration flow"""
+    return redirect("core:slack_connect")
+
+
+@login_required
+def integrate_shopify(request):
+    """Shopify integration setup page"""
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+
+        context = {"organization": organization}
+        return render(request, "core/integrate_shopify.html.j2", context)
+
+    except UserProfile.DoesNotExist:
+        return redirect("core:create_organization")

@@ -1,0 +1,276 @@
+{% extends "core/base.html.j2" %}
+
+{% block title %}Shopify Integration - {{ organization.name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center">
+                <a href="{% url 'core:integrations' %}"
+                   class="mr-4 text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </a>
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
+                        <svg class="w-8 h-8 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M15.337 1.317c-.133-.077-.266-.125-.42-.144-.036-.006-.072-.006-.108-.012-.072-.018-.144-.024-.216-.024-.265 0-.516.054-.75.152-.012.006-.024.006-.036.012C13.452.979 13.141.656 12.758.346c-.6-.48-1.32-.72-2.004-.72-.024 0-.054 0-.078.006-.048-.048-.102-.096-.162-.138C9.984-.75 9.348-1.017 8.628-1.017c-1.242 0-2.628.768-3.702 2.064C3.882 2.547 3.318 4.146 3.156 6.066L.306 6.906c-.906.264-1.242.36-1.398.786-.138.384-.996 7.572-1.098 8.334l.006.006 11.076 2.046c.012-.006.024-.006.036-.012l5.718-1.254s.012-.006.018-.012l.006-.006c.024-.012.048-.03.072-.048l.036-.024c.018-.018.036-.036.048-.054.018-.024.036-.048.048-.072.012-.024.018-.048.024-.078.006-.024.006-.048.006-.072v-.012c0-.018-.006-.036-.006-.054l-1.632-13.098c-.054-.408-.192-.672-.426-.804zM8.628-.42c.426 0 .816.156 1.146.402.102.078.192.162.276.252-.42.198-.876.432-1.38.714-.984.552-2.118 1.302-3.186 2.292C5.106 4.422 4.746 5.862 4.686 7.518L2.154 8.226c.396-3.456 2.064-5.994 3.552-7.032.546-.384 1.188-.606 1.902-.606h.02zm1.65.924c.318-.168.618-.318.912-.456.228-.108.456-.204.684-.294.132.168.258.348.384.546.318.504.576 1.044.768 1.596.204.594.348 1.2.426 1.794l-3.078.876c-.012-1.572-.324-2.766-.696-3.612-.234-.516-.462-.936-.642-1.254.084-.066.168-.132.252-.198zm2.718-1.2c.132-.048.264-.09.396-.126.126-.036.252-.066.378-.09-.318.252-.636.546-.948.882-.312.336-.612.708-.894 1.11-.282.402-.546.84-.78 1.314-.234.474-.438.978-.606 1.524l-3.078.876c-.072-.456-.186-.912-.336-1.356-.15-.444-.342-.876-.576-1.284-.234-.408-.516-.798-.846-1.152-.33-.354-.708-.672-1.128-.942.132-.156.276-.306.426-.45.372-.354.78-.678 1.224-.942.444-.264.924-.474 1.422-.636.498-.162 1.014-.276 1.536-.348.522-.072 1.044-.09 1.548-.072.504.018.996.078 1.464.186.468.108.918.264 1.35.468-.144.054-.288.114-.432.18zm7.116 1.764c-.144-.84-.426-1.536-.822-2.064-.396-.528-.912-.816-1.512-.816-.006 0-.018 0-.024 0-.6.006-1.188.306-1.734.822-.546.516-1.032 1.236-1.434 2.106-.402.87-.714 1.872-.918 2.958-.204 1.086-.294 2.244-.258 3.396l-3.078.876c-.048-.744-.042-1.482.018-2.202.06-.72.186-1.422.378-2.088.192-.666.45-1.296.774-1.872.324-.576.714-1.086 1.164-1.512.45-.426.96-.756 1.524-.972.564-.216 1.182-.312 1.836-.276.654.036 1.35.228 2.088.576z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900">Connect Shopify</h1>
+                        <p class="mt-2 text-sm text-gray-600">Receive webhooks from your Shopify store</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mb-6 p-4 rounded-md {% if message.tags == 'error' %}bg-red-50 border border-red-200{% else %}bg-green-50 border border-green-200{% endif %}">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            {% if message.tags == 'error' %}
+                                <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                                </svg>
+                            {% else %}
+                                <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                </svg>
+                            {% endif %}
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm {% if message.tags == 'error' %}text-red-700{% else %}text-green-700{% endif %}">
+                                {{ message }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- What This Integration Does -->
+        <div class="bg-white shadow rounded-lg mb-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">What This Integration Does</h2>
+            </div>
+            <div class="px-6 py-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-sm font-medium text-gray-900">Real-time Notifications</h3>
+                        <p class="mt-1 text-sm text-gray-500">Get instant alerts when customers place orders</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-sm font-medium text-gray-900">Order Analytics</h3>
+                        <p class="mt-1 text-sm text-gray-500">Track sales performance and customer behavior</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-sm font-medium text-gray-900">Automation Ready</h3>
+                        <p class="mt-1 text-sm text-gray-500">Trigger workflows based on store events</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Instructions -->
+        <div class="bg-white shadow rounded-lg mb-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Setup Instructions</h2>
+                <p class="mt-1 text-sm text-gray-500">Follow these steps to connect your Shopify store</p>
+            </div>
+            <div class="px-6 py-6">
+                <div class="space-y-6">
+                    <!-- Step 1 -->
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium text-primary-600">1</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-medium text-gray-900">Access Your Shopify Admin</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                Log into your Shopify admin panel and navigate to
+                                <strong>Settings → Notifications → Webhooks</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium text-primary-600">2</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-medium text-gray-900">Add Webhook Endpoint</h3>
+                            <p class="mt-1 text-sm text-gray-600 mb-3">
+                                Click "Create webhook" and use this URL for your endpoint:
+                            </p>
+                            <div class="bg-gray-50 border border-gray-200 rounded-md p-3">
+                                <div class="flex items-center justify-between">
+                                    <code class="text-sm text-gray-800 break-all">
+                                        http://localhost/webhook/customer/{{ organization.uuid }}/shopify/
+                                    </code>
+                                    <button type="button" onclick="copyToClipboard('http://localhost/webhook/customer/{{ organization.uuid }}/shopify/')"
+                                            class="ml-2 flex-shrink-0 inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-xs text-gray-500">
+                                ⚠️ <strong>Important:</strong> Replace <code>localhost</code> with your actual domain when deploying to production
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium text-primary-600">3</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-medium text-gray-900">Configure Events</h3>
+                            <p class="mt-1 text-sm text-gray-600 mb-3">
+                                Select the events you want to receive notifications for:
+                            </p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="text-sm text-gray-700">Order created</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="text-sm text-gray-700">Order paid</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="text-sm text-gray-700">Order cancelled</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="text-sm text-gray-700">Order fulfilled</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium text-primary-600">4</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-medium text-gray-900">Set Format to JSON</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                Make sure the webhook format is set to <strong>JSON</strong> for proper processing.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Step 5 -->
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                <span class="text-sm font-medium text-primary-600">5</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-medium text-gray-900">Test the Connection</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                Create a test order in your Shopify store to verify the webhooks are working correctly.
+                                Check your notification dashboard to confirm you're receiving events.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Troubleshooting -->
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-yellow-800">Troubleshooting Tips</h3>
+                    <div class="mt-2 text-sm text-yellow-700">
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><strong>Webhook not receiving data?</strong> Check that your Shopify webhook URL is exactly as shown above</li>
+                            <li><strong>Invalid URL error?</strong> Make sure you're using your production domain instead of localhost</li>
+                            <li><strong>HTTP errors?</strong> Verify your webhook endpoint is publicly accessible</li>
+                            <li><strong>Still having issues?</strong> Check Shopify's webhook delivery logs in your admin panel</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex justify-between">
+            <a href="{% url 'core:integrations' %}"
+               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition duration-150 ease-in-out">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back to Integrations
+            </a>
+
+            <a href="{% url 'core:dashboard' %}"
+               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition duration-150 ease-in-out">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Complete Setup
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Could add a toast notification here
+        alert('Webhook URL copied to clipboard!');
+    });
+}
+</script>
+{% endblock %}

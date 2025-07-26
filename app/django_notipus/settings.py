@@ -42,6 +42,17 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
+
+    # Third-party apps
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.slack",
+    "allauth.socialaccount.providers.shopify",
+    "django_extensions",
+
+    # Local apps
     "webhooks",
     "core",
 ]
@@ -54,6 +65,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "django_notipus.urls"
@@ -61,7 +73,7 @@ ROOT_URLCONF = "django_notipus.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "core" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -70,12 +82,72 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],
+            "debug": True,
         },
     },
 ]
 
 WSGI_APPLICATION = "django_notipus.wsgi.application"
 
+# Authentication configuration
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# Django-allauth configuration
+SITE_ID = 1
+
+# Email configuration
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+
+# SMTP settings for production (when EMAIL_BACKEND is smtp)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@notipus.com')
+
+# Email and verification
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
+
+# Login methods (replaces ACCOUNT_AUTHENTICATION_METHOD = "username_email")
+ACCOUNT_LOGIN_METHODS = {'username', 'email'}
+
+# Signup fields (replaces ACCOUNT_EMAIL_REQUIRED = True and ACCOUNT_USERNAME_REQUIRED = True)
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+
+# Rate limiting (replaces ACCOUNT_LOGIN_ATTEMPTS_LIMIT = 5 and ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT = 300)
+ACCOUNT_RATE_LIMITS = {'login_failed': '5/300s'}
+
+# Session and logout settings
+ACCOUNT_LOGOUT_ON_GET = True
+ACCOUNT_SESSION_REMEMBER = True
+
+# Login/logout URLs
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/"
+
+# Social account providers
+SOCIALACCOUNT_PROVIDERS = {
+    "slack": {
+        "APP": {
+            "client_id": os.environ.get("SLACK_CLIENT_ID", ""),
+            "secret": os.environ.get("SLACK_CLIENT_SECRET", ""),
+        },
+        "SCOPE": ["openid", "profile", "email"],
+        "AUTH_PARAMS": {"approval_prompt": "force"},
+    },
+    "shopify": {
+        "APP": {
+            "client_id": os.environ.get("SHOPIFY_CLIENT_ID", ""),
+            "secret": os.environ.get("SHOPIFY_CLIENT_SECRET", ""),
+        },
+        "SCOPE": ["read_orders", "read_products", "read_customers"],
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -138,6 +210,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
@@ -156,6 +230,10 @@ LOGGING = {
         "webhooks": {
             "handlers": ["console"],
             "level": "INFO",
+        },
+        "django.contrib.staticfiles": {
+            "handlers": ["console"],
+            "level": "ERROR",  # Silence static file duplicate warnings
         },
     },
 }
@@ -183,6 +261,7 @@ SLACK_CLIENT = None
 SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", "")
 SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
 SLACK_REDIRECT_URI = os.environ.get("SLACK_REDIRECT_URI", "")
+SLACK_CONNECT_REDIRECT_URI = os.environ.get("SLACK_CONNECT_REDIRECT_URI", "")
 
 SLACK_CLIENT_BOT_ID = os.environ.get("SLACK_CLIENT_BOT_ID", "")
 SLACK_CLIENT_BOT_SECRET = os.environ.get("SLACK_CLIENT_BOT_SECRET", "")
