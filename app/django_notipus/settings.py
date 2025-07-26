@@ -334,7 +334,8 @@ LOGGING = {
 
 # Provider configurations
 # Note: Shopify configurations removed - now handled per-tenant via Integration model
-# Individual organizations configure their own Shopify credentials through the web interface
+# Individual organizations configure their own Shopify credentials through the
+# web interface
 
 # Slack OAuth configuration (global for app-level authentication)
 # Note: Individual Slack webhooks are configured per-tenant via Integration model

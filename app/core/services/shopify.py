@@ -76,7 +76,9 @@ class ShopifyAPI:
             return None
 
     @classmethod
-    def get_shop_info(cls, shop_domain: str, access_token: str) -> Optional[Dict[str, str]]:
+    def get_shop_info(
+        cls, shop_domain: str, access_token: str
+    ) -> Optional[Dict[str, str]]:
         """
         Get comprehensive shop information from Shopify API.
 
@@ -115,7 +117,9 @@ class ShopifyAPI:
             return None
 
     @classmethod
-    def get_customer(cls, customer_id: str, shop_domain: str, access_token: str) -> Optional[Dict]:
+    def get_customer(
+        cls, customer_id: str, shop_domain: str, access_token: str
+    ) -> Optional[Dict]:
         """
         Retrieve customer information by ID.
 
@@ -157,7 +161,9 @@ class ShopifyAPI:
             return None
 
     @classmethod
-    def get_order(cls, order_id: str, shop_domain: str, access_token: str) -> Optional[Dict]:
+    def get_order(
+        cls, order_id: str, shop_domain: str, access_token: str
+    ) -> Optional[Dict]:
         """
         Retrieve order information by ID.
 

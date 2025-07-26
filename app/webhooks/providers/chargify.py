@@ -123,9 +123,13 @@ class ChargifyProvider(PaymentProvider):
     def validate_webhook(self, request: HttpRequest) -> bool:
         """Validate webhook signature and timestamp"""
         try:
-            # For development/testing: allow bypassing validation when webhook secret is empty
+            # For development/testing: allow bypassing validation when webhook
+            # secret is empty
             if not self.webhook_secret:
-                logger.info("Webhook secret not configured - bypassing validation for development")
+                logger.info(
+                    "Webhook secret not configured - bypassing validation for "
+                    "development"
+                )
                 return True
 
             # Validate timestamp first

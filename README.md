@@ -28,19 +28,18 @@ Build the necessary Docker containers for the project:
 docker-compose build
 ```
 
-3. Create the .env File
-Create a .env file in the root directory to store environment variables. Below is a template for reference:
-```
-# Django configuration
-SECRET_DJANGO_KEY=your-secure-secret-key-here
-DEBUG=True
+3. Set Environment Variables
+The application reads configuration from environment variables. Set these before running:
+```bash
+export SECRET_DJANGO_KEY=your-secure-secret-key-here
+export DEBUG=True
 
 # Notipus billing (for subscription revenue)
-NOTIPUS_STRIPE_SECRET_KEY=sk_test_your_stripe_key
-NOTIPUS_STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+export NOTIPUS_STRIPE_SECRET_KEY=sk_test_your_stripe_key
+export NOTIPUS_STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
 
 # Optional: Override other settings
-DB_PASSWORD=secure_db_password
+export DB_PASSWORD=secure_db_password
 ```
 Note: Webhook secrets for customer integrations are now managed per-tenant through the web interface.
 
@@ -78,8 +77,13 @@ cd notipus
 poetry install
 ```
 
-3. Environment Configuration
-See the main installation section above for environment variable configuration. Webhook secrets for customer integrations are managed per-tenant through the application interface.
+3. Set Environment Variables
+```bash
+export SECRET_DJANGO_KEY=your-secure-secret-key-here
+export DEBUG=True
+# Add other required environment variables as needed
+```
+Webhook secrets for customer integrations are managed per-tenant through the application interface.
 
 ## Development
 
