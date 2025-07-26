@@ -8,33 +8,57 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .exceptions import (
-    WebhookError,
-    WebhookSignatureError,
-    create_error_response,
-    create_success_response,
-)
+from core.models import Integration, Organization
+from .exceptions import WebhookError, WebhookSignatureError
+from .services.rate_limiter import rate_limiter, RateLimitException
 
 logger = logging.getLogger(__name__)
 
 
-@require_http_methods(["GET"])
-def health_check(request: HttpRequest) -> JsonResponse:
-    """Health check endpoint for webhook service"""
-    try:
-        if settings.SLACK_CLIENT:
-            settings.SLACK_CLIENT.send_message({"text": "health_check"})
-        return JsonResponse(create_success_response("Health check passed"))
-    except Exception as e:
-        error_response = create_error_response(e, 500)
-        return JsonResponse(error_response, status=500)
+def create_success_response(message: str) -> dict:
+    """Create standardized success response"""
+    return {"status": "success", "message": message}
+
+
+def create_error_response(error: Exception, status_code: int = 500) -> dict:
+    """Create standardized error response"""
+    return {
+        "status": "error",
+        "error": type(error).__name__,
+        "message": str(error),
+        "code": status_code,
+    }
 
 
 def _process_webhook(
-    request: HttpRequest, provider: Any, provider_name: str
+    request: HttpRequest, provider: Any, provider_name: str, organization: Organization = None
 ) -> JsonResponse:
-    """Common webhook processing logic with standardized error handling"""
+    """Common webhook processing logic with standardized error handling and rate limiting"""
     try:
+        # Apply rate limiting if organization is provided
+        rate_limit_info = None
+        if organization:
+            try:
+                rate_limit_info = rate_limiter.enforce_rate_limit(organization)
+                logger.info(f"Rate limit check passed for org {organization.uuid}: {rate_limit_info['current_usage']}/{rate_limit_info['limit']}")
+            except RateLimitException as e:
+                logger.warning(f"Rate limit exceeded for org {organization.uuid}: {str(e)}")
+                error_response = create_error_response(e, 429)
+                response = JsonResponse(error_response, status=429)
+
+                # Add rate limit headers
+                rate_limit_headers = rate_limiter.get_rate_limit_headers({
+                    "limit": e.limit,
+                    "current_usage": e.current_usage,
+                    "remaining": 0,
+                    "reset_time": e.reset_time,
+                    "plan": organization.subscription_plan,
+                })
+                for header_name, header_value in rate_limit_headers.items():
+                    response[header_name] = header_value
+
+                return response
+
         # Validate webhook signature
         if not provider.validate_webhook(request):
             raise WebhookSignatureError()
@@ -42,9 +66,15 @@ def _process_webhook(
         # Parse webhook data
         event_data = provider.parse_webhook(request)
         if not event_data:
-            return JsonResponse(
+            response = JsonResponse(
                 create_success_response("Test webhook received"), status=200
             )
+            # Add rate limit headers to successful responses
+            if rate_limit_info:
+                rate_limit_headers = rate_limiter.get_rate_limit_headers(rate_limit_info)
+                for header_name, header_value in rate_limit_headers.items():
+                    response[header_name] = header_value
+            return response
 
         # Get customer data
         customer_data = provider.get_customer_data(event_data["customer_id"])
@@ -57,10 +87,18 @@ def _process_webhook(
         # Send to Slack
         settings.SLACK_CLIENT.send_message(notification)
 
-        return JsonResponse(
+        response = JsonResponse(
             create_success_response(f"{provider_name} webhook processed successfully"),
             status=200,
         )
+
+        # Add rate limit headers to successful responses
+        if rate_limit_info:
+            rate_limit_headers = rate_limiter.get_rate_limit_headers(rate_limit_info)
+            for header_name, header_value in rate_limit_headers.items():
+                response[header_name] = header_value
+
+        return response
 
     except WebhookSignatureError as e:
         logger.warning(f"Invalid signature for {provider_name} webhook")
@@ -79,6 +117,13 @@ def _process_webhook(
 
 
 @csrf_exempt
+@require_http_methods(["GET"])
+def health_check(request: HttpRequest) -> JsonResponse:
+    """Health check endpoint"""
+    return JsonResponse({"status": "healthy", "service": "webhook-processor"})
+
+
+@csrf_exempt
 @require_http_methods(["POST"])
 def shopify_webhook(request: HttpRequest) -> JsonResponse:
     """Handle Shopify webhook requests"""
@@ -93,12 +138,14 @@ def shopify_webhook(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 def chargify_webhook(request: HttpRequest) -> JsonResponse:
-    """Handle Chargify webhook requests"""
+    """Handle Chargify/Maxio webhook requests"""
     logger.info(
-        "Processing Chargify webhook",
-        extra={"content_type": request.content_type, "headers": dict(request.headers)},
+        "Processing Chargify/Maxio webhook",
+        extra={
+            "http_method": request.method,
+            "content_type": request.content_type,
+        },
     )
-
     return _process_webhook(request, settings.CHARGIFY_PROVIDER, "chargify")
 
 
@@ -151,43 +198,33 @@ def ephemeral_webhook(request: HttpRequest) -> JsonResponse:
         return JsonResponse(error_response, status=500)
 
 
-# === NEW CUSTOMER PAYMENT WEBHOOKS (organization-specific) ===
-
-def _get_organization_integration(organization_uuid: uuid.UUID, integration_type: str):
-    """Get organization integration for customer webhooks"""
-    from core.models import Integration, Organization
-
-    organization = get_object_or_404(Organization, uuid=organization_uuid)
-    integration = get_object_or_404(
-        Integration,
-        organization=organization,
-        integration_type=integration_type,
-        is_active=True
-    )
-    return organization, integration
-
-
-def _create_organization_provider(integration, provider_class):
-    """Create provider instance with organization-specific credentials"""
-    return provider_class(webhook_secret=integration.webhook_secret)
-
+# === CUSTOMER-SPECIFIC WEBHOOKS ===
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def customer_shopify_webhook(request: HttpRequest, organization_uuid: uuid.UUID) -> JsonResponse:
-    """Handle Shopify customer payment webhooks for a specific organization"""
+def customer_shopify_webhook(request: HttpRequest, organization_uuid: str) -> JsonResponse:
+    """Handle customer-specific Shopify webhook requests with rate limiting"""
     logger.info(
-        "Processing customer Shopify webhook",
-        extra={"organization_uuid": str(organization_uuid), "content_type": request.content_type}
+        f"Processing customer Shopify webhook for organization {organization_uuid}",
+        extra={"content_type": request.content_type, "organization_uuid": organization_uuid},
     )
 
     try:
-        organization, integration = _get_organization_integration(organization_uuid, "shopify")
+        # Get organization for rate limiting
+        organization = get_object_or_404(Organization, uuid=organization_uuid)
+
+        # Get organization's Shopify integration
+        integration = get_object_or_404(
+            Integration,
+            organization=organization,
+            integration_type="shopify",
+            is_active=True
+        )
 
         from .providers.shopify import ShopifyProvider
-        provider = _create_organization_provider(integration, ShopifyProvider)
+        provider = ShopifyProvider(webhook_secret=integration.webhook_secret)
 
-        return _process_webhook(request, provider, f"customer_shopify_{organization.id}")
+        return _process_webhook(request, provider, "customer_shopify", organization)
 
     except Exception as e:
         logger.error(f"Error in customer Shopify webhook: {str(e)}", exc_info=True)
@@ -197,43 +234,63 @@ def customer_shopify_webhook(request: HttpRequest, organization_uuid: uuid.UUID)
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def customer_chargify_webhook(request: HttpRequest, organization_uuid: uuid.UUID) -> JsonResponse:
-    """Handle Chargify customer payment webhooks for a specific organization"""
+def customer_chargify_webhook(request: HttpRequest, organization_uuid: str) -> JsonResponse:
+    """Handle customer-specific Chargify/Maxio webhook requests with rate limiting"""
     logger.info(
-        "Processing customer Chargify webhook",
-        extra={"organization_uuid": str(organization_uuid), "content_type": request.content_type}
+        f"Processing customer Chargify/Maxio webhook for organization {organization_uuid}",
+        extra={
+            "organization_uuid": organization_uuid,
+            "http_method": request.method,
+        },
     )
 
     try:
-        organization, integration = _get_organization_integration(organization_uuid, "chargify")
+        # Get organization
+        organization = Organization.objects.get(uuid=organization_uuid)
+
+        # Get organization's Chargify/Maxio integration
+        integration = Integration.objects.get(
+            organization=organization,
+            integration_type="chargify",
+            is_active=True
+        )
 
         from .providers.chargify import ChargifyProvider
-        provider = _create_organization_provider(integration, ChargifyProvider)
+        provider = ChargifyProvider(webhook_secret=integration.webhook_secret)
 
-        return _process_webhook(request, provider, f"customer_chargify_{organization.id}")
+        return _process_webhook(request, provider, "customer_chargify", organization)
 
     except Exception as e:
-        logger.error(f"Error in customer Chargify webhook: {str(e)}", exc_info=True)
+        logger.error(f"Error in customer Chargify/Maxio webhook: {str(e)}", exc_info=True)
         error_response = create_error_response(e, 500)
         return JsonResponse(error_response, status=500)
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def customer_stripe_webhook(request: HttpRequest, organization_uuid: uuid.UUID) -> JsonResponse:
-    """Handle Stripe customer payment webhooks for a specific organization"""
+def customer_stripe_webhook(request: HttpRequest, organization_uuid: str) -> JsonResponse:
+    """Handle customer-specific Stripe webhook requests with rate limiting"""
     logger.info(
-        "Processing customer Stripe webhook",
-        extra={"organization_uuid": str(organization_uuid), "content_type": request.content_type}
+        f"Processing customer Stripe webhook for organization {organization_uuid}",
+        extra={"content_type": request.content_type, "organization_uuid": organization_uuid},
     )
 
     try:
-        organization, integration = _get_organization_integration(organization_uuid, "stripe_customer")
+        # Get organization for rate limiting
+        organization = get_object_or_404(Organization, uuid=organization_uuid)
+
+        # Get organization's Stripe integration
+        integration = get_object_or_404(
+            Integration,
+            organization=organization,
+            integration_type="stripe_customer",
+            is_active=True
+        )
 
         from .providers.stripe import StripeProvider
-        provider = _create_organization_provider(integration, StripeProvider)
+        provider = StripeProvider(webhook_secret=integration.webhook_secret)
 
-        return _process_webhook(request, provider, f"customer_stripe_{organization.id}")
+        return _process_webhook(request, provider, "customer_stripe", organization)
 
     except Exception as e:
         logger.error(f"Error in customer Stripe webhook: {str(e)}", exc_info=True)

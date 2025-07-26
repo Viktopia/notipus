@@ -13,6 +13,15 @@ urlpatterns = [
     path("select-plan/", views.select_plan, name="select_plan"),
     path("plan/selected/", views.plan_selected, name="plan_selected"),
 
+    # Billing management
+    path("billing/", views.billing_dashboard, name="billing_dashboard"),
+    path("billing/upgrade/", views.upgrade_plan, name="upgrade_plan"),
+    path("billing/payment-methods/", views.payment_methods, name="payment_methods"),
+    path("billing/history/", views.billing_history, name="billing_history"),
+    path("billing/checkout/<str:plan_name>/", views.checkout, name="checkout"),
+    path("billing/checkout/success/", views.checkout_success, name="checkout_success"),
+    path("billing/checkout/cancel/", views.checkout_cancel, name="checkout_cancel"),
+
     # Organization management
     path("organization/create/", views.create_organization, name="create_organization"),
     path("organization/settings/", views.organization_settings, name="organization_settings"),
@@ -21,6 +30,7 @@ urlpatterns = [
     path("integrations/", views.integrations, name="integrations"),
     path("integrate/slack/", views.integrate_slack, name="integrate_slack"),
     path("integrate/shopify/", views.integrate_shopify, name="integrate_shopify"),
+    path("integrate/chargify/", views.integrate_chargify, name="integrate_chargify"),
 
     # Legacy API endpoints (working views)
     path("api/auth/slack/", views.slack_auth, name="slack_auth"),

@@ -2,13 +2,67 @@
 #
 # DEVELOPMENT:
 #   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
-#   (Uses development overrides from docker-compose.dev.yml)
 #
 # PRODUCTION:
 #   1. Copy this file to docker-compose.prod.yml
 #   2. Update environment variables for production
 #   3. Set proper secrets, database passwords, etc.
 #   4. docker-compose -f docker-compose.prod.yml up
+
+# YAML Anchors for reusable configurations
+x-common-variables: &common-variables
+  # Database
+  DB_HOST: db
+  DB_PORT: 5432
+  DB_NAME: notipus_dev
+  DB_USER: notipus_user
+  DB_PASSWORD: dev_password_123
+
+  # Redis
+  REDIS_URL: redis://redis:6379/0
+
+  # Django (development defaults)
+  SECRET_DJANGO_KEY: django-dev-key-not-for-production-use
+  DEBUG: "True"
+  ALLOWED_HOSTS: localhost,127.0.0.1,django,notipus_django
+
+  # Global Authentication (Notipus's OAuth apps)
+  SLACK_CLIENT_ID: your_slack_auth_client_id
+  SLACK_CLIENT_SECRET: your_slack_auth_client_secret
+  SLACK_REDIRECT_URI: http://localhost/accounts/slack/login/callback/
+  SLACK_CONNECT_REDIRECT_URI: http://localhost/api/connect/slack/callback/
+  SHOPIFY_CLIENT_ID: your_shopify_auth_client_id
+  SHOPIFY_CLIENT_SECRET: your_shopify_auth_client_secret
+  SHOPIFY_REDIRECT_URI: http://localhost/integrate/shopify/callback/
+
+  # Global Billing (Notipus's revenue)
+  NOTIPUS_STRIPE_SECRET_KEY: sk_test_notipus_billing_key
+  NOTIPUS_STRIPE_WEBHOOK_SECRET: whsec_notipus_billing_secret
+
+  # External Services
+  BRANDFETCH_API_KEY: dev_brandfetch_key
+  BRANDFETCH_BASE_URL: https://api.brandfetch.io/v2
+  DISABLE_BILLING: "True"
+
+x-django-service: &django-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment: *common-variables
+  networks:
+    - app_network
+  restart: unless-stopped
+
+x-app-dependencies: &app-dependencies
+  db:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
 
 services:
   db:
@@ -26,87 +80,46 @@ services:
       - app_network
     restart: unless-stopped
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD-SHELL", "pg_isready -U notipus_user -d notipus_dev"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  migration:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: notipus_migration
-    command: ["python", "manage.py", "migrate"]
-    environment: &django_env
-      # Database
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=notipus_dev
-      - DB_USER=notipus_user
-      - DB_PASSWORD=dev_password_123
-
-      # Django (development defaults)
-      - SECRET_DJANGO_KEY=django-dev-key-not-for-production-use
-      - DEBUG=True
-      - ALLOWED_HOSTS=localhost,127.0.0.1,django,notipus_django
-
-      # === GLOBAL AUTHENTICATION (Notipus's OAuth apps) ===
-      # For users logging into Notipus platform
-      - SLACK_CLIENT_ID=your_slack_auth_client_id
-      - SLACK_CLIENT_SECRET=your_slack_auth_client_secret
-      - SLACK_REDIRECT_URI=http://localhost/accounts/slack/login/callback/
-      - SLACK_CONNECT_REDIRECT_URI=http://localhost/api/connect/slack/callback/
-      - SHOPIFY_CLIENT_ID=your_shopify_auth_client_id
-      - SHOPIFY_CLIENT_SECRET=your_shopify_auth_client_secret
-      - SHOPIFY_REDIRECT_URI=http://localhost/integrate/shopify/callback/
-
-      # === GLOBAL BILLING (Notipus's revenue) ===
-      # For workspace owners paying Notipus
-      - NOTIPUS_STRIPE_SECRET_KEY=sk_test_notipus_billing_key
-      - NOTIPUS_STRIPE_WEBHOOK_SECRET=whsec_notipus_billing_secret
-
-      # === WORKSPACE-SPECIFIC INTEGRATIONS ===
-      # These are stored in Integration model per organization:
-      # - slack_notifications: Each workspace's Slack for receiving notifications
-      # - stripe_customer: Each workspace's Stripe for receiving customer payments
-      # - shopify: Each workspace's Shopify store
-      # - chargify: Each workspace's Chargify billing
-
-      # External Services
-      - BRANDFETCH_API_KEY=dev_brandfetch_key
-      - BRANDFETCH_BASE_URL=https://api.brandfetch.io/v2
-      - DISABLE_BILLING=True
-    depends_on:
-      db:
-        condition: service_healthy
+  redis:
+    image: redis:7-alpine
+    container_name: notipus_redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
     networks:
       - app_network
+    restart: unless-stopped
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "redis-cli", "ping"]
+
+  migration:
+    <<: *django-service
+    container_name: notipus_migration
+    command: ["python", "manage.py", "migrate"]
+    depends_on: *app-dependencies
     restart: "no"  # Migration should run once and exit
 
   django:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *django-service
     container_name: notipus_django
     command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "django_notipus.wsgi:application"]
-    environment: *django_env
     volumes:
       - static_volume:/app/staticfiles
     ports:
       - "8000:8000"
     depends_on:
+      <<: *app-dependencies
       migration:
         condition: service_completed_successfully
-      db:
-        condition: service_healthy
-    networks:
-      - app_network
-    restart: unless-stopped
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "python", "manage.py", "check"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   nginx:
     image: nginx:alpine
@@ -124,13 +137,13 @@ services:
       - app_network
     restart: unless-stopped
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "curl", "-f", "http://localhost/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
   static_volume:
     driver: local

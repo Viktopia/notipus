@@ -148,18 +148,36 @@
                     </svg>
                 </a>
 
-                <div class="flex items-center justify-between p-3 border border-gray-200 rounded-md">
+                <a href="{% url 'core:billing_dashboard' %}"
+                   class="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
                     <div class="flex items-center">
                         <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+                        </svg>
+                        <div>
+                            <div class="text-sm font-medium text-gray-900">Billing Dashboard</div>
+                            <div class="text-sm text-gray-500">View usage, invoices, and payment methods</div>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
+
+                <a href="{% url 'core:upgrade_plan' %}" class="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors duration-200">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
                         </svg>
                         <div>
                             <div class="text-sm font-medium text-gray-900">Upgrade Plan</div>
                             <div class="text-sm text-gray-500">Get more features and higher limits</div>
                         </div>
                     </div>
-                    <span class="text-sm text-gray-400">Coming soon</span>
-                </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
             </div>
         </div>
     </div>

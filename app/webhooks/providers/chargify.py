@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChargifyProvider(PaymentProvider):
-    """Chargify payment provider implementation"""
+    """Chargify (Maxio Advanced Billing) payment provider implementation"""
 
     EVENT_TYPE_MAPPING = {
         # Payment events

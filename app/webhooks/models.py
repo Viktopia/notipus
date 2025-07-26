@@ -33,7 +33,7 @@ class PaymentRecord(models.Model):
     chargify_transaction_id = models.CharField(max_length=255, blank=True, default="")
     stripe_payment_intent_id = models.CharField(max_length=255, blank=True, default="")
 
-    # Metadata and timestamps
+        # Metadata and timestamps
     metadata = models.JSONField(default=dict, blank=True)
     processed_at = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -87,7 +87,7 @@ class OrderRecord(models.Model):
         related_name="related_orders",
     )
 
-    # Metadata and timestamps
+        # Metadata and timestamps
     metadata = models.JSONField(default=dict, blank=True)
     order_date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)

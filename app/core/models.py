@@ -120,7 +120,7 @@ class Integration(models.Model):
         # Customer payment providers (organization-specific)
         ("stripe_customer", "Stripe Customer Payments"),
         ("shopify", "Shopify Ecommerce"),
-        ("chargify", "Chargify Billing"),
+        ("chargify", "Chargify / Maxio Advanced Billing"),
 
         # Notification integrations (organization-specific)
         ("slack_notifications", "Slack Notifications"),

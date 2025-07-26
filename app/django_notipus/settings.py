@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
+    "django.contrib.humanize",
 
     # Third-party apps
     "allauth",
@@ -163,6 +164,16 @@ DATABASES = {
     }
 }
 
+# Cache configuration for Redis
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        "KEY_PREFIX": "notipus",
+        "TIMEOUT": 300,  # Default timeout of 5 minutes
+    }
+}
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -229,12 +240,25 @@ LOGGING = {
     "loggers": {
         "webhooks": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": "DEBUG" if DEBUG else "INFO",
+        },
+        "core": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+        },
+        "django": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "WARNING",
         },
         "django.contrib.staticfiles": {
             "handlers": ["console"],
-            "level": "ERROR",  # Silence static file duplicate warnings
+            "level": "ERROR",  # Always silence static file duplicate warnings
         },
+    },
+    # Set root logger level based on DEBUG
+    "root": {
+        "handlers": ["console"],
+        "level": "DEBUG" if DEBUG else "INFO",
     },
 }
 

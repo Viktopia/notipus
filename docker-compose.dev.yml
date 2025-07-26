@@ -5,9 +5,6 @@
 services:
   # Override migration service for development
   migration:
-    # No specific overrides needed for migration in dev
-    environment:
-      - DEBUG=True
     volumes:
       - ./app:/app  # Live code reloading for migration files
 
@@ -16,18 +13,13 @@ services:
     # Use development server instead of gunicorn for auto-reload
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     environment:
-      # Override with development-specific settings
       - DEBUG=True
-      - DJANGO_DEBUG=True
-      - DJANGO_LOG_LEVEL=DEBUG
-      - ALLOWED_HOSTS=localhost,127.0.0.1,django,notipus_django
     # Enable live code reloading for development
     volumes:
       - ./app:/app
       - static_volume:/app/staticfiles
 
-  # Keep db healthcheck enabled since migration depends on it
-  # Only disable nginx healthcheck for faster startup
+  # Disable nginx healthcheck for faster development startup
   nginx:
     healthcheck:
       disable: true

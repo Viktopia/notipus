@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Notipus - Smart Webhook Notifications{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" type="text/css" href="{% static 'css/fontawesome-fonts.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/fontawesome.min.css' %}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -11,10 +14,28 @@
                 extend: {
                     colors: {
                         primary: {
-                            50: '#f0f9ff',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            700: '#1d4ed8',
+                            50: '#fef6f0',
+                            100: '#fde9d7',
+                            200: '#fad2ae',
+                            300: '#f7b47a',
+                            400: '#f39144',
+                            500: '#f05800',
+                            600: '#e14a00',
+                            700: '#bb3700',
+                            800: '#992c06',
+                            900: '#7c2507',
+                        },
+                        notipus: {
+                            50: '#fef7ee',
+                            100: '#feebc7',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            700: '#c2410c',
+                            800: '#9a3412',
+                            900: '#7c2d12',
                         }
                     }
                 }
@@ -31,8 +52,11 @@
                 <div class="flex justify-between h-16">
                     <div class="flex">
                         <div class="flex-shrink-0 flex items-center">
-                            <a href="/" class="text-2xl font-bold text-primary-600">
-                                Notipus
+                            <a href="/" class="flex items-center space-x-3">
+                                <img src="{% static 'img/notipus-logo.png' %}" alt="Notipus Logo" class="h-10 w-auto">
+                                <span class="text-2xl font-bold text-gray-900">
+                                    Notipus
+                                </span>
                             </a>
                         </div>
                     </div>
@@ -83,7 +107,7 @@
         <footer class="bg-white border-t border-gray-200 mt-12">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
                 <div class="text-center text-sm text-gray-500">
-                    <p>&copy; 2024 Notipus. All rights reserved.</p>
+                    <p>&copy; {% now "Y" %} Notipus, a <a href="https://studio.viktopia.io" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:text-primary-700 transition-colors duration-200">Viktopia Studio</a> project. All rights reserved.</p>
                 </div>
             </div>
         </footer>
