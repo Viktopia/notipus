@@ -18,6 +18,7 @@ class Organization(models.Model):
     An organization represents a tenant in our multi-tenant SaaS.
     Each organization has its own integrations, users, and settings.
     """
+
     STRIPE_PLANS = (
         ("trial", "14-Day Trial"),
         ("basic", "Basic Plan - $29/month"),
@@ -33,7 +34,9 @@ class Organization(models.Model):
     )
 
     # Basic fields
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    uuid = models.UUIDField(
+        default=uuid.uuid4, editable=False, unique=True, db_index=True
+    )
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     shop_domain = models.CharField(max_length=255, unique=True)
@@ -55,19 +58,21 @@ class Organization(models.Model):
     class Meta:
         app_label = "core"
 
+    def __str__(self):
+        return f"{self.name} ({self.shop_domain})"
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
             # Ensure uniqueness
             original_slug = self.slug
             counter = 1
-            while Organization.objects.filter(slug=self.slug).exclude(pk=self.pk).exists():
+            while (
+                Organization.objects.filter(slug=self.slug).exclude(pk=self.pk).exists()
+            ):
                 self.slug = f"{original_slug}-{counter}"
                 counter += 1
         super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.name} ({self.shop_domain})"
 
     @property
     def webhook_token(self):
@@ -90,6 +95,7 @@ class OrganizationUser(models.Model):
     Junction table for organization membership with roles.
     A user can belong to multiple organizations with different roles.
     """
+
     ROLE_CHOICES = (
         ("owner", "Owner"),
         ("admin", "Administrator"),
@@ -116,17 +122,19 @@ class Integration(models.Model):
     Integrations for organizations - now supports both customer payment providers
     and workspace-specific notification integrations.
     """
+
     INTEGRATION_TYPES = (
         # Customer payment providers (organization-specific)
         ("stripe_customer", "Stripe Customer Payments"),
         ("shopify", "Shopify Ecommerce"),
         ("chargify", "Chargify / Maxio Advanced Billing"),
-
         # Notification integrations (organization-specific)
         ("slack_notifications", "Slack Notifications"),
     )
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="integrations")
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="integrations"
+    )
     integration_type = models.CharField(max_length=50, choices=INTEGRATION_TYPES)
 
     # OAuth and authentication data
@@ -173,12 +181,15 @@ class GlobalBillingIntegration(models.Model):
     Global integrations for Notipus's own billing and authentication.
     These are not tied to any specific organization.
     """
+
     INTEGRATION_TYPES = (
         ("stripe_billing", "Stripe Billing (Notipus Revenue)"),
         ("slack_auth", "Slack Authentication (Global)"),
     )
 
-    integration_type = models.CharField(max_length=50, choices=INTEGRATION_TYPES, unique=True)
+    integration_type = models.CharField(
+        max_length=50, choices=INTEGRATION_TYPES, unique=True
+    )
 
     # OAuth and authentication data
     oauth_credentials = models.JSONField(default=dict, blank=True)
@@ -205,10 +216,7 @@ def validate_domain(value):
     """Validate domain format and return cleaned domain"""
     # Remove protocol if present and clean
     domain = (
-        value.replace("https://", "")
-        .replace("http://", "")
-        .replace("www.", "")
-        .lower()
+        value.replace("https://", "").replace("http://", "").replace("www.", "").lower()
     )
 
     # Validate format - must have at least one dot for TLD
@@ -226,17 +234,17 @@ class Company(models.Model):
     name = models.CharField(max_length=255, unique=True)
     domain = models.CharField(max_length=255, unique=True, validators=[validate_domain])
 
-    def clean(self):
-        # Clean and validate domain
-        if self.domain:
-            self.domain = validate_domain(self.domain)
+    def __str__(self):
+        return f"{self.name} ({self.domain})"
 
     def save(self, *args, **kwargs):
         self.full_clean()  # This calls clean() and validators
         super().save(*args, **kwargs)
 
-    def __str__(self):
-        return f"{self.name} ({self.domain})"
+    def clean(self):
+        # Clean and validate domain
+        if self.domain:
+            self.domain = validate_domain(self.domain)
 
 
 class UsageLimit(models.Model):
@@ -298,11 +306,14 @@ class Plan(models.Model):
     """
     Plan definitions with usage limits for organizations.
     """
+
     name = models.CharField(max_length=50, unique=True)
     display_name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     price_monthly = models.DecimalField(max_digits=10, decimal_places=2)
-    price_yearly = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    price_yearly = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
 
     # Limits
     max_users = models.IntegerField(default=1)

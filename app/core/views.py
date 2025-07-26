@@ -169,7 +169,7 @@ def slack_connect_callback(request):
                 "team_id": data["team"]["id"],
             },
             "is_active": True,
-        }
+        },
     )
 
     if not created:
@@ -197,7 +197,9 @@ def connect_shopify(request):
         shop_url = data.get("shop_url")
 
         if not access_token or not shop_url:
-            return JsonResponse({"error": "Missing access token or shop URL"}, status=400)
+            return JsonResponse(
+                {"error": "Missing access token or shop URL"}, status=400
+            )
 
         # Get user's organization
         if not request.user.is_authenticated:
@@ -227,7 +229,7 @@ def connect_shopify(request):
                     "shop_domain": shop_domain,
                 },
                 "is_active": True,
-            }
+            },
         )
 
         if not created:
@@ -281,7 +283,7 @@ def connect_stripe(request):
                     "business_profile": account_info.get("business_profile", {}),
                 },
                 "is_active": True,
-            }
+            },
         )
 
         if not created:
@@ -364,6 +366,7 @@ def update_notification_settings(request):
 
 # === NEW USER FLOW VIEWS ===
 
+
 def landing(request):
     """Landing page for new users"""
     if request.user.is_authenticated:
@@ -379,7 +382,9 @@ def dashboard(request):
         organization = user_profile.organization
 
         # Get organization's integrations
-        integrations = Integration.objects.filter(organization=organization, is_active=True)
+        integrations = Integration.objects.filter(
+            organization=organization, is_active=True
+        )
 
         # Check which integrations are active
         has_slack = integrations.filter(integration_type="slack_notifications").exists()
@@ -395,26 +400,29 @@ def dashboard(request):
         for record in recent_activity_raw:
             try:
                 # Parse timestamp
-                if 'timestamp' in record:
+                if "timestamp" in record:
                     from datetime import datetime
-                    timestamp = datetime.fromtimestamp(record['timestamp'], tz=timezone.get_current_timezone())
+
+                    timestamp = datetime.fromtimestamp(
+                        record["timestamp"], tz=timezone.get_current_timezone()
+                    )
                 else:
                     timestamp = timezone.now()
 
                 activity_item = {
-                    'type': record.get('type'),
-                    'provider': record.get('provider'),
-                    'status': record.get('status'),
-                    'amount': record.get('amount'),
-                    'currency': record.get('currency'),
-                    'timestamp': timestamp,
-                    'external_id': record.get('external_id'),
-                    'customer_id': record.get('customer_id'),
+                    "type": record.get("type"),
+                    "provider": record.get("provider"),
+                    "status": record.get("status"),
+                    "amount": record.get("amount"),
+                    "currency": record.get("currency"),
+                    "timestamp": timestamp,
+                    "external_id": record.get("external_id"),
+                    "customer_id": record.get("customer_id"),
                 }
 
                 # Add type-specific fields
-                if record.get('type') == 'order':
-                    activity_item['order_number'] = record.get('order_number', '')
+                if record.get("type") == "order":
+                    activity_item["order_number"] = record.get("order_number", "")
 
                 recent_activity.append(activity_item)
 
@@ -427,14 +435,16 @@ def dashboard(request):
         usage_stats = rate_limiter.get_usage_stats(organization, months=3)
 
         # Calculate usage percentage
-        current_usage = rate_limit_info.get('current_usage', 0)
-        limit = rate_limit_info.get('limit', 1000)
-        usage_percentage = (current_usage / limit * 100)
+        current_usage = rate_limit_info.get("current_usage", 0)
+        limit = rate_limit_info.get("limit", 1000)
+        usage_percentage = current_usage / limit * 100
 
         # Calculate trial days remaining
         trial_days_remaining = 0
         if organization.subscription_status == "trial" and organization.trial_end_date:
-            trial_days_remaining = max(0, (organization.trial_end_date - timezone.now()).days)
+            trial_days_remaining = max(
+                0, (organization.trial_end_date - timezone.now()).days
+            )
 
         context = {
             "organization": organization,
@@ -469,7 +479,11 @@ def select_plan(request):
             "name": "trial",
             "display_name": "14-Day Trial",
             "price": "Free",
-            "features": ["Up to 1,000 notifications", "Basic integrations", "Email support"],
+            "features": [
+                "Up to 1,000 notifications",
+                "Basic integrations",
+                "Email support",
+            ],
         },
         {
             "name": "basic",
@@ -481,13 +495,21 @@ def select_plan(request):
             "name": "pro",
             "display_name": "Pro Plan",
             "price": "$99/month",
-            "features": ["Up to 100,000 events/month", "All integrations", "Priority support"],
+            "features": [
+                "Up to 100,000 events/month",
+                "All integrations",
+                "Priority support",
+            ],
         },
         {
             "name": "enterprise",
             "display_name": "Enterprise Plan",
             "price": "$299/month",
-            "features": ["1,000,000 events/month", "Custom integrations", "Dedicated support"],
+            "features": [
+                "1,000,000 events/month",
+                "Custom integrations",
+                "Dedicated support",
+            ],
         },
     ]
 
@@ -500,7 +522,9 @@ def plan_selected(request):
     if not selected_plan:
         return redirect("core:select_plan")
 
-    return render(request, "core/plan_selected.html.j2", {"selected_plan": selected_plan})
+    return render(
+        request, "core/plan_selected.html.j2", {"selected_plan": selected_plan}
+    )
 
 
 @login_required
@@ -541,7 +565,9 @@ def organization_settings(request):
 
         if request.method == "POST":
             organization.name = request.POST.get("name", organization.name)
-            organization.shop_domain = request.POST.get("shop_domain", organization.shop_domain)
+            organization.shop_domain = request.POST.get(
+                "shop_domain", organization.shop_domain
+            )
             organization.save()
             messages.success(request, "Organization settings updated!")
             return redirect("core:organization_settings")
@@ -561,40 +587,59 @@ def integrations(request):
         organization = user_profile.organization
 
         # Get current integrations
-        current_integrations = Integration.objects.filter(organization=organization, is_active=True)
+        current_integrations = Integration.objects.filter(
+            organization=organization, is_active=True
+        )
 
         # Event Sources - Services that send webhooks TO Notipus
         event_sources = [
             {
                 "id": "shopify",
                 "name": "Shopify",
-                "description": "E-commerce events from your Shopify store (orders, payments, customers)",
-                "connected": current_integrations.filter(integration_type="shopify").exists(),
+                "description": (
+                    "E-commerce events from your Shopify store "
+                    "(orders, payments, customers)"
+                ),
+                "connected": current_integrations.filter(
+                    integration_type="shopify"
+                ).exists(),
                 "category": "E-commerce",
             },
             {
                 "id": "chargify",
                 "name": "Chargify / Maxio Advanced Billing",
-                "description": "Subscription billing events (renewals, cancellations, upgrades)",
-                "connected": current_integrations.filter(integration_type="chargify").exists(),
+                "description": (
+                    "Subscription billing events " "(renewals, cancellations, upgrades)"
+                ),
+                "connected": current_integrations.filter(
+                    integration_type="chargify"
+                ).exists(),
                 "category": "Billing",
             },
             {
                 "id": "stripe_customer",
                 "name": "Stripe Payments",
-                "description": "Customer payment events (successful payments, failed charges)",
-                "connected": current_integrations.filter(integration_type="stripe_customer").exists(),
+                "description": (
+                    "Customer payment events " "(successful payments, failed charges)"
+                ),
+                "connected": current_integrations.filter(
+                    integration_type="stripe_customer"
+                ).exists(),
                 "category": "Payments",
             },
         ]
 
-        # Notification Channels - Services that receive alerts FROM Notipus
-        notification_channels = [
+        # Notification Destinations - Services that receive notifications FROM Notipus
+        notification_destinations = [
             {
                 "id": "slack_notifications",
                 "name": "Slack",
-                "description": "Real-time notifications sent to your team's Slack workspace",
-                "connected": current_integrations.filter(integration_type="slack_notifications").exists(),
+                "description": (
+                    "Real-time notifications sent to your team's Slack workspace"
+                ),
+                "connected": current_integrations.filter(
+                    integration_type="slack_notifications"
+                ).exists(),
                 "category": "Team Communication",
             },
         ]
@@ -602,7 +647,7 @@ def integrations(request):
         context = {
             "organization": organization,
             "event_sources": event_sources,
-            "notification_channels": notification_channels,
+            "notification_destinations": notification_destinations,
             "current_integrations": current_integrations,
         }
         return render(request, "core/integrations.html.j2", context)
@@ -640,9 +685,7 @@ def integrate_chargify(request):
 
         # Check if Chargify is already connected
         existing_integration = Integration.objects.filter(
-            organization=organization,
-            integration_type="chargify",
-            is_active=True
+            organization=organization, integration_type="chargify", is_active=True
         ).first()
 
         if request.method == "POST":
@@ -653,23 +696,29 @@ def integrate_chargify(request):
                     # Update existing integration
                     existing_integration.webhook_secret = webhook_secret
                     existing_integration.save()
-                    messages.success(request, "Chargify/Maxio integration updated successfully!")
+                    messages.success(
+                        request, "Chargify/Maxio integration updated successfully!"
+                    )
                 else:
                     # Create new integration
                     Integration.objects.create(
                         organization=organization,
                         integration_type="chargify",
                         webhook_secret=webhook_secret,
-                        is_active=True
+                        is_active=True,
                     )
-                    messages.success(request, "Chargify/Maxio integration connected successfully!")
+                    messages.success(
+                        request, "Chargify/Maxio integration connected successfully!"
+                    )
 
                 return redirect("core:integrations")
             else:
                 messages.error(request, "Please provide a webhook secret.")
 
         # Generate webhook URL for this organization
-        webhook_url = request.build_absolute_uri(f"/webhooks/customer/chargify/{organization.uuid}/")
+        webhook_url = request.build_absolute_uri(
+            f"/webhooks/customer/chargify/{organization.uuid}/"
+        )
 
         context = {
             "organization": organization,
@@ -694,14 +743,16 @@ def billing_dashboard(request):
         usage_stats = rate_limiter.get_usage_stats(organization, months=3)
 
         # Calculate usage percentage
-        current_usage = rate_limit_info.get('current_usage', 0)
-        limit = rate_limit_info.get('limit', 1000)
-        usage_percentage = (current_usage / limit * 100)
+        current_usage = rate_limit_info.get("current_usage", 0)
+        limit = rate_limit_info.get("limit", 1000)
+        usage_percentage = current_usage / limit * 100
 
         # Calculate trial days remaining
         trial_days_remaining = 0
         if organization.subscription_status == "trial" and organization.trial_end_date:
-            trial_days_remaining = max(0, (organization.trial_end_date - timezone.now()).days)
+            trial_days_remaining = max(
+                0, (organization.trial_end_date - timezone.now()).days
+            )
 
         # Get available plans for upgrades
         available_plans = [
@@ -712,8 +763,8 @@ def billing_dashboard(request):
                 "currency": "USD",
                 "interval": "month",
                 "features": ["Up to 10,000 events/month", "All integrations"],
-                "stripe_price_id": "price_basic_monthly",  # This would be your Stripe price ID
-                "recommended": False
+                "stripe_price_id": "price_basic_monthly",  # Stripe price ID
+                "recommended": False,
             },
             {
                 "id": "pro",
@@ -721,9 +772,13 @@ def billing_dashboard(request):
                 "price": 99,
                 "currency": "USD",
                 "interval": "month",
-                "features": ["Up to 100,000 events/month", "All integrations", "Priority support"],
+                "features": [
+                    "Up to 100,000 events/month",
+                    "All integrations",
+                    "Priority support",
+                ],
                 "stripe_price_id": "price_pro_monthly",
-                "recommended": True
+                "recommended": True,
             },
             {
                 "id": "enterprise",
@@ -731,10 +786,14 @@ def billing_dashboard(request):
                 "price": 299,
                 "currency": "USD",
                 "interval": "month",
-                "features": ["1,000,000 events/month", "Custom integrations", "Dedicated support"],
+                "features": [
+                    "1,000,000 events/month",
+                    "Custom integrations",
+                    "Dedicated support",
+                ],
                 "stripe_price_id": "price_enterprise_monthly",
-                "recommended": False
-            }
+                "recommended": False,
+            },
         ]
 
         # Filter out current plan
@@ -773,7 +832,7 @@ def upgrade_plan(request):
                 "interval": "month",
                 "features": ["Up to 10,000 events/month", "All integrations"],
                 "stripe_price_id": "price_basic_monthly",
-                "recommended": False
+                "recommended": False,
             },
             {
                 "id": "pro",
@@ -781,9 +840,13 @@ def upgrade_plan(request):
                 "price": 99,
                 "currency": "USD",
                 "interval": "month",
-                "features": ["Up to 100,000 events/month", "All integrations", "Priority support"],
+                "features": [
+                    "Up to 100,000 events/month",
+                    "All integrations",
+                    "Priority support",
+                ],
                 "stripe_price_id": "price_pro_monthly",
-                "recommended": True
+                "recommended": True,
             },
             {
                 "id": "enterprise",
@@ -791,10 +854,14 @@ def upgrade_plan(request):
                 "price": 299,
                 "currency": "USD",
                 "interval": "month",
-                "features": ["1,000,000 events/month", "Custom integrations", "Dedicated support"],
+                "features": [
+                    "1,000,000 events/month",
+                    "Custom integrations",
+                    "Dedicated support",
+                ],
                 "stripe_price_id": "price_enterprise_monthly",
-                "recommended": False
-            }
+                "recommended": False,
+            },
         ]
 
         context = {
@@ -849,7 +916,9 @@ def billing_history(request):
                 "pro": 99.00,
                 "enterprise": 299.00,
             }
-            current_month_amount = plan_amounts.get(organization.subscription_plan, 0.00)
+            current_month_amount = plan_amounts.get(
+                organization.subscription_plan, 0.00
+            )
 
         # Get rate limit info for next payment date
         is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
@@ -857,7 +926,9 @@ def billing_history(request):
         # Calculate trial days remaining
         trial_days_remaining = 0
         if organization.subscription_status == "trial" and organization.trial_end_date:
-            trial_days_remaining = max(0, (organization.trial_end_date - timezone.now()).days)
+            trial_days_remaining = max(
+                0, (organization.trial_end_date - timezone.now()).days
+            )
 
         context = {
             "organization": organization,
@@ -887,15 +958,27 @@ def checkout(request, plan_name):
 
         # Get plan details
         plan_details = {
-            "basic": {"name": "Basic Plan", "price": 29, "stripe_price_id": "price_basic_monthly"},
-            "pro": {"name": "Pro Plan", "price": 99, "stripe_price_id": "price_pro_monthly"},
-            "enterprise": {"name": "Enterprise Plan", "price": 299, "stripe_price_id": "price_enterprise_monthly"},
+            "basic": {
+                "name": "Basic Plan",
+                "price": 29,
+                "stripe_price_id": "price_basic_monthly",
+            },
+            "pro": {
+                "name": "Pro Plan",
+                "price": 99,
+                "stripe_price_id": "price_pro_monthly",
+            },
+            "enterprise": {
+                "name": "Enterprise Plan",
+                "price": 299,
+                "stripe_price_id": "price_enterprise_monthly",
+            },
         }
 
         plan = plan_details[plan_name]
 
         # Store plan selection in session for checkout success
-        request.session['checkout_plan'] = plan_name
+        request.session["checkout_plan"] = plan_name
 
         context = {
             "organization": organization,
@@ -913,12 +996,12 @@ def checkout(request, plan_name):
 @login_required
 def checkout_success(request):
     """Checkout success page"""
-    plan_name = request.session.get('checkout_plan')
+    plan_name = request.session.get("checkout_plan")
     if not plan_name:
         return redirect("core:billing_dashboard")
 
     # Clear session
-    request.session.pop('checkout_plan', None)
+    request.session.pop("checkout_plan", None)
 
     context = {
         "plan_name": plan_name,
@@ -930,6 +1013,6 @@ def checkout_success(request):
 def checkout_cancel(request):
     """Checkout cancelled page"""
     # Clear session
-    request.session.pop('checkout_plan', None)
+    request.session.pop("checkout_plan", None)
 
     return render(request, "core/checkout_cancel.html.j2")

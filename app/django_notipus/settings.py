@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sites",
     "django.contrib.humanize",
-
     # Third-party apps
     "allauth",
     "allauth.account",
@@ -52,7 +51,6 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.slack",
     "allauth.socialaccount.providers.shopify",
     "django_extensions",
-
     # Local apps
     "webhooks",
     "core",
@@ -100,27 +98,31 @@ AUTHENTICATION_BACKENDS = [
 SITE_ID = 1
 
 # Email configuration
-EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
 
 # SMTP settings for production (when EMAIL_BACKEND is smtp)
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@notipus.com')
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@notipus.com")
 
 # Email and verification
 ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
 
 # Login methods (replaces ACCOUNT_AUTHENTICATION_METHOD = "username_email")
-ACCOUNT_LOGIN_METHODS = {'username', 'email'}
+ACCOUNT_LOGIN_METHODS = {"username", "email"}
 
-# Signup fields (replaces ACCOUNT_EMAIL_REQUIRED = True and ACCOUNT_USERNAME_REQUIRED = True)
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+# Signup fields (replaces ACCOUNT_EMAIL_REQUIRED = True
+# and ACCOUNT_USERNAME_REQUIRED = True)
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 
-# Rate limiting (replaces ACCOUNT_LOGIN_ATTEMPTS_LIMIT = 5 and ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT = 300)
-ACCOUNT_RATE_LIMITS = {'login_failed': '5/300s'}
+# Rate limiting (replaces ACCOUNT_LOGIN_ATTEMPTS_LIMIT = 5
+# and ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT = 300)
+ACCOUNT_RATE_LIMITS = {"login_failed": "5/300s"}
 
 # Session and logout settings
 ACCOUNT_LOGOUT_ON_GET = True

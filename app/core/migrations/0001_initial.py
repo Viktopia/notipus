@@ -9,7 +9,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -18,137 +17,344 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Company',
+            name="Company",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255, unique=True)),
-                ('domain', models.CharField(max_length=255, unique=True, validators=[core.models.validate_domain])),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255, unique=True)),
+                (
+                    "domain",
+                    models.CharField(
+                        max_length=255,
+                        unique=True,
+                        validators=[core.models.validate_domain],
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='GlobalBillingIntegration',
+            name="GlobalBillingIntegration",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('integration_type', models.CharField(choices=[('stripe_billing', 'Stripe Billing (Notipus Revenue)'), ('slack_auth', 'Slack Authentication (Global)')], max_length=50, unique=True)),
-                ('oauth_credentials', models.JSONField(blank=True, default=dict)),
-                ('webhook_secret', models.CharField(blank=True, max_length=255)),
-                ('integration_settings', models.JSONField(blank=True, default=dict)),
-                ('is_active', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "integration_type",
+                    models.CharField(
+                        choices=[
+                            ("stripe_billing", "Stripe Billing (Notipus Revenue)"),
+                            ("slack_auth", "Slack Authentication (Global)"),
+                        ],
+                        max_length=50,
+                        unique=True,
+                    ),
+                ),
+                ("oauth_credentials", models.JSONField(blank=True, default=dict)),
+                ("webhook_secret", models.CharField(blank=True, max_length=255)),
+                ("integration_settings", models.JSONField(blank=True, default=dict)),
+                ("is_active", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'verbose_name': 'Global Billing Integration',
-                'verbose_name_plural': 'Global Billing Integrations',
-                'ordering': ['integration_type'],
+                "verbose_name": "Global Billing Integration",
+                "verbose_name_plural": "Global Billing Integrations",
+                "ordering": ["integration_type"],
             },
         ),
         migrations.CreateModel(
-            name='Organization',
+            name="Organization",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('uuid', models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
-                ('name', models.CharField(max_length=200)),
-                ('slug', models.SlugField(blank=True, max_length=200, unique=True)),
-                ('shop_domain', models.CharField(max_length=255, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('subscription_plan', models.CharField(choices=[('trial', '14-Day Trial'), ('basic', 'Basic Plan - $29/month'), ('pro', 'Pro Plan - $99/month'), ('enterprise', 'Enterprise Plan - $299/month')], default='trial', max_length=20)),
-                ('subscription_status', models.CharField(choices=[('active', 'Active'), ('trial', 'Trial'), ('suspended', 'Suspended'), ('cancelled', 'Cancelled')], default='trial', max_length=20)),
-                ('trial_end_date', models.DateTimeField(default=core.models.get_trial_end_date)),
-                ('billing_cycle_anchor', models.IntegerField(blank=True, null=True)),
-                ('stripe_customer_id', models.CharField(blank=True, default='', max_length=255)),
-                ('payment_method_added', models.BooleanField(default=False)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "uuid",
+                    models.UUIDField(
+                        db_index=True, default=uuid.uuid4, editable=False, unique=True
+                    ),
+                ),
+                ("name", models.CharField(max_length=200)),
+                ("slug", models.SlugField(blank=True, max_length=200, unique=True)),
+                ("shop_domain", models.CharField(max_length=255, unique=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "subscription_plan",
+                    models.CharField(
+                        choices=[
+                            ("trial", "14-Day Trial"),
+                            ("basic", "Basic Plan - $29/month"),
+                            ("pro", "Pro Plan - $99/month"),
+                            ("enterprise", "Enterprise Plan - $299/month"),
+                        ],
+                        default="trial",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "subscription_status",
+                    models.CharField(
+                        choices=[
+                            ("active", "Active"),
+                            ("trial", "Trial"),
+                            ("suspended", "Suspended"),
+                            ("cancelled", "Cancelled"),
+                        ],
+                        default="trial",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "trial_end_date",
+                    models.DateTimeField(default=core.models.get_trial_end_date),
+                ),
+                ("billing_cycle_anchor", models.IntegerField(blank=True, null=True)),
+                (
+                    "stripe_customer_id",
+                    models.CharField(blank=True, default="", max_length=255),
+                ),
+                ("payment_method_added", models.BooleanField(default=False)),
             ],
         ),
         migrations.CreateModel(
-            name='Plan',
+            name="Plan",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=50, unique=True)),
-                ('display_name', models.CharField(max_length=100)),
-                ('description', models.TextField(blank=True)),
-                ('price_monthly', models.DecimalField(decimal_places=2, max_digits=10)),
-                ('price_yearly', models.DecimalField(blank=True, decimal_places=2, max_digits=10, null=True)),
-                ('max_users', models.IntegerField(default=1)),
-                ('max_integrations', models.IntegerField(default=1)),
-                ('max_monthly_notifications', models.IntegerField(default=1000)),
-                ('features', models.JSONField(default=list)),
-                ('stripe_price_id_monthly', models.CharField(blank=True, max_length=100)),
-                ('stripe_price_id_yearly', models.CharField(blank=True, max_length=100)),
-                ('is_active', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=50, unique=True)),
+                ("display_name", models.CharField(max_length=100)),
+                ("description", models.TextField(blank=True)),
+                ("price_monthly", models.DecimalField(decimal_places=2, max_digits=10)),
+                (
+                    "price_yearly",
+                    models.DecimalField(
+                        blank=True, decimal_places=2, max_digits=10, null=True
+                    ),
+                ),
+                ("max_users", models.IntegerField(default=1)),
+                ("max_integrations", models.IntegerField(default=1)),
+                ("max_monthly_notifications", models.IntegerField(default=1000)),
+                ("features", models.JSONField(default=list)),
+                (
+                    "stripe_price_id_monthly",
+                    models.CharField(blank=True, max_length=100),
+                ),
+                (
+                    "stripe_price_id_yearly",
+                    models.CharField(blank=True, max_length=100),
+                ),
+                ("is_active", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
         ),
         migrations.CreateModel(
-            name='UsageLimit',
+            name="UsageLimit",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('plan', models.CharField(choices=[('trial', '14-Day Trial'), ('basic', 'Basic Plan - $29/month'), ('pro', 'Pro Plan - $99/month'), ('enterprise', 'Enterprise Plan - $299/month')], max_length=20)),
-                ('max_monthly_registrations', models.IntegerField()),
-                ('max_monthly_notifications', models.IntegerField()),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "plan",
+                    models.CharField(
+                        choices=[
+                            ("trial", "14-Day Trial"),
+                            ("basic", "Basic Plan - $29/month"),
+                            ("pro", "Pro Plan - $99/month"),
+                            ("enterprise", "Enterprise Plan - $299/month"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("max_monthly_registrations", models.IntegerField()),
+                ("max_monthly_notifications", models.IntegerField()),
             ],
         ),
         migrations.CreateModel(
-            name='NotificationSettings',
+            name="NotificationSettings",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('notify_payment_success', models.BooleanField(default=True)),
-                ('notify_payment_failure', models.BooleanField(default=True)),
-                ('notify_subscription_created', models.BooleanField(default=True)),
-                ('notify_subscription_updated', models.BooleanField(default=True)),
-                ('notify_subscription_canceled', models.BooleanField(default=True)),
-                ('notify_trial_ending', models.BooleanField(default=True)),
-                ('notify_trial_expired', models.BooleanField(default=True)),
-                ('notify_customer_updated', models.BooleanField(default=True)),
-                ('notify_signups', models.BooleanField(default=True)),
-                ('notify_shopify_order_created', models.BooleanField(default=True)),
-                ('notify_shopify_order_updated', models.BooleanField(default=True)),
-                ('notify_shopify_order_paid', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('organization', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='notification_settings', to='core.organization')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("notify_payment_success", models.BooleanField(default=True)),
+                ("notify_payment_failure", models.BooleanField(default=True)),
+                ("notify_subscription_created", models.BooleanField(default=True)),
+                ("notify_subscription_updated", models.BooleanField(default=True)),
+                ("notify_subscription_canceled", models.BooleanField(default=True)),
+                ("notify_trial_ending", models.BooleanField(default=True)),
+                ("notify_trial_expired", models.BooleanField(default=True)),
+                ("notify_customer_updated", models.BooleanField(default=True)),
+                ("notify_signups", models.BooleanField(default=True)),
+                ("notify_shopify_order_created", models.BooleanField(default=True)),
+                ("notify_shopify_order_updated", models.BooleanField(default=True)),
+                ("notify_shopify_order_paid", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "organization",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notification_settings",
+                        to="core.organization",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='UserProfile',
+            name="UserProfile",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('slack_user_id', models.CharField(max_length=255, unique=True)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.organization')),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("slack_user_id", models.CharField(max_length=255, unique=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="core.organization",
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Integration',
+            name="Integration",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('integration_type', models.CharField(choices=[('stripe_customer', 'Stripe Customer Payments'), ('shopify', 'Shopify Ecommerce'), ('chargify', 'Chargify Billing'), ('slack_notifications', 'Slack Notifications')], max_length=50)),
-                ('oauth_credentials', models.JSONField(blank=True, default=dict)),
-                ('webhook_secret', models.CharField(blank=True, max_length=255)),
-                ('integration_settings', models.JSONField(blank=True, default=dict)),
-                ('is_active', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('auth_data', models.JSONField(blank=True, default=dict)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='integrations', to='core.organization')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "integration_type",
+                    models.CharField(
+                        choices=[
+                            ("stripe_customer", "Stripe Customer Payments"),
+                            ("shopify", "Shopify Ecommerce"),
+                            ("chargify", "Chargify Billing"),
+                            ("slack_notifications", "Slack Notifications"),
+                        ],
+                        max_length=50,
+                    ),
+                ),
+                ("oauth_credentials", models.JSONField(blank=True, default=dict)),
+                ("webhook_secret", models.CharField(blank=True, max_length=255)),
+                ("integration_settings", models.JSONField(blank=True, default=dict)),
+                ("is_active", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("auth_data", models.JSONField(blank=True, default=dict)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="integrations",
+                        to="core.organization",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('organization', 'integration_type')},
+                "unique_together": {("organization", "integration_type")},
             },
         ),
         migrations.CreateModel(
-            name='OrganizationUser',
+            name="OrganizationUser",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('role', models.CharField(choices=[('owner', 'Owner'), ('admin', 'Administrator'), ('member', 'Member'), ('viewer', 'Viewer')], default='member', max_length=20)),
-                ('joined_at', models.DateTimeField(auto_now_add=True)),
-                ('is_active', models.BooleanField(default=True)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.organization')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "role",
+                    models.CharField(
+                        choices=[
+                            ("owner", "Owner"),
+                            ("admin", "Administrator"),
+                            ("member", "Member"),
+                            ("viewer", "Viewer"),
+                        ],
+                        default="member",
+                        max_length=20,
+                    ),
+                ),
+                ("joined_at", models.DateTimeField(auto_now_add=True)),
+                ("is_active", models.BooleanField(default=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="core.organization",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('user', 'organization')},
+                "unique_together": {("user", "organization")},
             },
         ),
     ]

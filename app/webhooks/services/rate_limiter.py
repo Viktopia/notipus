@@ -1,9 +1,7 @@
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
-from decimal import Decimal
+from datetime import datetime
+from typing import Dict, Tuple
 
-from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -12,7 +10,10 @@ logger = logging.getLogger(__name__)
 
 class RateLimitException(Exception):
     """Raised when rate limit is exceeded"""
-    def __init__(self, message: str, limit: int, current_usage: int, reset_time: datetime):
+
+    def __init__(
+        self, message: str, limit: int, current_usage: int, reset_time: datetime
+    ):
         self.message = message
         self.limit = limit
         self.current_usage = current_usage
@@ -72,9 +73,24 @@ class RateLimiter:
             # Calculate reset time (first day of next month)
             now = timezone.now()
             if now.month == 12:
-                reset_time = now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                reset_time = now.replace(
+                    year=now.year + 1,
+                    month=1,
+                    day=1,
+                    hour=0,
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
             else:
-                reset_time = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                reset_time = now.replace(
+                    month=now.month + 1,
+                    day=1,
+                    hour=0,
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
 
             rate_limit_info = {
                 "limit": limit,
@@ -87,7 +103,10 @@ class RateLimiter:
             return is_allowed, rate_limit_info
 
         except Exception as e:
-            logger.error(f"Error checking rate limit for organization {organization.uuid}: {str(e)}")
+            logger.error(
+                f"Error checking rate limit for organization "
+                f"{organization.uuid}: {str(e)}"
+            )
             # Fail open - allow request if rate limiting fails
             return True, {
                 "limit": 0,
@@ -95,7 +114,7 @@ class RateLimiter:
                 "remaining": 0,
                 "reset_time": timezone.now(),
                 "plan": "unknown",
-                "error": str(e)
+                "error": str(e),
             }
 
     def increment_usage(self, organization) -> int:
@@ -111,11 +130,16 @@ class RateLimiter:
             new_count = cache.get(cache_key, 0) + 1
             cache.set(cache_key, new_count, timeout=self.cache_timeout)
 
-            logger.info(f"Incremented webhook usage for org {organization_uuid} to {new_count}")
+            logger.info(
+                f"Incremented webhook usage for org {organization_uuid} to {new_count}"
+            )
             return new_count
 
         except Exception as e:
-            logger.error(f"Error incrementing usage for organization {organization.uuid}: {str(e)}")
+            logger.error(
+                f"Error incrementing usage for organization "
+                f"{organization.uuid}: {str(e)}"
+            )
             return 0
 
     def enforce_rate_limit(self, organization) -> Dict[str, any]:
@@ -131,16 +155,17 @@ class RateLimiter:
         if not is_allowed:
             raise RateLimitException(
                 f"Rate limit exceeded for plan '{organization.subscription_plan}'. "
-                f"Limit: {rate_limit_info['limit']}, Current usage: {rate_limit_info['current_usage']}",
-                limit=rate_limit_info['limit'],
-                current_usage=rate_limit_info['current_usage'],
-                reset_time=rate_limit_info['reset_time']
+                f"Limit: {rate_limit_info['limit']}, "
+                f"Current usage: {rate_limit_info['current_usage']}",
+                limit=rate_limit_info["limit"],
+                current_usage=rate_limit_info["current_usage"],
+                reset_time=rate_limit_info["reset_time"],
             )
 
         # Increment usage if allowed
         new_usage = self.increment_usage(organization)
-        rate_limit_info['current_usage'] = new_usage
-        rate_limit_info['remaining'] = max(0, rate_limit_info['limit'] - new_usage)
+        rate_limit_info["current_usage"] = new_usage
+        rate_limit_info["remaining"] = max(0, rate_limit_info["limit"] - new_usage)
 
         return rate_limit_info
 
@@ -149,11 +174,13 @@ class RateLimiter:
         Generate HTTP headers for rate limiting information.
         """
         headers = {
-            "X-RateLimit-Limit": str(rate_limit_info.get('limit', 0)),
-            "X-RateLimit-Remaining": str(rate_limit_info.get('remaining', 0)),
-            "X-RateLimit-Used": str(rate_limit_info.get('current_usage', 0)),
-            "X-RateLimit-Reset": str(int(rate_limit_info.get('reset_time', timezone.now()).timestamp())),
-            "X-RateLimit-Plan": rate_limit_info.get('plan', 'unknown'),
+            "X-RateLimit-Limit": str(rate_limit_info.get("limit", 0)),
+            "X-RateLimit-Remaining": str(rate_limit_info.get("remaining", 0)),
+            "X-RateLimit-Used": str(rate_limit_info.get("current_usage", 0)),
+            "X-RateLimit-Reset": str(
+                int(rate_limit_info.get("reset_time", timezone.now()).timestamp())
+            ),
+            "X-RateLimit-Plan": rate_limit_info.get("plan", "unknown"),
         }
 
         return headers

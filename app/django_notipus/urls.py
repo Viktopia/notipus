@@ -22,5 +22,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("", include("core.urls")),  # Main app URLs including dashboard and API
-    path("webhook/", include("webhooks.urls")),  # Mount webhooks at /webhook/ to match tests
+    path(
+        "webhook/", include("webhooks.urls")
+    ),  # Mount webhooks at /webhook/ to match tests
 ]

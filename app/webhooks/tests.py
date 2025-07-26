@@ -11,15 +11,14 @@ class ChargifyWebhookTest(TestCase):
     def setUp(self):
         # Create test organization and integration
         self.organization = Organization.objects.create(
-            name="Test Organization",
-            shop_domain="test.myshopify.com"
+            name="Test Organization", shop_domain="test.myshopify.com"
         )
 
         self.integration = Integration.objects.create(
             organization=self.organization,
             integration_type="chargify",
             webhook_secret="test-webhook-secret",
-            is_active=True
+            is_active=True,
         )
 
         # Use organization-specific webhook URL
@@ -71,7 +70,9 @@ class ChargifyWebhookTest(TestCase):
         self.assertEqual(response_data["status"], "success")
 
         # Verify provider was created with correct webhook secret
-        mock_provider_class.assert_called_once_with(webhook_secret="test-webhook-secret")
+        mock_provider_class.assert_called_once_with(
+            webhook_secret="test-webhook-secret"
+        )
 
     @patch("webhooks.providers.chargify.ChargifyProvider")
     def test_invalid_signature(self, mock_provider_class):
@@ -93,7 +94,9 @@ class ChargifyWebhookTest(TestCase):
         self.assertEqual(response_data["status"], "error")
 
         # Verify provider was created with correct webhook secret
-        mock_provider_class.assert_called_once_with(webhook_secret="test-webhook-secret")
+        mock_provider_class.assert_called_once_with(
+            webhook_secret="test-webhook-secret"
+        )
 
 
 class StripeProviderTest(TestCase):
