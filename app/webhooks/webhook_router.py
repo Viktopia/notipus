@@ -171,79 +171,12 @@ def health_check(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"status": "healthy", "service": "webhook-processor"})
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def shopify_webhook(request: HttpRequest) -> JsonResponse:
-    """Handle Shopify webhook requests"""
-    logger.info(
-        "Processing Shopify webhook",
-        extra={"content_type": request.content_type, "headers": dict(request.headers)},
-    )
-
-    return _process_webhook(request, settings.SHOPIFY_PROVIDER, "shopify")
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def chargify_webhook(request: HttpRequest) -> JsonResponse:
-    """Handle Chargify/Maxio webhook requests"""
-    logger.info(
-        "Processing Chargify/Maxio webhook",
-        extra={
-            "http_method": request.method,
-            "content_type": request.content_type,
-        },
-    )
-    return _process_webhook(request, settings.CHARGIFY_PROVIDER, "chargify")
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def stripe_webhook(request: HttpRequest) -> JsonResponse:
-    """Handle Stripe webhook requests"""
-    logger.info(
-        "Processing Stripe webhook",
-        extra={"content_type": request.content_type, "headers": dict(request.headers)},
-    )
-
-    return _process_webhook(request, settings.STRIPE_PROVIDER, "stripe")
-
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def ephemeral_webhook(request: HttpRequest) -> JsonResponse:
-    """Handle ephemeral webhook requests that can be from multiple providers"""
-    try:
-        # Determine provider based on headers
-        topic = request.headers.get("X-Shopify-Topic")
-        if topic is not None:
-            provider = settings.SHOPIFY_PROVIDER
-            provider_name = "shopify"
-        else:
-            signature = request.headers.get("Stripe-Signature")
-            if signature is not None:
-                provider = settings.STRIPE_PROVIDER
-                provider_name = "stripe"
-            else:
-                raise WebhookError(
-                    "Required provider headers missing", "MISSING_HEADERS"
-                )
-
-        logger.info(
-            f"Processing ephemeral webhook for {provider_name}",
-            extra={"provider": provider_name, "content_type": request.content_type},
-        )
-
-        return _process_webhook(request, provider, f"ephemeral_{provider_name}")
-
-    except WebhookError as e:
-        error_response = create_error_response(e, 400)
-        return JsonResponse(error_response, status=400)
-
-    except Exception as e:
-        logger.error("Unexpected error in ephemeral webhook", exc_info=True)
-        error_response = create_error_response(e, 500)
-        return JsonResponse(error_response, status=500)
+# Legacy webhook endpoints removed to enforce multi-tenancy
+# All webhooks must now use organization-specific endpoints:
+# - /webhook/customer/{uuid}/shopify/
+# - /webhook/customer/{uuid}/chargify/
+# - /webhook/customer/{uuid}/stripe/
+# - /webhook/billing/stripe/ (for Notipus billing only)
 
 
 # === CUSTOMER-SPECIFIC WEBHOOKS ===

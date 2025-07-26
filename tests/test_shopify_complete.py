@@ -424,7 +424,7 @@ class TestShopifyAPI:
         mock_shop.myshopify_domain = "test.myshopify.com"
         mock_shop_current.return_value = mock_shop
 
-        result = ShopifyAPI.get_shop_domain()
+        result = ShopifyAPI.get_shop_domain("test.myshopify.com", "test_token")
 
         assert result == "test.myshopify.com"
 
@@ -434,7 +434,7 @@ class TestShopifyAPI:
         mock_session.side_effect = Exception("Session creation failed")
 
         with pytest.raises(Exception, match="Session creation failed"):
-            ShopifyAPI._get_session()
+            ShopifyAPI._get_session("test.myshopify.com", "test_token")
 
     @patch("app.core.services.shopify.ShopifyAPI._get_session")
     @patch("app.core.services.shopify.shopify.Session.temp")
@@ -442,7 +442,7 @@ class TestShopifyAPI:
         """Test shop domain retrieval with exception"""
         mock_get_session.side_effect = Exception("API error")
 
-        result = ShopifyAPI.get_shop_domain()
+        result = ShopifyAPI.get_shop_domain("test.myshopify.com", "test_token")
 
         assert result is None
 

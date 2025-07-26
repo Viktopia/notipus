@@ -31,13 +31,18 @@ docker-compose build
 3. Create the .env File
 Create a .env file in the root directory to store environment variables. Below is a template for reference:
 ```
-SLACK_WEBHOOK_URL=https://hooks.slack.com/test
-CHARGIFY_WEBHOOK_SECRET=test_secret
-SHOPIFY_WEBHOOK_SECRET=test_secret
-SHOPIFY_SHOP_URL=test.myshopify.com
-SHOPIFY_ACCESS_TOKEN=test_token
+# Django configuration
+SECRET_DJANGO_KEY=your-secure-secret-key-here
+DEBUG=True
+
+# Notipus billing (for subscription revenue)
+NOTIPUS_STRIPE_SECRET_KEY=sk_test_your_stripe_key
+NOTIPUS_STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+
+# Optional: Override other settings
+DB_PASSWORD=secure_db_password
 ```
-Note: Replace the placeholder values (test_secret, test_token, etc.) with the actual credentials and secrets for your environment.
+Note: Webhook secrets for customer integrations are now managed per-tenant through the web interface.
 
 4. Run the Containers
 Start the Docker containers with the specified environment variables:
@@ -73,15 +78,8 @@ cd notipus
 poetry install
 ```
 
-3. Create the .env File
-Create a .env file in the root directory to store environment variables. Below is a template for reference:
-```
-SLACK_WEBHOOK_URL=https://hooks.slack.com/test
-CHARGIFY_WEBHOOK_SECRET=test_secret
-SHOPIFY_WEBHOOK_SECRET=test_secret
-SHOPIFY_SHOP_URL=test.myshopify.com
-SHOPIFY_ACCESS_TOKEN=test_token
-```
+3. Environment Configuration
+See the main installation section above for environment variable configuration. Webhook secrets for customer integrations are managed per-tenant through the application interface.
 
 ## Development
 
@@ -130,10 +128,26 @@ app/
 
 ## Configuration
 
+### Core Environment Variables
+
 The application requires the following environment variables:
 
-- `SLACK_WEBHOOK_URL`: The Slack webhook URL used to send notifications.
-- `CHARGIFY_WEBHOOK_SECRET`: (Optional) The webhook secret from your Chargify settings.
-- `SHOPIFY_WEBHOOK_SECRET`: The webhook secret from your Shopify app settings.
-- `SHOPIFY_SHOP_URL`: The URL of your Shopify store (e.g., yourstore.myshopify.com).
-- `SHOPIFY_ACCESS_TOKEN`: The access token to authenticate API requests to your Shopify store.
+**Required for production:**
+- `SECRET_DJANGO_KEY`: Django secret key for cryptographic operations
+- `DB_PASSWORD`: Database password for PostgreSQL
+
+**Notipus billing (subscription revenue):**
+- `NOTIPUS_STRIPE_SECRET_KEY`: Stripe secret key for processing subscriptions
+- `NOTIPUS_STRIPE_WEBHOOK_SECRET`: Webhook secret for Stripe billing events
+
+**Optional overrides:**
+- `DEBUG`: Set to "False" for production (defaults to "True")
+- `ALLOWED_HOSTS`: Comma-separated list of allowed hostnames
+- `DB_NAME`, `DB_USER`, `DB_HOST`: Database connection parameters
+
+### Per-Tenant Configuration
+
+Customer webhook integrations (Shopify, Chargify, Stripe) are configured per-tenant through the web interface. Each organization manages their own:
+- Webhook secrets
+- API credentials
+- Slack integration settings

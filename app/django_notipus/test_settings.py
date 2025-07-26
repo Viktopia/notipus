@@ -14,9 +14,7 @@ DEBUG = True
 
 # Override settings for tests
 DISABLE_BILLING = True
-CHARGIFY_WEBHOOK_SECRET = "test-chargify-secret"
-SHOPIFY_WEBHOOK_SECRET = "test-shopify-secret"
-STRIPE_WEBHOOK_SECRET = "test-stripe-secret"
+# Note: Webhook secrets now managed per-tenant, not globally
 
 
 # Enable migrations for testing - we need to test migrations on in-memory SQL

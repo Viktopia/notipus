@@ -29,9 +29,6 @@ urlpatterns = [
         webhook_router.billing_stripe_webhook,
         name="billing_stripe_webhook",
     ),
-    # Legacy webhook endpoints (no organization-specific credentials)
-    path("shopify/", webhook_router.shopify_webhook, name="shopify_webhook"),
-    path("chargify/", webhook_router.chargify_webhook, name="chargify_webhook"),
-    path("stripe/", webhook_router.stripe_webhook, name="stripe_webhook"),
-    path("ephemeral/", webhook_router.ephemeral_webhook, name="ephemeral_webhook"),
+    # Legacy endpoints removed to enforce multi-tenancy
+    # All external service webhooks must use organization-specific endpoints
 ]
