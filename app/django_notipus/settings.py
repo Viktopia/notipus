@@ -204,7 +204,9 @@ else:
 
     # Build Redis URL from individual components
     if REDIS_PASSWORD:
-        redis_location = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+        redis_location = (
+            f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+        )
     else:
         redis_location = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 

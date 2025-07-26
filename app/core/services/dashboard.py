@@ -224,8 +224,7 @@ class IntegrationService:
                 "id": "chargify",
                 "name": "Chargify / Maxio Advanced Billing",
                 "description": (
-                    "Subscription billing events "
-                    "(renewals, cancellations, upgrades)"
+                    "Subscription billing events " "(renewals, cancellations, upgrades)"
                 ),
                 "connected": current_integrations.filter(
                     integration_type="chargify"
@@ -236,8 +235,7 @@ class IntegrationService:
                 "id": "stripe_customer",
                 "name": "Stripe Payments",
                 "description": (
-                    "Customer payment events "
-                    "(successful payments, failed charges)"
+                    "Customer payment events " "(successful payments, failed charges)"
                 ),
                 "connected": current_integrations.filter(
                     integration_type="stripe_customer"

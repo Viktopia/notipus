@@ -6,48 +6,101 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0001_initial'),
+        ("core", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='integration',
-            name='integration_type',
-            field=models.CharField(choices=[('stripe_customer', 'Stripe Customer Payments'), ('shopify', 'Shopify Ecommerce'), ('chargify', 'Chargify / Maxio Advanced Billing'), ('slack_notifications', 'Slack Notifications')], max_length=50),
+            model_name="integration",
+            name="integration_type",
+            field=models.CharField(
+                choices=[
+                    ("stripe_customer", "Stripe Customer Payments"),
+                    ("shopify", "Shopify Ecommerce"),
+                    ("chargify", "Chargify / Maxio Advanced Billing"),
+                    ("slack_notifications", "Slack Notifications"),
+                ],
+                max_length=50,
+            ),
         ),
         migrations.CreateModel(
-            name='WebAuthnChallenge',
+            name="WebAuthnChallenge",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('challenge', models.CharField(max_length=255, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('challenge_type', models.CharField(choices=[('registration', 'Registration'), ('authentication', 'Authentication')], max_length=20)),
-                ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("challenge", models.CharField(max_length=255, unique=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "challenge_type",
+                    models.CharField(
+                        choices=[
+                            ("registration", "Registration"),
+                            ("authentication", "Authentication"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'WebAuthn Challenge',
-                'verbose_name_plural': 'WebAuthn Challenges',
+                "verbose_name": "WebAuthn Challenge",
+                "verbose_name_plural": "WebAuthn Challenges",
             },
         ),
         migrations.CreateModel(
-            name='WebAuthnCredential',
+            name="WebAuthnCredential",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('credential_id', models.TextField(unique=True)),
-                ('public_key', models.TextField()),
-                ('sign_count', models.BigIntegerField(default=0)),
-                ('name', models.CharField(help_text='User-friendly name for this credential', max_length=100)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('last_used', models.DateTimeField(blank=True, null=True)),
-                ('user_agent', models.TextField(blank=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='webauthn_credentials', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("credential_id", models.TextField(unique=True)),
+                ("public_key", models.TextField()),
+                ("sign_count", models.BigIntegerField(default=0)),
+                (
+                    "name",
+                    models.CharField(
+                        help_text="User-friendly name for this credential",
+                        max_length=100,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("last_used", models.DateTimeField(blank=True, null=True)),
+                ("user_agent", models.TextField(blank=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="webauthn_credentials",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'WebAuthn Credential',
-                'verbose_name_plural': 'WebAuthn Credentials',
+                "verbose_name": "WebAuthn Credential",
+                "verbose_name_plural": "WebAuthn Credentials",
             },
         ),
     ]

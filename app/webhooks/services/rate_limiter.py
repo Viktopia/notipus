@@ -164,7 +164,8 @@ class RateLimiter:
         # Clean up expired entries to prevent memory leaks
         current_time = time.time()
         expired_keys = [
-            k for k, (_, timestamp) in self._in_memory_fallback.items()
+            k
+            for k, (_, timestamp) in self._in_memory_fallback.items()
             if current_time - timestamp >= self._fallback_timeout
         ]
         for expired_key in expired_keys:

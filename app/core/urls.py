@@ -44,7 +44,6 @@ urlpatterns = [
         views.slack_connect_callback,
         name="slack_connect_callback",
     ),
-
     path("api/connect/stripe/", views.connect_stripe, name="connect_stripe"),
     # WebAuthn endpoints
     path(

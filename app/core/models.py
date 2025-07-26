@@ -78,9 +78,12 @@ class Organization(models.Model):
                 try:
                     # Try to save with current slug by using select_for_update
                     # to lock potential conflicting records
-                    existing = Organization.objects.select_for_update().filter(
-                        slug=slug
-                    ).exclude(pk=self.pk).first()
+                    existing = (
+                        Organization.objects.select_for_update()
+                        .filter(slug=slug)
+                        .exclude(pk=self.pk)
+                        .first()
+                    )
 
                     if not existing:
                         self.slug = slug
