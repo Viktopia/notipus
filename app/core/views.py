@@ -14,7 +14,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 # Import services for Redis-based webhook activity
-from webhooks.services.database_lookup import DatabaseLookupService
 from webhooks.services.rate_limiter import rate_limiter
 
 from .models import Integration, NotificationSettings, Organization, UserProfile
@@ -380,141 +379,56 @@ def landing(request):
 @login_required
 def dashboard(request):
     """Main dashboard for authenticated users"""
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    from core.services.dashboard import DashboardService
 
-        # Get organization's integrations
-        integrations = Integration.objects.filter(
-            organization=organization, is_active=True
-        )
+    dashboard_service = DashboardService()
+    dashboard_data = dashboard_service.get_dashboard_data(request.user)
 
-        # Check which integrations are active
-        has_slack = integrations.filter(integration_type="slack_notifications").exists()
-        has_shopify = integrations.filter(integration_type="shopify").exists()
-        has_chargify = integrations.filter(integration_type="chargify").exists()
-
-        # Get recent webhook activity from Redis
-        db_service = DatabaseLookupService()
-        recent_activity_raw = db_service.get_recent_webhook_activity(days=7, limit=15)
-
-        # Transform Redis data to match dashboard template format
-        recent_activity = []
-        for record in recent_activity_raw:
-            try:
-                # Parse timestamp
-                if "timestamp" in record:
-                    from datetime import datetime
-
-                    timestamp = datetime.fromtimestamp(
-                        record["timestamp"], tz=timezone.get_current_timezone()
-                    )
-                else:
-                    timestamp = timezone.now()
-
-                activity_item = {
-                    "type": record.get("type"),
-                    "provider": record.get("provider"),
-                    "status": record.get("status"),
-                    "amount": record.get("amount"),
-                    "currency": record.get("currency"),
-                    "timestamp": timestamp,
-                    "external_id": record.get("external_id"),
-                    "customer_id": record.get("customer_id"),
-                }
-
-                # Add type-specific fields
-                if record.get("type") == "order":
-                    activity_item["order_number"] = record.get("order_number", "")
-
-                recent_activity.append(activity_item)
-
-            except Exception as e:
-                logger.warning(f"Error processing webhook activity record: {str(e)}")
-                continue
-
-        # Get rate limit info and usage stats
-        is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
-        usage_stats = rate_limiter.get_usage_stats(organization, months=3)
-
-        # Calculate usage percentage
-        current_usage = rate_limit_info.get("current_usage", 0)
-        limit = rate_limit_info.get("limit", 1000)
-        usage_percentage = current_usage / limit * 100
-
-        # Calculate trial days remaining
-        trial_days_remaining = 0
-        if organization.subscription_status == "trial" and organization.trial_end_date:
-            trial_days_remaining = max(
-                0, (organization.trial_end_date - timezone.now()).days
-            )
-
-        context = {
-            "organization": organization,
-            "integrations": integrations,
-            "user_profile": user_profile,
-            "has_slack": has_slack,
-            "has_shopify": has_shopify,
-            "has_chargify": has_chargify,
-            "recent_activity": recent_activity,
-            "rate_limit_info": rate_limit_info,
-            "usage_stats": usage_stats,
-            "usage_percentage": min(usage_percentage, 100),  # Cap at 100%
-            "trial_days_remaining": trial_days_remaining,
-        }
-        return render(request, "core/dashboard.html.j2", context)
-
-    except UserProfile.DoesNotExist:
+    if not dashboard_data:
         # User doesn't have a profile yet - redirect to organization creation
         return redirect("core:create_organization")
+
+    # Flatten the data for template compatibility
+    context = {
+        "organization": dashboard_data["organization"],
+        "user_profile": dashboard_data["user_profile"],
+        **dashboard_data["integrations"],  # has_slack, has_shopify, etc.
+        "recent_activity": dashboard_data["recent_activity"],
+        **dashboard_data["usage_data"],  # rate_limit_info, usage_stats, etc.
+        **dashboard_data["trial_info"],  # trial_days_remaining, is_trial, etc.
+    }
+
+    return render(request, "core/dashboard.html.j2", context)
 
 
 def select_plan(request):
     """Plan selection page"""
+    from core.models import Plan
+
     if request.method == "POST":
         selected_plan = request.POST.get("plan")
-        if selected_plan in ["trial", "basic", "pro", "enterprise"]:
+        # Validate against available plans
+        if Plan.objects.filter(name=selected_plan, is_active=True).exists():
             request.session["selected_plan"] = selected_plan
             return redirect("core:plan_selected")
 
-    plans = [
-        {
-            "name": "trial",
-            "display_name": "14-Day Trial",
-            "price": "Free",
-            "features": [
-                "Up to 1,000 notifications",
-                "Basic integrations",
-                "Email support",
-            ],
-        },
-        {
-            "name": "basic",
-            "display_name": "Basic Plan",
-            "price": "$29/month",
-            "features": ["Up to 10,000 events/month", "All integrations"],
-        },
-        {
-            "name": "pro",
-            "display_name": "Pro Plan",
-            "price": "$99/month",
-            "features": [
-                "Up to 100,000 events/month",
-                "All integrations",
-                "Priority support",
-            ],
-        },
-        {
-            "name": "enterprise",
-            "display_name": "Enterprise Plan",
-            "price": "$299/month",
-            "features": [
-                "1,000,000 events/month",
-                "Custom integrations",
-                "Dedicated support",
-            ],
-        },
-    ]
+    # Get plans from database
+    plans_queryset = Plan.objects.filter(is_active=True).order_by("price_monthly")
+    plans = []
+
+    for plan in plans_queryset:
+        price_display = (
+            "Free" if plan.price_monthly == 0 else f"${plan.price_monthly:.0f}/month"
+        )
+        plans.append(
+            {
+                "name": plan.name,
+                "display_name": plan.display_name,
+                "price": price_display,
+                "features": plan.features,
+                "description": plan.description,
+            }
+        )
 
     return render(request, "core/select_plan.html.j2", {"plans": plans})
 
@@ -585,74 +499,15 @@ def organization_settings(request):
 @login_required
 def integrations(request):
     """Integrations overview page"""
+    from core.services.dashboard import IntegrationService
+
     try:
         user_profile = UserProfile.objects.get(user=request.user)
         organization = user_profile.organization
 
-        # Get current integrations
-        current_integrations = Integration.objects.filter(
-            organization=organization, is_active=True
-        )
+        integration_service = IntegrationService()
+        context = integration_service.get_integration_overview(organization)
 
-        # Event Sources - Services that send webhooks TO Notipus
-        event_sources = [
-            {
-                "id": "shopify",
-                "name": "Shopify",
-                "description": (
-                    "E-commerce events from your Shopify store "
-                    "(orders, payments, customers)"
-                ),
-                "connected": current_integrations.filter(
-                    integration_type="shopify"
-                ).exists(),
-                "category": "E-commerce",
-            },
-            {
-                "id": "chargify",
-                "name": "Chargify / Maxio Advanced Billing",
-                "description": (
-                    "Subscription billing events " "(renewals, cancellations, upgrades)"
-                ),
-                "connected": current_integrations.filter(
-                    integration_type="chargify"
-                ).exists(),
-                "category": "Billing",
-            },
-            {
-                "id": "stripe_customer",
-                "name": "Stripe Payments",
-                "description": (
-                    "Customer payment events " "(successful payments, failed charges)"
-                ),
-                "connected": current_integrations.filter(
-                    integration_type="stripe_customer"
-                ).exists(),
-                "category": "Payments",
-            },
-        ]
-
-        # Notification Destinations - Services that receive notifications FROM Notipus
-        notification_destinations = [
-            {
-                "id": "slack_notifications",
-                "name": "Slack",
-                "description": (
-                    "Real-time notifications sent to your team's Slack workspace"
-                ),
-                "connected": current_integrations.filter(
-                    integration_type="slack_notifications"
-                ).exists(),
-                "category": "Team Communication",
-            },
-        ]
-
-        context = {
-            "organization": organization,
-            "event_sources": event_sources,
-            "notification_destinations": notification_destinations,
-            "current_integrations": current_integrations,
-        }
         return render(request, "core/integrations.html.j2", context)
 
     except UserProfile.DoesNotExist:
@@ -737,82 +592,25 @@ def integrate_chargify(request):
 @login_required
 def billing_dashboard(request):
     """Billing dashboard showing current plan, usage, and billing info"""
+    from core.services.dashboard import BillingService
+
     try:
         user_profile = UserProfile.objects.get(user=request.user)
         organization = user_profile.organization
 
-        # Get rate limit info and usage stats
-        is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
-        usage_stats = rate_limiter.get_usage_stats(organization, months=3)
+        billing_service = BillingService()
+        billing_data = billing_service.get_billing_dashboard_data(organization)
 
-        # Calculate usage percentage
-        current_usage = rate_limit_info.get("current_usage", 0)
-        limit = rate_limit_info.get("limit", 1000)
-        usage_percentage = current_usage / limit * 100
-
-        # Calculate trial days remaining
-        trial_days_remaining = 0
-        if organization.subscription_status == "trial" and organization.trial_end_date:
-            trial_days_remaining = max(
-                0, (organization.trial_end_date - timezone.now()).days
-            )
-
-        # Get available plans for upgrades
-        available_plans = [
-            {
-                "id": "basic",
-                "name": "Basic Plan",
-                "price": 29,
-                "currency": "USD",
-                "interval": "month",
-                "features": ["Up to 10,000 events/month", "All integrations"],
-                "stripe_price_id": "price_basic_monthly",  # Stripe price ID
-                "recommended": False,
-            },
-            {
-                "id": "pro",
-                "name": "Pro Plan",
-                "price": 99,
-                "currency": "USD",
-                "interval": "month",
-                "features": [
-                    "Up to 100,000 events/month",
-                    "All integrations",
-                    "Priority support",
-                ],
-                "stripe_price_id": "price_pro_monthly",
-                "recommended": True,
-            },
-            {
-                "id": "enterprise",
-                "name": "Enterprise Plan",
-                "price": 299,
-                "currency": "USD",
-                "interval": "month",
-                "features": [
-                    "1,000,000 events/month",
-                    "Custom integrations",
-                    "Dedicated support",
-                ],
-                "stripe_price_id": "price_enterprise_monthly",
-                "recommended": False,
-            },
-        ]
-
-        # Filter out current plan
-        current_plan = organization.subscription_plan
-        available_plans = [p for p in available_plans if p["id"] != current_plan]
-
+        # Flatten data for template compatibility
         context = {
-            "organization": organization,
+            "organization": billing_data["organization"],
             "user_profile": user_profile,
-            "rate_limit_info": rate_limit_info,
-            "usage_stats": usage_stats,
-            "usage_percentage": min(usage_percentage, 100),
-            "trial_days_remaining": trial_days_remaining,
-            "available_plans": available_plans,
-            "current_plan": current_plan,
+            **billing_data["usage_data"],  # rate_limit_info, usage_stats, etc.
+            **billing_data["trial_info"],  # trial_days_remaining, is_trial, etc.
+            "available_plans": billing_data["available_plans"],
+            "current_plan": billing_data["current_plan"],
         }
+
         return render(request, "core/billing_dashboard.html.j2", context)
 
     except UserProfile.DoesNotExist:
@@ -822,54 +620,20 @@ def billing_dashboard(request):
 @login_required
 def upgrade_plan(request):
     """Plan upgrade/downgrade page"""
+    from core.services.dashboard import BillingService
+
     try:
         user_profile = UserProfile.objects.get(user=request.user)
         organization = user_profile.organization
 
-        plans = [
-            {
-                "id": "basic",
-                "name": "Basic Plan",
-                "price": 29,
-                "currency": "USD",
-                "interval": "month",
-                "features": ["Up to 10,000 events/month", "All integrations"],
-                "stripe_price_id": "price_basic_monthly",
-                "recommended": False,
-            },
-            {
-                "id": "pro",
-                "name": "Pro Plan",
-                "price": 99,
-                "currency": "USD",
-                "interval": "month",
-                "features": [
-                    "Up to 100,000 events/month",
-                    "All integrations",
-                    "Priority support",
-                ],
-                "stripe_price_id": "price_pro_monthly",
-                "recommended": True,
-            },
-            {
-                "id": "enterprise",
-                "name": "Enterprise Plan",
-                "price": 299,
-                "currency": "USD",
-                "interval": "month",
-                "features": [
-                    "1,000,000 events/month",
-                    "Custom integrations",
-                    "Dedicated support",
-                ],
-                "stripe_price_id": "price_enterprise_monthly",
-                "recommended": False,
-            },
-        ]
+        billing_service = BillingService()
+        available_plans = billing_service.get_available_plans(
+            organization.subscription_plan
+        )
 
         context = {
             "organization": organization,
-            "plans": plans,
+            "plans": available_plans,
             "current_plan": organization.subscription_plan,
         }
         return render(request, "core/upgrade_plan.html.j2", context)
@@ -911,17 +675,18 @@ def billing_history(request):
         # using organization.stripe_customer_id
         invoices = []
 
-        # Get current month billing amount
+        # Get current month billing amount from Plan model
         current_month_amount = 0.00
         if organization.subscription_status != "trial":
-            plan_amounts = {
-                "basic": 29.00,
-                "pro": 99.00,
-                "enterprise": 299.00,
-            }
-            current_month_amount = plan_amounts.get(
-                organization.subscription_plan, 0.00
-            )
+            from core.models import Plan
+
+            try:
+                plan = Plan.objects.get(
+                    name=organization.subscription_plan, is_active=True
+                )
+                current_month_amount = float(plan.price_monthly)
+            except Plan.DoesNotExist:
+                current_month_amount = 0.00
 
         # Get rate limit info for next payment date
         is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
@@ -1061,14 +826,13 @@ def webauthn_register_complete(request):
         )
 
         if success:
-            return JsonResponse({
-                "success": True,
-                "message": "Passkey registered successfully"
-            })
+            return JsonResponse(
+                {"success": True, "message": "Passkey registered successfully"}
+            )
         else:
-            return JsonResponse({
-                "error": "Registration verification failed"
-            }, status=400)
+            return JsonResponse(
+                {"error": "Registration verification failed"}, status=400
+            )
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON data"}, status=400)
@@ -1113,15 +877,17 @@ def webauthn_authenticate_complete(request):
         if user:
             # Log the user in
             login(request, user)
-            return JsonResponse({
-                "success": True,
-                "message": "Authentication successful",
-                "redirect_url": "/dashboard/"
-            })
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": "Authentication successful",
+                    "redirect_url": "/dashboard/",
+                }
+            )
         else:
-            return JsonResponse({
-                "error": "Authentication verification failed"
-            }, status=401)
+            return JsonResponse(
+                {"error": "Authentication verification failed"}, status=401
+            )
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON data"}, status=400)
@@ -1136,8 +902,9 @@ def webauthn_credentials(request):
     if request.method == "GET":
         # Return user's existing credentials
         from .models import WebAuthnCredential
+
         credentials = WebAuthnCredential.objects.filter(user=request.user).values(
-            'id', 'name', 'created_at', 'last_used'
+            "id", "name", "created_at", "last_used"
         )
         return JsonResponse({"credentials": list(credentials)})
 
@@ -1151,6 +918,7 @@ def webauthn_credentials(request):
                 return JsonResponse({"error": "Missing credential_id"}, status=400)
 
             from .models import WebAuthnCredential
+
             WebAuthnCredential.objects.filter(
                 id=credential_id, user=request.user
             ).delete()
@@ -1163,4 +931,77 @@ def webauthn_credentials(request):
             logger.error(f"WebAuthn credential deletion error: {e}")
             return JsonResponse({"error": "Failed to delete credential"}, status=500)
 
-    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def webauthn_signup_begin(request):
+    """Start WebAuthn registration flow for passwordless signup."""
+    try:
+        data = json.loads(request.body)
+        username = data.get("username", "").strip()
+        email = data.get("email", "").strip()
+
+        if not username or not email:
+            return JsonResponse(
+                {"error": "Username and email are required"}, status=400
+            )
+
+        # Check if username or email already exists
+        if User.objects.filter(username=username).exists():
+            return JsonResponse({"error": "Username already exists"}, status=400)
+
+        if User.objects.filter(email=email).exists():
+            return JsonResponse({"error": "Email already exists"}, status=400)
+
+        webauthn_service = WebAuthnService()
+        options = webauthn_service.generate_signup_registration_options(username, email)
+        return JsonResponse({"success": True, "options": options})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"WebAuthn signup begin error: {e}")
+        return JsonResponse({"error": "Failed to start registration"}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def webauthn_signup_complete(request):
+    """Complete WebAuthn registration and create user account."""
+    try:
+        data = json.loads(request.body)
+        credential_data = data.get("credential")
+        username = data.get("username", "").strip()
+        email = data.get("email", "").strip()
+
+        if not credential_data or not username or not email:
+            return JsonResponse({"error": "Missing required data"}, status=400)
+
+        webauthn_service = WebAuthnService()
+        user = webauthn_service.complete_signup_registration(
+            credential_data, username, email
+        )
+
+        if user:
+            # Log the user in
+            from django.contrib.auth import login
+
+            login(request, user)
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": "Account created successfully with passkey",
+                    "redirect_url": "/dashboard/",
+                }
+            )
+        else:
+            return JsonResponse(
+                {"error": "Registration verification failed"}, status=400
+            )
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"WebAuthn signup complete error: {e}")
+        return JsonResponse({"error": "Failed to complete registration"}, status=500)

@@ -271,9 +271,33 @@ function arrayBufferToBase64url(buffer) {
 }
 
 // Check if WebAuthn is supported
-if (!window.PublicKeyCredential) {
-    document.getElementById('passkey-login').style.display = 'none';
-    console.log('WebAuthn not supported');
+function checkWebAuthnSupport() {
+    const button = document.getElementById('passkey-login');
+
+    if (!window.PublicKeyCredential) {
+        // Check if it's a very old browser
+        const isOldBrowser = /MSIE|Trident/.test(navigator.userAgent) ||
+                            (navigator.userAgent.includes('Chrome/') &&
+                             parseInt(navigator.userAgent.match(/Chrome\/(\d+)/)[1]) < 67);
+
+        if (isOldBrowser) {
+            button.style.display = 'none';
+        }
+        return false;
+    }
+
+    if (!navigator.credentials || !navigator.credentials.get) {
+        return false;
+    }
+
+    return true;
+}
+
+// Run the check when DOM is loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkWebAuthnSupport);
+} else {
+    checkWebAuthnSupport();
 }
 </script>
 {% endblock %}

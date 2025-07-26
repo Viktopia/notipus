@@ -72,6 +72,17 @@ urlpatterns = [
         views.webauthn_credentials,
         name="webauthn_credentials",
     ),
+    # WebAuthn signup endpoints (passwordless registration)
+    path(
+        "webauthn/signup/begin/",
+        views.webauthn_signup_begin,
+        name="webauthn_signup_begin",
+    ),
+    path(
+        "webauthn/signup/complete/",
+        views.webauthn_signup_complete,
+        name="webauthn_signup_complete",
+    ),
     path(
         "api/notification-settings/",
         views.get_notification_settings,

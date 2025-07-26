@@ -3,7 +3,7 @@ import uuid
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -63,16 +63,43 @@ class Organization(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
-            # Ensure uniqueness
-            original_slug = self.slug
-            counter = 1
-            while (
-                Organization.objects.filter(slug=self.slug).exclude(pk=self.pk).exists()
-            ):
-                self.slug = f"{original_slug}-{counter}"
-                counter += 1
+            self._generate_unique_slug()
         super().save(*args, **kwargs)
+
+    def _generate_unique_slug(self):
+        """Generate a unique slug in a race-condition-safe manner"""
+        base_slug = slugify(self.name)
+        slug = base_slug
+        counter = 1
+
+        # Use atomic transaction to prevent race conditions
+        with transaction.atomic():
+            while True:
+                try:
+                    # Try to save with current slug by using select_for_update
+                    # to lock potential conflicting records
+                    existing = Organization.objects.select_for_update().filter(
+                        slug=slug
+                    ).exclude(pk=self.pk).first()
+
+                    if not existing:
+                        self.slug = slug
+                        break
+
+                    # Slug exists, try next variation
+                    slug = f"{base_slug}-{counter}"
+                    counter += 1
+
+                    # Prevent infinite loops
+                    if counter > 1000:
+                        # Fallback to UUID if we can't find a unique slug
+                        self.slug = f"{base_slug}-{uuid.uuid4().hex[:8]}"
+                        break
+
+                except Exception:
+                    # If there's any database error, use UUID fallback
+                    self.slug = f"{base_slug}-{uuid.uuid4().hex[:8]}"
+                    break
 
     @property
     def webhook_token(self):

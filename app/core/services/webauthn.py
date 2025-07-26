@@ -47,22 +47,22 @@ class WebAuthnService:
         """Get the Relying Party ID from settings or environment."""
         # In production, this should be your domain (e.g., "notipus.com")
         # In development, use localhost
-        if hasattr(settings, 'WEBAUTHN_RP_ID'):
+        if hasattr(settings, "WEBAUTHN_RP_ID"):
             return settings.WEBAUTHN_RP_ID
 
         if settings.DEBUG:
             return "localhost"
         else:
             # Extract from ALLOWED_HOSTS in production
-            allowed_hosts = getattr(settings, 'ALLOWED_HOSTS', [])
+            allowed_hosts = getattr(settings, "ALLOWED_HOSTS", [])
             for host in allowed_hosts:
-                if host not in ['*', 'localhost', '127.0.0.1']:
+                if host not in ["*", "localhost", "127.0.0.1"]:
                     return host
             return "notipus.com"  # Fallback
 
     def _get_origin(self) -> str:
         """Get the origin URL for WebAuthn operations."""
-        if hasattr(settings, 'WEBAUTHN_ORIGIN'):
+        if hasattr(settings, "WEBAUTHN_ORIGIN"):
             return settings.WEBAUTHN_ORIGIN
 
         if settings.DEBUG:
@@ -104,11 +104,9 @@ class WebAuthnService:
             )
 
             # Store challenge for verification
-            challenge_str = base64.urlsafe_b64encode(options.challenge).decode('utf-8')
+            challenge_str = base64.urlsafe_b64encode(options.challenge).decode("utf-8")
             WebAuthnChallenge.objects.create(
-                challenge=challenge_str,
-                user=user,
-                challenge_type="registration"
+                challenge=challenge_str, user=user, challenge_type="registration"
             )
 
             # Convert to JSON-serializable format
@@ -143,9 +141,7 @@ class WebAuthnService:
                 return False
 
             challenge = WebAuthnChallenge.objects.get(
-                challenge=challenge_str,
-                user=user,
-                challenge_type="registration"
+                challenge=challenge_str, user=user, challenge_type="registration"
             )
 
             # Verify the registration response
@@ -160,8 +156,12 @@ class WebAuthnService:
                 # Store the credential
                 WebAuthnCredential.objects.create(
                     user=user,
-                    credential_id=base64.urlsafe_b64encode(verification.credential_id).decode(),
-                    public_key=base64.urlsafe_b64encode(verification.credential_public_key).decode(),
+                    credential_id=base64.urlsafe_b64encode(
+                        verification.credential_id
+                    ).decode(),
+                    public_key=base64.urlsafe_b64encode(
+                        verification.credential_public_key
+                    ).decode(),
                     sign_count=verification.sign_count,
                     name=credential_name,
                 )
@@ -213,11 +213,11 @@ class WebAuthnService:
             )
 
             # Store challenge for verification
-            challenge_str = base64.urlsafe_b64encode(options.challenge).decode('utf-8')
+            challenge_str = base64.urlsafe_b64encode(options.challenge).decode("utf-8")
             WebAuthnChallenge.objects.create(
                 challenge=challenge_str,
                 user=None,  # No specific user for authentication challenges
-                challenge_type="authentication"
+                challenge_type="authentication",
             )
 
             # Convert to JSON-serializable format
@@ -245,8 +245,7 @@ class WebAuthnService:
                 return None
 
             challenge = WebAuthnChallenge.objects.get(
-                challenge=challenge_str,
-                challenge_type="authentication"
+                challenge=challenge_str, challenge_type="authentication"
             )
 
             # Find the credential
@@ -269,7 +268,9 @@ class WebAuthnService:
                 expected_challenge=base64.urlsafe_b64decode(challenge.challenge),
                 expected_origin=self.origin,
                 expected_rp_id=self.rp_id,
-                credential_public_key=base64.urlsafe_b64decode(stored_credential.public_key),
+                credential_public_key=base64.urlsafe_b64decode(
+                    stored_credential.public_key
+                ),
                 credential_current_sign_count=stored_credential.sign_count,
             )
 
@@ -298,9 +299,146 @@ class WebAuthnService:
             logger.error(f"Error verifying authentication: {e}")
             return None
 
-    def _get_user_credentials(
-        self, user: User
-    ) -> List[PublicKeyCredentialDescriptor]:
+    def generate_signup_registration_options(
+        self, username: str, email: str
+    ) -> Dict[str, Any]:
+        """
+        Generate registration options for WebAuthn signup flow.
+
+        This method generates registration options for users who don't exist yet
+        during the signup process.
+
+        Args:
+            username: The desired username for the new account
+            email: The email address for the new account
+
+        Returns:
+            Dictionary containing registration options for the client
+        """
+        try:
+            # Generate a temporary user ID for the registration
+            # We'll use a hash of username + email to ensure uniqueness
+            import hashlib
+
+            temp_user_id = hashlib.sha256(f"{username}:{email}".encode()).hexdigest()[
+                :16
+            ]
+
+            # Generate registration options
+            options = generate_registration_options(
+                rp_id=self.rp_id,
+                rp_name=self.rp_name,
+                user_id=temp_user_id.encode(),
+                user_name=username,
+                user_display_name=username,  # Use username as display name for signup
+                exclude_credentials=[],  # No existing credentials for new users
+                authenticator_selection=AuthenticatorSelectionCriteria(
+                    authenticator_attachment=AuthenticatorAttachment.PLATFORM,
+                    resident_key=ResidentKeyRequirement.PREFERRED,
+                    user_verification=UserVerificationRequirement.PREFERRED,
+                ),
+                supported_pub_key_algs=[
+                    COSEAlgorithmIdentifier.ECDSA_SHA_256,
+                    COSEAlgorithmIdentifier.RSASSA_PSS_SHA_256,
+                ],
+            )
+
+            # Store challenge for verification with signup context
+            challenge_str = base64.urlsafe_b64encode(options.challenge).decode("utf-8")
+            WebAuthnChallenge.objects.create(
+                challenge=challenge_str,
+                user=None,  # No user yet, this is for signup
+                challenge_type="signup_registration",
+                # Store username and email in challenge for later retrieval
+                # We'll use a JSON field or extend the model if needed
+            )
+
+            # Convert to JSON-serializable format
+            return json.loads(options_to_json(options))
+
+        except Exception as e:
+            logger.error(f"Error generating signup registration options: {e}")
+            raise
+
+    def complete_signup_registration(
+        self, credential_data: Dict[str, Any], username: str, email: str
+    ) -> Optional[User]:
+        """
+        Complete WebAuthn registration and create the user account.
+
+        Args:
+            credential_data: Registration response from client
+            username: The username for the new account
+            email: The email address for the new account
+
+        Returns:
+            Created User instance if successful, None otherwise
+        """
+        try:
+            # Get and validate challenge
+            challenge_str = credential_data.get("challenge")
+            if not challenge_str:
+                logger.error("No challenge in credential data")
+                return None
+
+            # Find challenge for signup registration
+            challenge = WebAuthnChallenge.objects.get(
+                challenge=challenge_str,
+                user=None,  # Signup challenges have no user
+                challenge_type="signup_registration",
+            )
+
+            # Verify the registration response
+            verification = verify_registration_response(
+                credential=credential_data,
+                expected_challenge=base64.urlsafe_b64decode(challenge.challenge),
+                expected_origin=self.origin,
+                expected_rp_id=self.rp_id,
+            )
+
+            if verification.verified:
+                # Create the user account atomically with the WebAuthn credential
+                from django.contrib.auth.models import User
+                from django.db import transaction
+
+                with transaction.atomic():
+                    # Create user without password (passwordless account)
+                    user = User.objects.create_user(
+                        username=username,
+                        email=email,
+                        password=None,  # No password for passkey-only accounts
+                    )
+
+                    # Store the WebAuthn credential
+                    WebAuthnCredential.objects.create(
+                        user=user,
+                        credential_id=base64.urlsafe_b64encode(
+                            verification.credential_id
+                        ).decode(),
+                        public_key=base64.urlsafe_b64encode(
+                            verification.credential_public_key
+                        ).decode(),
+                        sign_count=verification.sign_count,
+                        name="Signup Passkey",
+                    )
+
+                    # Clean up challenge
+                    challenge.delete()
+
+                logger.info(f"WebAuthn signup completed for user {username}")
+                return user
+            else:
+                logger.error("WebAuthn signup registration verification failed")
+                return None
+
+        except WebAuthnChallenge.DoesNotExist:
+            logger.error("Challenge not found for signup registration")
+            return None
+        except Exception as e:
+            logger.error(f"Error during signup registration: {e}")
+            return None
+
+    def _get_user_credentials(self, user: User) -> List[PublicKeyCredentialDescriptor]:
         """
         Get existing credentials for a user as PublicKeyCredentialDescriptor objects.
         """
