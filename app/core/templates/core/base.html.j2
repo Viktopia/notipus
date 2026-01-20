@@ -5,43 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Notipus - Smart Webhook Notifications{% endblock %}</title>
     {% load static %}
-    <link rel="stylesheet" type="text/css" href="{% static 'css/fontawesome-fonts.css' %}">
-    <link rel="stylesheet" type="text/css" href="{% static 'css/fontawesome.min.css' %}">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#fef6f0',
-                            100: '#fde9d7',
-                            200: '#fad2ae',
-                            300: '#f7b47a',
-                            400: '#f39144',
-                            500: '#f05800',
-                            600: '#e14a00',
-                            700: '#bb3700',
-                            800: '#992c06',
-                            900: '#7c2507',
-                        },
-                        notipus: {
-                            50: '#fef7ee',
-                            100: '#feebc7',
-                            200: '#fed7aa',
-                            300: '#fdba74',
-                            400: '#fb923c',
-                            500: '#f97316',
-                            600: '#ea580c',
-                            700: '#c2410c',
-                            800: '#9a3412',
-                            900: '#7c2d12',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" type="text/css" href="{% static 'dist/main.css' %}">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="h-full">

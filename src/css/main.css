@@ -1,0 +1,35 @@
+/* Import Tailwind CSS v4 */
+@import "tailwindcss";
+
+/* Import FontAwesome */
+@import "@fortawesome/fontawesome-free/css/fontawesome.css";
+@import "@fortawesome/fontawesome-free/css/solid.css";
+@import "@fortawesome/fontawesome-free/css/regular.css";
+@import "@fortawesome/fontawesome-free/css/brands.css";
+
+/* Custom theme configuration for Tailwind v4 */
+@theme {
+  /* Primary colors (Notipus orange) */
+  --color-primary-50: #fef6f0;
+  --color-primary-100: #fde9d7;
+  --color-primary-200: #fad2ae;
+  --color-primary-300: #f7b47a;
+  --color-primary-400: #f39144;
+  --color-primary-500: #f05800;
+  --color-primary-600: #e14a00;
+  --color-primary-700: #bb3700;
+  --color-primary-800: #992c06;
+  --color-primary-900: #7c2507;
+
+  /* Notipus brand colors */
+  --color-notipus-50: #fef7ee;
+  --color-notipus-100: #feebc7;
+  --color-notipus-200: #fed7aa;
+  --color-notipus-300: #fdba74;
+  --color-notipus-400: #fb923c;
+  --color-notipus-500: #f97316;
+  --color-notipus-600: #ea580c;
+  --color-notipus-700: #c2410c;
+  --color-notipus-800: #9a3412;
+  --color-notipus-900: #7c2d12;
+}
