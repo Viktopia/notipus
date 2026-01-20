@@ -48,7 +48,7 @@ class BillingService:
         Returns:
             Plan ID string, or None if not found.
         """
-        # Try the nested items.data[0].plan.id format (Stripe API >= 2020)
+        # Try the nested items.data[0].plan.id format (Stripe API 2020-08-27 and later)
         items = subscription.get("items", {})
         if isinstance(items, dict):
             data_list = items.get("data", [])

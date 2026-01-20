@@ -380,6 +380,9 @@ SLACK_REDIRECT_BOT_URI = os.environ.get("SLACK_REDIRECT_BOT_URI", "")
 
 # Stripe configuration for Notipus billing (our revenue)
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "sk_test_dev_key")
+# Pin Stripe API version for consistent behavior across deployments
+# See https://docs.stripe.com/api/versioning for available versions
+STRIPE_API_VERSION = os.environ.get("STRIPE_API_VERSION", "2025-12-18.acacia")
 STRIPE_PLANS = {
     "basic": os.environ.get("STRIPE_BASIC_PLAN", ""),
     "pro": os.environ.get("STRIPE_PRO_PLAN", ""),

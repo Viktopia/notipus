@@ -51,8 +51,9 @@ def get_notification_settings(request: HttpRequest) -> JsonResponse:
 
     except UserProfile.DoesNotExist:
         return JsonResponse({"error": "User profile not found"}, status=404)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("Error retrieving notification settings")
+        return JsonResponse({"error": "An internal error occurred"}, status=500)
 
 
 @login_required
@@ -90,5 +91,6 @@ def update_notification_settings(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"error": "User profile not found"}, status=404)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON data"}, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("Error updating notification settings")
+        return JsonResponse({"error": "An internal error occurred"}, status=500)
