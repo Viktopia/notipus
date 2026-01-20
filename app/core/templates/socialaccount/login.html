@@ -1,7 +1,7 @@
-{#
+{% comment %}
     IMPORTANT: This template MUST have .html extension (not .html.j2)
     Django-allauth's template discovery only recognizes .html files
-#}
+{% endcomment %}
 {% extends "core/base.html.j2" %}
 {% load socialaccount %}
 
@@ -35,13 +35,6 @@
                     </button>
                 </div>
 
-                {% if form.non_field_errors %}
-                    <div class="mt-4 p-3 rounded-md bg-red-50 border border-red-200">
-                        <div class="text-sm text-red-700">
-                            {{ form.non_field_errors }}
-                        </div>
-                    </div>
-                {% endif %}
             </form>
 
             <!-- Back Link -->
