@@ -380,9 +380,23 @@ SLACK_REDIRECT_BOT_URI = os.environ.get("SLACK_REDIRECT_BOT_URI", "")
 
 # Stripe configuration for Notipus billing (our revenue)
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "sk_test_dev_key")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "pk_test_dev_key")
 # Pin Stripe API version for consistent behavior across deployments
 # See https://docs.stripe.com/api/versioning for available versions
 STRIPE_API_VERSION = os.environ.get("STRIPE_API_VERSION", "2025-12-18.acacia")
+
+# Stripe Checkout and Portal URLs
+STRIPE_SUCCESS_URL = os.environ.get(
+    "STRIPE_SUCCESS_URL", "http://localhost:8000/billing/checkout/success/"
+)
+STRIPE_CANCEL_URL = os.environ.get(
+    "STRIPE_CANCEL_URL", "http://localhost:8000/billing/checkout/cancel/"
+)
+STRIPE_PORTAL_RETURN_URL = os.environ.get(
+    "STRIPE_PORTAL_RETURN_URL", "http://localhost:8000/billing/"
+)
+
+# Legacy plan ID mapping (prefer fetching from Stripe API)
 STRIPE_PLANS = {
     "basic": os.environ.get("STRIPE_BASIC_PLAN", ""),
     "pro": os.environ.get("STRIPE_PRO_PLAN", ""),

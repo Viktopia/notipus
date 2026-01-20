@@ -31,8 +31,12 @@ class StripeProvider(PaymentProvider):
         "customer.subscription.created": "subscription_created",
         "customer.subscription.updated": "subscription_updated",
         "customer.subscription.deleted": "subscription_deleted",
+        "customer.subscription.trial_will_end": "trial_ending",
         "invoice.payment_succeeded": "payment_success",
         "invoice.payment_failed": "payment_failure",
+        "invoice.paid": "invoice_paid",
+        "invoice.payment_action_required": "payment_action_required",
+        "checkout.session.completed": "checkout_completed",
         "test": "test",
     }
 
@@ -138,6 +142,18 @@ class StripeProvider(PaymentProvider):
         elif event_type == "payment_failure":
             amount = str(data.get("amount_due", 0))
             BillingService.handle_payment_failed(data)
+        elif event_type == "checkout_completed":
+            amount = str(data.get("amount_total", 0))
+            BillingService.handle_checkout_completed(data)
+        elif event_type == "trial_ending":
+            amount = "0"
+            BillingService.handle_trial_ending(data)
+        elif event_type == "invoice_paid":
+            amount = str(data.get("amount_paid", 0))
+            BillingService.handle_invoice_paid(data)
+        elif event_type == "payment_action_required":
+            amount = str(data.get("amount_due", 0))
+            BillingService.handle_payment_action_required(data)
         else:
             amount = "0"
 
@@ -220,8 +236,18 @@ class StripeProvider(PaymentProvider):
             else:
                 data_dict = dict(data)
 
-            customer_id = str(data_dict.get("customer", ""))
-            if not customer_id:
+            # Get customer ID - some events may not require one
+            # (checkout sessions use metadata for organization lookup)
+            customer_id = str(data_dict.get("customer", "") or "")
+
+            # For checkout_completed and trial_ending, customer ID is optional
+            # These events use metadata for organization lookup
+            events_without_required_customer = {
+                "checkout_completed",
+                "trial_ending",
+                "payment_action_required",
+            }
+            if not customer_id and event_type not in events_without_required_customer:
                 raise InvalidDataError("Missing customer ID")
 
             # Handle billing and get amount

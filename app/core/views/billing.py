@@ -174,18 +174,49 @@ def payment_methods(request: HttpRequest) -> HttpResponse | HttpResponseRedirect
 def billing_history(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Billing history and invoices page.
 
+    Fetches real invoice data from Stripe for the organization.
+
     Args:
         request: The HTTP request object.
 
     Returns:
         Billing history page or redirect to organization creation.
     """
+    from datetime import datetime
+
+    from core.services.stripe import StripeAPI
+
     try:
         user_profile = UserProfile.objects.get(user=request.user)
         organization = user_profile.organization
 
-        # In a real implementation, you would fetch invoices from Stripe
+        # Fetch real invoices from Stripe
         invoices: list[dict[str, Any]] = []
+        if organization.stripe_customer_id:
+            stripe_api = StripeAPI()
+            raw_invoices = stripe_api.get_invoices(
+                organization.stripe_customer_id, limit=20
+            )
+            # Format invoices for template
+            for inv in raw_invoices:
+                invoices.append(
+                    {
+                        "id": inv["id"],
+                        "number": inv.get("number", "N/A"),
+                        "status": inv["status"],
+                        "amount": inv["amount_paid"] / 100,  # Convert from cents
+                        "currency": inv["currency"].upper(),
+                        "date": datetime.fromtimestamp(inv["created"]),
+                        "period_start": datetime.fromtimestamp(inv["period_start"])
+                        if inv.get("period_start")
+                        else None,
+                        "period_end": datetime.fromtimestamp(inv["period_end"])
+                        if inv.get("period_end")
+                        else None,
+                        "invoice_url": inv.get("hosted_invoice_url"),
+                        "pdf_url": inv.get("invoice_pdf"),
+                    }
+                )
 
         # Get current month billing amount from Plan model
         current_month_amount = 0.00
@@ -225,60 +256,133 @@ def billing_history(request: HttpRequest) -> HttpResponse | HttpResponseRedirect
 def checkout(
     request: HttpRequest, plan_name: str
 ) -> HttpResponse | HttpResponseRedirect:
-    """Stripe checkout page for plan upgrades.
+    """Create Stripe Checkout Session and redirect to Stripe-hosted checkout.
 
     Args:
         request: The HTTP request object.
-        plan_name: Name of the plan to checkout.
+        plan_name: Name of the plan to checkout (basic, pro, enterprise).
 
     Returns:
-        Checkout page or redirect on invalid plan.
+        Redirect to Stripe Checkout or error page.
     """
+    from core.services.stripe import StripeAPI
+    from django.conf import settings as django_settings
+
     try:
         user_profile = UserProfile.objects.get(user=request.user)
         organization = user_profile.organization
 
-        # Validate plan
+        # Validate plan name
         valid_plans = ["basic", "pro", "enterprise"]
         if plan_name not in valid_plans:
             messages.error(request, "Invalid plan selected.")
             return redirect("core:upgrade_plan")
 
-        # Get plan details
-        plan_details = {
-            "basic": {
-                "name": "Basic Plan",
-                "price": 29,
-                "stripe_price_id": "price_basic_monthly",
-            },
-            "pro": {
-                "name": "Pro Plan",
-                "price": 99,
-                "stripe_price_id": "price_pro_monthly",
-            },
-            "enterprise": {
-                "name": "Enterprise Plan",
-                "price": 299,
-                "stripe_price_id": "price_enterprise_monthly",
-            },
-        }
+        # Initialize Stripe API
+        stripe_api = StripeAPI()
 
-        plan = plan_details[plan_name]
+        # Get or create Stripe customer for the organization
+        customer = stripe_api.get_or_create_customer(organization)
+        if not customer:
+            messages.error(
+                request, "Unable to create billing account. Please try again."
+            )
+            return redirect("core:upgrade_plan")
+
+        # Try to get price from Stripe using lookup key (preferred method)
+        lookup_key = f"{plan_name}_monthly"
+        price = stripe_api.get_price_by_lookup_key(lookup_key)
+
+        if not price:
+            # Fall back to environment variable price ID
+            price_id = django_settings.STRIPE_PLANS.get(plan_name)
+            if not price_id:
+                logger.error(f"No Stripe price configured for plan: {plan_name}")
+                messages.error(
+                    request, "Plan configuration error. Please contact support."
+                )
+                return redirect("core:upgrade_plan")
+        else:
+            price_id = price["id"]
 
         # Store plan selection in session for checkout success
         request.session["checkout_plan"] = plan_name
 
-        context: dict[str, Any] = {
-            "organization": organization,
-            "plan": plan,
-            "plan_name": plan_name,
-            # In a real implementation, you would create a Stripe checkout session here
-            "stripe_checkout_url": f"#checkout-{plan_name}",  # Placeholder
-        }
-        return render(request, "core/checkout.html.j2", context)
+        # Create Stripe Checkout Session
+        checkout_session = stripe_api.create_checkout_session(
+            customer_id=customer["id"],
+            price_id=price_id,
+            metadata={
+                "organization_id": str(organization.id),
+                "plan_name": plan_name,
+            },
+        )
+
+        if not checkout_session or not checkout_session.get("url"):
+            messages.error(
+                request, "Unable to create checkout session. Please try again."
+            )
+            return redirect("core:upgrade_plan")
+
+        # Redirect to Stripe Checkout
+        return redirect(checkout_session["url"])
 
     except UserProfile.DoesNotExist:
         return redirect("core:create_organization")
+    except Exception as e:
+        logger.exception(f"Checkout error: {e!s}")
+        messages.error(request, "An error occurred. Please try again.")
+        return redirect("core:upgrade_plan")
+
+
+@login_required
+def billing_portal(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
+    """Redirect to Stripe Customer Portal for self-service billing management.
+
+    Allows customers to update payment methods, view invoices,
+    and manage their subscription through Stripe's hosted portal.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        Redirect to Stripe Customer Portal or billing dashboard on error.
+    """
+    from core.services.stripe import StripeAPI
+
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+
+        # Check if organization has a Stripe customer
+        if not organization.stripe_customer_id:
+            messages.warning(
+                request,
+                "No billing account found. Please subscribe to a plan first.",
+            )
+            return redirect("core:upgrade_plan")
+
+        # Initialize Stripe API and create portal session
+        stripe_api = StripeAPI()
+        portal_session = stripe_api.create_portal_session(
+            customer_id=organization.stripe_customer_id,
+        )
+
+        if not portal_session or not portal_session.get("url"):
+            messages.error(
+                request, "Unable to access billing portal. Please try again."
+            )
+            return redirect("core:billing_dashboard")
+
+        # Redirect to Stripe Customer Portal
+        return redirect(portal_session["url"])
+
+    except UserProfile.DoesNotExist:
+        return redirect("core:create_organization")
+    except Exception as e:
+        logger.exception(f"Billing portal error: {e!s}")
+        messages.error(request, "An error occurred. Please try again.")
+        return redirect("core:billing_dashboard")
 
 
 @login_required

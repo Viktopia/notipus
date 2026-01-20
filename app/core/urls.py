@@ -13,6 +13,7 @@ urlpatterns = [
     path("plan/selected/", views.plan_selected, name="plan_selected"),
     # Billing management
     path("billing/", views.billing_dashboard, name="billing_dashboard"),
+    path("billing/portal/", views.billing_portal, name="billing_portal"),
     path("billing/upgrade/", views.upgrade_plan, name="upgrade_plan"),
     path("billing/payment-methods/", views.payment_methods, name="payment_methods"),
     path("billing/history/", views.billing_history, name="billing_history"),
