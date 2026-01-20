@@ -107,14 +107,14 @@ services:
   migration:
     <<: *django-service
     container_name: notipus_migration
-    command: ["python", "manage.py", "migrate"]
+    command: ["uv", "run", "python", "manage.py", "migrate"]
     depends_on: *app-dependencies
     restart: "no"  # Migration should run once and exit
 
   django:
     <<: *django-service
     container_name: notipus_django
-    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "django_notipus.wsgi:application"]
+    command: ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "django_notipus.wsgi:application"]
     volumes:
       - static_volume:/app/staticfiles
     ports:
@@ -125,7 +125,7 @@ services:
         condition: service_completed_successfully
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD", "python", "manage.py", "check"]
+      test: ["CMD", "uv", "run", "python", "manage.py", "check"]
 
   nginx:
     image: nginx:alpine

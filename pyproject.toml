@@ -3,38 +3,35 @@ name = "notipus"
 version = "0.1.0"
 description = "A webhook service that sends enriched Shopify, Stripe and Chargify notifications to Slack"
 authors = [
-    {name = "Viktopia Studio",email = "info@viktopia.io"}
+    {name = "Viktopia Studio", email = "info@viktopia.io"}
 ]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "django (>=5.1.5,<6.0.0)",
-    "requests (>=2.32.3,<3.0.0)",
-    "gunicorn (>=23.0.0,<24.0.0)",
-    "psycopg2 (>=2.9.10,<3.0.0)",
-    "pre-commit (>=4.1.0,<5.0.0)",
-    "stripe (>=12.3.0,<13.0.0)",
-    "shopifyapi (>=12.7.0,<13.0.0)",
-    "django-allauth (>=65.10.0,<66.0.0)",
-    "webauthn (>=2.6.0,<3.0.0)",
-    "django-extensions (>=4.1,<5.0)",
-    "redis (>=5.2.0,<6.0.0)",
+    "django>=5.1.5,<6.0.0",
+    "requests>=2.32.3,<3.0.0",
+    "gunicorn>=23.0.0,<24.0.0",
+    "psycopg2>=2.9.10,<3.0.0",
+    "pre-commit>=4.1.0,<5.0.0",
+    "stripe>=12.3.0,<13.0.0",
+    "shopifyapi>=12.7.0,<13.0.0",
+    "django-allauth>=65.10.0,<66.0.0",
+    "webauthn>=2.6.0,<3.0.0",
+    "django-extensions>=4.1,<5.0",
+    "redis>=5.2.0,<6.0.0",
 ]
 
-[tool.poetry]
-packages = [
-    { include = "app" }
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4,<9.0.0",
+    "pytest-cov>=6.0.0,<7.0.0",
+    "ruff>=0.8.4,<0.9.0",
+    "pre-commit>=4.0.1,<5.0.0",
+    "mypy>=1.8.0,<2.0.0",
+    "types-requests>=2.31.0.20240218",
+    "pytest-django>=4.11.1,<5.0.0",
+    "djlint>=1.36.4,<2.0.0",
 ]
-
-[tool.poetry.group.dev.dependencies]
-pytest = ">=8.3.4,<9.0.0"
-pytest-cov = "^6.0.0"
-ruff = "^0.8.4"
-pre-commit = "^4.0.1"
-mypy = "^1.8.0"
-types-requests = "^2.31.0.20240218"
-pytest-django = "^4.11.1"
-djlint = "^1.36.4"
 
 [tool.ruff]
 line-length = 88
@@ -75,5 +72,8 @@ markers = [
 ]
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

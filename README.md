@@ -72,12 +72,21 @@ git clone git@github.com:Viktopia/notipus.git
 cd notipus
 ```
 
-2. Set up Poetry for dependency management:
+2. Install [uv](https://docs.astral.sh/uv/) for dependency management:
 ```bash
-poetry install
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or with Homebrew
+brew install uv
 ```
 
-3. Set Environment Variables
+3. Install dependencies:
+```bash
+uv sync
+```
+
+4. Set Environment Variables
 ```bash
 export SECRET_DJANGO_KEY=your-secure-secret-key-here
 export DEBUG=True
@@ -87,24 +96,24 @@ Webhook secrets for customer integrations are managed per-tenant through the app
 
 ## Development
 
-1. Install development dependencies:
+1. Install all dependencies (including dev):
 ```bash
-poetry install --with dev
+uv sync --all-groups
 ```
 
 2. Run tests:
 ```bash
-poetry run pytest
+uv run pytest
 ```
 
 3. Format code:
 ```bash
-poetry run ruff format .
+uv run ruff format .
 ```
 
 4. Run linting:
 ```bash
-poetry run ruff check .
+uv run ruff check .
 ```
 ## Architecture
 The service is built with a modular architecture that separates concerns and makes it easy to extend:

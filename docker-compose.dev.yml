@@ -11,7 +11,7 @@ services:
   # Override Django service for development
   django:
     # Use development server instead of gunicorn for auto-reload
-    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    command: ["uv", "run", "python", "manage.py", "runserver", "0.0.0.0:8000"]
     environment:
       - DEBUG=True
     # Enable live code reloading for development
