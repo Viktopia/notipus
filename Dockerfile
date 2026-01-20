@@ -6,30 +6,29 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Copy uv binary from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Set the working directory
 WORKDIR /app
 
-# Copy dependencies
-COPY pyproject.toml poetry.lock /app/
+# Install system dependencies
+RUN apt-get update && apt-get install -y libpq-dev gcc redis-tools postgresql-client && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN pip install --upgrade pip && \
-    pip install poetry && \
-    poetry config virtualenvs.create false
+# Copy dependency files
+COPY pyproject.toml uv.lock /app/
 
-RUN apt-get update && apt-get install -y libpq-dev gcc redis-cli && rm -rf /var/lib/apt/lists/*
+# Install project dependencies (without dev dependencies)
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Install project dependencies
-RUN poetry install --no-root --no-interaction --no-ansi
-
+# Copy application code
 COPY ./app/ .
 
-RUN apt update && apt install -y postgresql-client
 # Collect static files (if used)
-RUN python manage.py collectstatic --noinput
+RUN uv run python manage.py collectstatic --noinput
 
 # Port that the application will use
 EXPOSE 8000
 
 # Command to start the server
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "django_notipus.wsgi:application"]
+CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8000", "django_notipus.wsgi:application"]
