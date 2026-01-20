@@ -19,12 +19,12 @@ RUN apt-get update && apt-get install -y libpq-dev gcc redis-tools postgresql-cl
 COPY pyproject.toml uv.lock /app/
 
 # Install project dependencies (without dev dependencies)
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev
 
 # Copy application code
 COPY ./app/ .
 
-# Collect static files (if used)
+# Collect static files
 RUN uv run python manage.py collectstatic --noinput
 
 # Port that the application will use
