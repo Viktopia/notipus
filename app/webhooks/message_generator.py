@@ -36,7 +36,7 @@ class MessageGenerator:
         "😅 Oops! {customer_name}'s payment didn't go through and needs attention.",
         "🤔 Uh-oh! Looks like {customer_name}'s payment needs looking at.",
         "👀 Seems like {customer_name} hit a snag and needs attention.",
-        "💭 Heads up! {customer_name}'s payment could use some attention.",
+        "💭 FYI: {customer_name}'s payment could use some attention.",
         # New messages
         "👋 Friendly nudge! {customer_name}'s payment could use a quick check.",
         "🚧 Hey team! {customer_name}'s payment hit a speed bump.",
@@ -65,11 +65,23 @@ class MessageGenerator:
             "{popular_features} is amazing!"
         ),
         # New messages
-        "🎯 {customer_name} is wrapping up their trial adventure - time to chat!",
-        "⏳ Trial countdown for {customer_name}! They've been loving the product!",
-        "🎁 {customer_name}'s free ride is coming to an end - let's help them commit!",
-        "⏰ Tick tock! {customer_name}'s trial is in the home stretch!",
-        "🔍 {customer_name} has been exploring like a pro - trial ends soon!",
+        (
+            "🎯 {customer_name} is wrapping up their trial adventure with "
+            "{popular_features} - time to chat!"
+        ),
+        (
+            "⏳ Trial countdown for {customer_name}! They've been loving "
+            "{popular_features}!"
+        ),
+        (
+            "🎁 {customer_name}'s been loving {popular_features} - "
+            "let's help them commit!"
+        ),
+        "⏰ Tick tock! {customer_name}'s trial with {popular_features} is wrapping up!",
+        (
+            "🔍 {customer_name} has been exploring {popular_features} like a pro - "
+            "trial ends soon!"
+        ),
     ]
 
     # Upgrade templates
@@ -95,11 +107,11 @@ class MessageGenerator:
             "powers! Awesome upgrade! 💪"
         ),
         # New messages
-        "💥 Boom! {customer_name} just went bigger and better with {new_plan}!",
-        "🔓 Growth mode activated! {customer_name} upgraded to {new_plan}!",
-        "📈 {customer_name} is scaling up to {new_plan} - what a journey!",
-        "🎯 Big moves! {customer_name} just unlocked {new_plan} features!",
-        "🌠 The sky's the limit! {customer_name} just upgraded to {new_plan}!",
+        "💥 🚀 Boom! {customer_name} just went bigger and better with {new_plan}! 🎉",
+        "🔓 ⭐️ Growth mode activated! {customer_name} upgraded to {new_plan}! 💪",
+        "📈 🚀 {customer_name} is scaling up to {new_plan} - what a journey! 🌟",
+        "🎯 💪 Big moves! {customer_name} just unlocked {new_plan} features! 🎉",
+        "🌠 ⭐️ The sky's the limit! {customer_name} just upgraded to {new_plan}! 🚀",
     ]
 
     def _format_features(self, features: List[str]) -> str:

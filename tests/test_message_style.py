@@ -114,13 +114,11 @@ def test_trial_ending_messages_are_encouraging() -> None:
         "exploring like a pro",
     ]
     assert any(phrase in message.lower() for phrase in encouraging_phrases)
-    # Some messages reference features, others focus on urgency/encouragement
-    # Only check for features when the original template style is used
-    if any(
-        phrase in message.lower()
-        for phrase in ["crushing it", "rocking", "loving", "really getting into"]
-    ):
-        assert "API" in message or "Dashboard" in message or "our features" in message
+    # All trial ending messages should reference features to highlight product usage
+    assert (
+        any(feature in message for feature in event["popular_features"])
+        or "our features" in message
+    )
 
 
 def test_upgrade_messages_are_extra_celebratory() -> None:
@@ -142,7 +140,7 @@ def test_upgrade_messages_are_extra_celebratory() -> None:
         message.count(emoji)
         for emoji in ["🎉", "🚀", "⭐️", "🌟", "💪", "💥", "🔓", "📈", "🎯", "🌠"]
     )
-    assert emoji_count >= 1
+    assert emoji_count >= 2
     enthusiastic_phrases = [
         "Awesome upgrade",
         "Leveled up",
