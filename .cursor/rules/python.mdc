@@ -16,7 +16,7 @@ alwaysApply: true
 - Use modern python features like pathlib for file system operations.
 - Detailed documentation using docstrings and README files.
 - Please use pep257 convention.
-- Package management via Poetry and *never* edit a lockfile by hand - use the `poetry` command.
+- Package management via `uv` (see https://docs.astral.sh/uv/). Never edit `uv.lock` by hand - use `uv` commands.
 - Use ruff for code style and formatting.
 - Update existing docstrings if need be.
 - Make sure you keep any comments that exist in a file.

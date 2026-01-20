@@ -34,33 +34,56 @@ def slack_auth(request):
     return redirect(auth_url)
 
 
+# Default timeout for external API requests (seconds)
+SLACK_API_TIMEOUT = 30
+
+
 def _get_slack_token(code):
     """Exchange OAuth code for access token"""
-    response = requests.post(
-        "https://slack.com/api/openid.connect.token",
-        data={
-            "client_id": settings.SLACK_CLIENT_ID,
-            "client_secret": settings.SLACK_CLIENT_SECRET,
-            "code": code,
-            "redirect_uri": settings.SLACK_REDIRECT_URI,
-        },
-    )
-    data = response.json()
-    if not data.get("ok"):
+    try:
+        response = requests.post(
+            "https://slack.com/api/openid.connect.token",
+            data={
+                "client_id": settings.SLACK_CLIENT_ID,
+                "client_secret": settings.SLACK_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": settings.SLACK_REDIRECT_URI,
+            },
+            timeout=SLACK_API_TIMEOUT,
+        )
+        data = response.json()
+        if not data.get("ok"):
+            error = data.get("error", "unknown")
+            logger.warning(f"Slack token exchange failed: {error}")
+            return None
+        return data
+    except requests.exceptions.Timeout:
+        logger.error("Slack token exchange request timed out")
         return None
-    return data
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Slack token exchange request failed: {str(e)}")
+        return None
 
 
 def _get_slack_user_info(access_token):
     """Get user information from Slack"""
-    response = requests.get(
-        "https://slack.com/api/openid.connect.userInfo",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    data = response.json()
-    if not data.get("ok"):
+    try:
+        response = requests.get(
+            "https://slack.com/api/openid.connect.userInfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=SLACK_API_TIMEOUT,
+        )
+        data = response.json()
+        if not data.get("ok"):
+            logger.warning(f"Slack userInfo failed: {data.get('error', 'unknown')}")
+            return None
+        return data
+    except requests.exceptions.Timeout:
+        logger.error("Slack userInfo request timed out")
         return None
-    return data
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Slack userInfo request failed: {str(e)}")
+        return None
 
 
 def slack_auth_callback(request):
@@ -132,16 +155,24 @@ def slack_connect_callback(request):
         return HttpResponse("Authorization failed: No code provided", status=400)
 
     # Exchange code for token
-    response = requests.post(
-        "https://slack.com/api/oauth.v2.access",
-        data={
-            "client_id": settings.SLACK_CLIENT_ID,
-            "client_secret": settings.SLACK_CLIENT_SECRET,
-            "code": code,
-            "redirect_uri": settings.SLACK_CONNECT_REDIRECT_URI,
-        },
-    )
-    data = response.json()
+    try:
+        response = requests.post(
+            "https://slack.com/api/oauth.v2.access",
+            data={
+                "client_id": settings.SLACK_CLIENT_ID,
+                "client_secret": settings.SLACK_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": settings.SLACK_CONNECT_REDIRECT_URI,
+            },
+            timeout=SLACK_API_TIMEOUT,
+        )
+        data = response.json()
+    except requests.exceptions.Timeout:
+        logger.error("Slack OAuth token exchange timed out")
+        return HttpResponse("Slack connection timed out. Please try again.", status=504)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Slack OAuth request failed: {str(e)}")
+        return HttpResponse("Slack connection failed. Please try again.", status=502)
 
     if not data.get("ok"):
         return HttpResponse(f"Slack connection failed: {data.get('error')}", status=400)
@@ -213,9 +244,9 @@ def connect_shopify(request):
         except UserProfile.DoesNotExist:
             return JsonResponse({"error": "User profile not found"}, status=400)
 
-        # Test the Shopify connection
-        shopify_api = ShopifyAPI(access_token, shop_url)
-        shop_domain = shopify_api.get_shop_domain()
+        # Test the Shopify connection using classmethod pattern
+        # ShopifyAPI uses classmethods that require shop_domain and access_token
+        shop_domain = ShopifyAPI.get_shop_domain(shop_url, access_token)
 
         if not shop_domain:
             return JsonResponse({"error": "Invalid Shopify credentials"}, status=400)

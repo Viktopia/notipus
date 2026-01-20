@@ -37,8 +37,8 @@ class ShopifyAPI:
             shopify.Session: Configured session for API access
         """
         try:
-            # Use the latest stable API version
-            api_version = "2024-01"
+            # Use the latest stable API version (updated January 2025)
+            api_version = "2025-01"
             session = shopify.Session(
                 shop_domain=shop_domain,
                 api_version=api_version,

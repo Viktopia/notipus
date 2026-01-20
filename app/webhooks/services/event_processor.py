@@ -16,6 +16,7 @@ class EventProcessor:
         "subscription_created",
         "subscription_updated",
         "subscription_canceled",
+        "subscription_deleted",
         "trial_ending",
         "customer_updated",
     }

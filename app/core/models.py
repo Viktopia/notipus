@@ -261,11 +261,25 @@ def validate_domain(value):
 
 
 class Company(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+    """
+    Company model for storing enriched brand/company data.
+
+    Used by DomainEnrichmentService to cache brand information
+    retrieved from enrichment providers like Brandfetch.
+    """
+
+    name = models.CharField(max_length=255, blank=True, default="")
     domain = models.CharField(max_length=255, unique=True, validators=[validate_domain])
+    logo_url = models.URLField(max_length=500, blank=True, default="")
+    brand_info = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        app_label = "core"
+        verbose_name_plural = "Companies"
 
     def __str__(self):
-        return f"{self.name} ({self.domain})"
+        display_name = self.name or self.domain
+        return f"{display_name} ({self.domain})"
 
     def save(self, *args, **kwargs):
         self.full_clean()  # This calls clean() and validators

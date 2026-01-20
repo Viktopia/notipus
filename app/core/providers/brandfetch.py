@@ -14,6 +14,14 @@ class BrandfetchProvider(BaseEnrichmentProvider):
         self.base_url = base_url
 
     def enrich_domain(self, domain: str) -> dict:
+        """
+        Enrich domain with brand data from Brandfetch API v2.
+
+        The /v2/brands/{domain} endpoint returns all brand data including logos
+        in a single response. There is no separate /logos endpoint.
+
+        API Documentation: https://docs.brandfetch.com/reference/brand-api
+        """
         if not self.api_key:
             logger.error("Brandfetch API key is not configured")
             return {}
@@ -36,13 +44,9 @@ class BrandfetchProvider(BaseEnrichmentProvider):
             # Check quota usage from response headers
             self._log_quota_usage(response.headers)
 
-            logos_response = requests.get(
-                f"{self.base_url}/brands/{domain}/logos",
-                headers=headers,
-                timeout=timeout,
-            )
-            logos_response.raise_for_status()
-            logos_data = logos_response.json()
+            # Logos are included in the main brands response under the "logos" array
+            # No separate /logos endpoint exists in the Brandfetch API v2
+            logos_data = brand_data.get("logos", [])
 
             return {
                 "name": brand_data.get("name"),

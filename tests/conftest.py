@@ -2,7 +2,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.test.client import RequestFactory
-from django.urls import reverse
+
+# Test organization UUID for multi-tenant webhook endpoints
+TEST_ORG_UUID = "12345678-1234-5678-1234-567812345678"
 
 
 @pytest.fixture
@@ -43,14 +45,26 @@ def mock_slack_response():
 
 
 @pytest.fixture
-def mock_shopify_request(request_factory):
-    """Mock Shopify webhook request"""
+def test_organization_uuid() -> str:
+    """Return a test organization UUID for webhook endpoints."""
+    return TEST_ORG_UUID
+
+
+@pytest.fixture
+def mock_shopify_request(request_factory: RequestFactory) -> Mock:
+    """
+    Mock Shopify webhook request.
+
+    Note: This fixture creates a mock request for testing providers directly.
+    For integration tests, use the customer webhook endpoints with
+    test_organization_uuid fixture.
+    """
     headers = {
-        "X-Shopify-Topic": "orders/paid",
-        "X-Shopify-Shop-Domain": "test.myshopify.com",
-        "X-Shopify-Hmac-SHA256": "test_signature",
-        "X-Shopify-Order-Id": "123456789",
-        "X-Shopify-Api-Version": "2024-01",
+        "HTTP_X_SHOPIFY_TOPIC": "orders/paid",
+        "HTTP_X_SHOPIFY_SHOP_DOMAIN": "test.myshopify.com",
+        "HTTP_X_SHOPIFY_HMAC_SHA256": "test_signature",
+        "HTTP_X_SHOPIFY_ORDER_ID": "123456789",
+        "HTTP_X_SHOPIFY_API_VERSION": "2025-01",
     }
     data = {
         "id": 123456789,
@@ -68,8 +82,9 @@ def mock_shopify_request(request_factory):
         "currency": "USD",
         "financial_status": "paid",
     }
+    # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        reverse("shopify_webhook"),
+        f"/webhooks/customer/{TEST_ORG_UUID}/shopify/",
         data=data,
         content_type="application/json",
         **headers,
@@ -78,12 +93,16 @@ def mock_shopify_request(request_factory):
 
 
 @pytest.fixture
-def mock_shopify_customer_request(request_factory):
-    """Mock Shopify customer webhook request"""
+def mock_shopify_customer_request(request_factory: RequestFactory) -> Mock:
+    """
+    Mock Shopify customer webhook request.
+
+    Note: This fixture creates a mock request for testing providers directly.
+    """
     headers = {
-        "X-Shopify-Topic": "customers/update",
-        "X-Shopify-Shop-Domain": "test.myshopify.com",
-        "X-Shopify-Hmac-SHA256": "test_signature",
+        "HTTP_X_SHOPIFY_TOPIC": "customers/update",
+        "HTTP_X_SHOPIFY_SHOP_DOMAIN": "test.myshopify.com",
+        "HTTP_X_SHOPIFY_HMAC_SHA256": "test_signature",
     }
     data = {
         "id": 456,
@@ -119,8 +138,9 @@ def mock_shopify_customer_request(request_factory):
             },
         ],
     }
+    # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        reverse("shopify_customer_webhook"),
+        f"/webhooks/customer/{TEST_ORG_UUID}/shopify/",
         data=data,
         content_type="application/json",
         **headers,
@@ -129,11 +149,15 @@ def mock_shopify_customer_request(request_factory):
 
 
 @pytest.fixture
-def mock_chargify_request(request_factory):
-    """Mock Chargify webhook request"""
+def mock_chargify_request(request_factory: RequestFactory) -> Mock:
+    """
+    Mock Chargify webhook request.
+
+    Note: This fixture creates a mock request for testing providers directly.
+    """
     headers = {
-        "X-Chargify-Webhook-Id": "test_webhook_1",
-        "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
+        "HTTP_X_CHARGIFY_WEBHOOK_ID": "test_webhook_1",
+        "HTTP_X_CHARGIFY_WEBHOOK_SIGNATURE_HMAC_SHA_256": "test_signature",
     }
     data = {
         "event": "payment_success",
@@ -148,8 +172,9 @@ def mock_chargify_request(request_factory):
         "payload[transaction][amount_in_cents]": "10000",
         "created_at": "2024-03-15T10:00:00Z",
     }
+    # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        reverse("chargify_webhook"),
+        f"/webhooks/customer/{TEST_ORG_UUID}/chargify/",
         data=data,
         content_type="application/x-www-form-urlencoded",
         **headers,

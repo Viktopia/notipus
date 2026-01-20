@@ -202,25 +202,81 @@ uv run python app/manage.py collectstatic
 
 ## Architecture
 
-The service is built with a modular architecture that separates concerns and makes it easy to extend:
+The service is built with a modular, multi-tenant architecture that separates concerns and makes it easy to extend:
 
 ```
 app/
 ├── core/              # Core application (users, organizations, billing)
+│   ├── models.py          # Organization, Integration, Company, UserProfile, etc.
+│   ├── services/
+│   │   ├── stripe.py      # Stripe billing API client
+│   │   ├── shopify.py     # Shopify Admin API client
+│   │   ├── enrichment.py  # Domain enrichment service
+│   │   ├── dashboard.py   # Dashboard data aggregation
+│   │   └── webauthn.py    # Passwordless authentication
+│   └── providers/
+│       ├── base.py        # BaseEnrichmentProvider
+│       └── brandfetch.py  # Domain/brand enrichment
 ├── webhooks/
 │   ├── providers/     # Payment gateway integrations
-│   │   ├── base.py        # AbstractProvider
-│   │   ├── chargify.py    # ChargifyWebhookProcessor
-│   │   ├── shopify.py     # ShopifyWebhookProcessor
-│   │   └── stripe.py      # StripeWebhookProcessor
-│   ├── services/      # Business logic
-│   │   ├── event_processor.py
-│   │   └── slack_client.py
+│   │   ├── base.py        # PaymentProvider abstract class
+│   │   ├── chargify.py    # Chargify/Maxio webhook processor
+│   │   ├── shopify.py     # Shopify webhook processor
+│   │   └── stripe.py      # Stripe webhook processor
+│   ├── services/
+│   │   ├── event_processor.py  # Event processing and notification formatting
+│   │   ├── slack_client.py     # Slack incoming webhooks client
+│   │   ├── billing.py          # Notipus subscription billing handler
+│   │   ├── rate_limiter.py     # Rate limiting with circuit breaker
+│   │   └── database_lookup.py  # Recent activity storage (Redis)
 │   ├── models/
 │   │   └── notification.py
-│   └── message_generator.py
+│   └── webhook_router.py  # Multi-tenant webhook routing
 └── django_notipus/    # Django project settings
 ```
+
+### Multi-Tenant Architecture
+
+Notipus is designed as a multi-tenant SaaS platform where each organization manages their own integrations:
+
+- **Organizations**: Each tenant (organization) has their own webhook endpoints, integrations, and Slack configurations
+- **Webhook Endpoints**: Organization-specific webhooks at `/webhooks/customer/{org_uuid}/{provider}/`
+- **Integration Storage**: Credentials and settings stored per-organization in the `Integration` model
+- **Isolation**: Each organization's data is isolated and rate-limited independently
+
+### Authentication
+
+Notipus supports multiple authentication methods:
+
+1. **Slack OAuth (Sign in with Slack)**: Primary authentication method using OpenID Connect
+2. **WebAuthn/Passkeys**: Passwordless authentication for enhanced security
+3. **Django Sessions**: Traditional session-based auth for API access
+
+### Domain Enrichment (Brandfetch)
+
+The Brandfetch integration enriches company domains with brand information:
+
+- Automatically fetches company logos, colors, and descriptions
+- Caches results in the `Company` model to reduce API calls
+- Used to enhance Slack notifications with company branding
+
+### Rate Limiting & Circuit Breaker
+
+The webhook system includes robust rate limiting:
+
+- **Per-Organization Limits**: Configurable limits based on subscription plan
+- **Redis-Backed**: Uses Redis for distributed rate limit tracking
+- **Circuit Breaker**: Automatically disables failing integrations to prevent cascading failures
+- **Graceful Degradation**: Falls back to in-memory counting if Redis is unavailable
+
+### Caching (Redis)
+
+Redis is used for multiple purposes:
+
+- **Rate Limit Tracking**: Per-organization request counts with TTL
+- **Recent Activity**: Last 7 days of webhook activity for dashboard display
+- **Session Cache**: Django session storage (configurable)
+- **Circuit Breaker State**: Tracks integration health status
 
 ## Contributing
 
@@ -261,3 +317,40 @@ Customer webhook integrations (Shopify, Chargify, Stripe) are configured per-ten
 - Webhook secrets
 - API credentials
 - Slack integration settings
+
+### Webhook Endpoints
+
+**Customer Webhooks** (per-organization):
+
+- `POST /webhooks/customer/{org_uuid}/shopify/` - Shopify order and customer events
+- `POST /webhooks/customer/{org_uuid}/chargify/` - Chargify/Maxio subscription events
+- `POST /webhooks/customer/{org_uuid}/stripe/` - Stripe payment events
+
+**Global Webhooks** (Notipus billing):
+
+- `POST /webhooks/billing/stripe/` - Notipus subscription billing events
+
+### Supported Events
+
+**Shopify**:
+
+- `orders/paid` - New order payments
+- `customers/create`, `customers/update` - Customer lifecycle events
+
+**Chargify/Maxio**:
+
+- `payment_success`, `payment_failure` - Payment outcomes
+- `subscription_created`, `subscription_updated` - Subscription lifecycle
+- `renewal_success`, `renewal_failure` - Renewal events
+
+**Stripe**:
+
+- `customer.subscription.created/updated/deleted` - Subscription lifecycle
+- `invoice.payment_succeeded/failed` - Invoice payment outcomes
+
+### Security Features
+
+- **HMAC Signature Validation**: All webhooks require valid signatures
+- **Timestamp Validation**: Prevents replay attacks (Chargify)
+- **Production-Only Enforcement**: Webhook validation cannot be bypassed in production
+- **Request Timeouts**: All external API calls have configured timeouts

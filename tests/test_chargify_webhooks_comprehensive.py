@@ -91,8 +91,10 @@ class TestChargifyWebhookValidation:
         with patch("hmac.compare_digest", return_value=False):
             assert provider.validate_webhook(request) is False
 
-    def test_no_secret_configured_bypasses_validation(self, request_factory):
-        """Test that missing webhook secret bypasses validation"""
+    def test_no_secret_configured_bypasses_validation_in_debug(
+        self, request_factory, settings
+    ):
+        """Test that missing webhook secret bypasses validation in DEBUG mode only"""
         provider = ChargifyProvider(webhook_secret="")
 
         request = request_factory.post(
@@ -101,7 +103,25 @@ class TestChargifyWebhookValidation:
             content_type="application/x-www-form-urlencoded",
         )
 
+        # In DEBUG mode, empty secret should bypass validation
+        settings.DEBUG = True
         assert provider.validate_webhook(request) is True
+
+    def test_no_secret_configured_rejects_in_production(
+        self, request_factory, settings
+    ):
+        """Test that missing webhook secret rejects in production (DEBUG=False)"""
+        provider = ChargifyProvider(webhook_secret="")
+
+        request = request_factory.post(
+            "/webhook/chargify/",
+            data="event=payment_success",
+            content_type="application/x-www-form-urlencoded",
+        )
+
+        # In production mode, empty secret should reject
+        settings.DEBUG = False
+        assert provider.validate_webhook(request) is False
 
 
 class TestChargifyWebhookParsing:

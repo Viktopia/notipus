@@ -122,13 +122,21 @@ class ChargifyProvider(PaymentProvider):
 
     def validate_webhook(self, request: HttpRequest) -> bool:
         """Validate webhook signature and timestamp"""
+        from django.conf import settings as django_settings
+
         try:
-            # For development/testing: allow bypassing validation when webhook
-            # secret is empty
+            # For development/testing ONLY: allow bypassing validation when
+            # webhook secret is empty. This MUST NOT work in production.
             if not self.webhook_secret:
-                logger.info(
+                if not django_settings.DEBUG:
+                    logger.error(
+                        "SECURITY: Webhook secret not configured in production! "
+                        "Rejecting webhook to prevent unauthorized access."
+                    )
+                    return False
+                logger.warning(
                     "Webhook secret not configured - bypassing validation for "
-                    "development"
+                    "development. This would be rejected in production."
                 )
                 return True
 
@@ -175,6 +183,12 @@ class ChargifyProvider(PaymentProvider):
                     hashlib.sha256,
                 ).hexdigest()
             else:
+                # MD5 is deprecated for cryptographic use - log warning
+                logger.warning(
+                    "Using MD5 signature validation (deprecated). "
+                    "Configure Chargify to use SHA-256 signatures for better security.",
+                    extra={"webhook_id": webhook_id},
+                )
                 expected_signature = hmac.new(
                     self.webhook_secret.encode(),
                     body,

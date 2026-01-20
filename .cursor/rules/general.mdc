@@ -11,8 +11,8 @@ You are an expert in Python, Django, scalable web application development with a
 - Keep related files together and maintain a logical directory hierarchy.
 
 ## Package Management and Dependencies
-- For Python, we're using `poetry` for package management, so never try to run python directly or through a virtual environment.
-- NEVER EVER TOUCH A LOCKFILE manually! Always use the corresponding package manager.
+- For Python, we're using `uv` for package management (see https://docs.astral.sh/uv/). Run Python via `uv run python` or `uv run pytest`.
+- NEVER EVER TOUCH A LOCKFILE manually! Always use `uv` commands to manage dependencies.
 - Always specify exact versions for dependencies to ensure reproducible builds.
 - Regularly update dependencies to maintain security and access new features.
 

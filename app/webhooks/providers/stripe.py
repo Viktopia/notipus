@@ -15,6 +15,8 @@ class StripeProvider(PaymentProvider):
 
     EVENT_TYPE_MAPPING = {
         "customer.subscription.created": "subscription_created",
+        "customer.subscription.updated": "subscription_updated",
+        "customer.subscription.deleted": "subscription_deleted",
         "invoice.payment_succeeded": "payment_success",
         "invoice.payment_failed": "payment_failure",
         "test": "test",
@@ -79,6 +81,12 @@ class StripeProvider(PaymentProvider):
         if event_type == "subscription_created":
             amount = str(data.get("plan", {}).get("amount", 0))
             BillingService.handle_subscription_created(data)
+        elif event_type == "subscription_updated":
+            amount = str(data.get("plan", {}).get("amount", 0))
+            BillingService.handle_subscription_updated(data)
+        elif event_type == "subscription_deleted":
+            amount = "0"
+            BillingService.handle_subscription_deleted(data)
         elif event_type == "payment_success":
             amount = str(data.get("amount_due", 0))
             BillingService.handle_payment_success(data)
