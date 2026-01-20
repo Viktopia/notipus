@@ -43,8 +43,9 @@ class StripeProvider(PaymentProvider):
             webhook_secret: Stripe webhook signing secret.
         """
         super().__init__(webhook_secret)
-        # Configure Stripe API key
+        # Configure Stripe API key and version
         stripe.api_key = settings.STRIPE_SECRET_KEY
+        stripe.api_version = settings.STRIPE_API_VERSION
 
     def validate_webhook(self, request: HttpRequest) -> bool:
         """Validate webhook signature using Stripe SDK.

@@ -30,8 +30,9 @@ class StripeAPI:
                      settings.STRIPE_SECRET_KEY (for Notipus billing).
         """
         self.api_key = api_key or settings.STRIPE_SECRET_KEY
-        # Configure Stripe with the secret key
+        # Configure Stripe with the secret key and API version
         stripe.api_key = self.api_key
+        stripe.api_version = settings.STRIPE_API_VERSION
 
     def get_account_info(self) -> dict[str, Any] | None:
         """Retrieve Stripe account information to verify API key validity.
@@ -108,8 +109,9 @@ class StripeAPI:
             Created customer data dictionary, or None on failure.
         """
         try:
-            # Configure Stripe API key for this operation
+            # Configure Stripe API key and version for this operation
             stripe.api_key = settings.STRIPE_SECRET_KEY
+            stripe.api_version = settings.STRIPE_API_VERSION
 
             # Use Stripe SDK to create customer
             customer = stripe.Customer.create(**customer_data)
