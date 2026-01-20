@@ -171,3 +171,4 @@ app/static/webfonts/
 
 # Django collectstatic output
 app/staticfiles/
+fly.toml

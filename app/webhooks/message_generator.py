@@ -4,10 +4,10 @@ from typing import Any, Dict, List
 
 class MessageGenerator:
     # Emoji collections
-    SUCCESS_EMOJI = ["🎉", "💸", "🎊", "🚀", "💪"]
-    FAILURE_EMOJI = ["😅", "🤔", "👀", "💭"]
-    TRIAL_EMOJI = ["✨", "🌟", "💫", "🚀"]
-    UPGRADE_EMOJI = ["🎉", "🚀", "⭐️", "🌟", "💪"]
+    SUCCESS_EMOJI = ["🎉", "💸", "🎊", "🚀", "💪", "🙌", "💥", "👀", "🏆", "🔐"]
+    FAILURE_EMOJI = ["😅", "🤔", "👀", "💭", "👋", "🚧", "📢", "📞", "🔔"]
+    TRIAL_EMOJI = ["✨", "🌟", "💫", "🚀", "🎯", "⏳", "🎁", "⏰", "🔍"]
+    UPGRADE_EMOJI = ["🎉", "🚀", "⭐️", "🌟", "💪", "💥", "🔓", "📈", "🎯", "🌠"]
     ALL_EMOJI = set(SUCCESS_EMOJI + FAILURE_EMOJI + TRIAL_EMOJI + UPGRADE_EMOJI)
 
     # Message templates with placeholders
@@ -23,6 +23,12 @@ class MessageGenerator:
             "💪 Sweet! Look who's crushing it! {customer_name} with a solid "
             "{amount} payment!"
         ),
+        # New messages
+        "🙌 High five! {customer_name} just came through with {amount}!",
+        "💥 Boom! {customer_name} is keeping the dream alive with {amount}!",
+        "👀 Look at that! {customer_name} just dropped {amount} - you love to see it!",
+        "🏆 Winner winner! {customer_name} just paid {amount}!",
+        "🔐 The vault just got heavier! {customer_name} sent {amount}!",
     ]
 
     # Payment failure templates
@@ -30,7 +36,13 @@ class MessageGenerator:
         "😅 Oops! {customer_name}'s payment didn't go through and needs attention.",
         "🤔 Uh-oh! Looks like {customer_name}'s payment needs looking at.",
         "👀 Seems like {customer_name} hit a snag and needs attention.",
-        "💭 Looks like {customer_name} hit a snag that needs looking at.",
+        "💭 FYI: {customer_name}'s payment could use some attention.",
+        # New messages
+        "👋 Friendly nudge! {customer_name}'s payment could use a quick check.",
+        "🚧 Hey team! {customer_name}'s payment hit a speed bump.",
+        "📢 Attention needed! {customer_name}'s payment didn't quite land.",
+        "📞 Time to reach out! {customer_name}'s payment needs some TLC.",
+        "🔔 Just a heads up! {customer_name}'s payment is waiting for a retry.",
     ]
 
     # Trial ending templates
@@ -51,6 +63,24 @@ class MessageGenerator:
         (
             "✨ The way {customer_name}'s making the most of "
             "{popular_features} is amazing!"
+        ),
+        # New messages
+        (
+            "🎯 {customer_name} is wrapping up their trial adventure with "
+            "{popular_features} - time to chat!"
+        ),
+        (
+            "⏳ Trial countdown for {customer_name}! They've been loving "
+            "{popular_features}!"
+        ),
+        (
+            "🎁 {customer_name}'s been loving {popular_features} - "
+            "let's help them commit!"
+        ),
+        "⏰ Tick tock! {customer_name}'s trial with {popular_features} is wrapping up!",
+        (
+            "🔍 {customer_name} has been exploring {popular_features} like a pro - "
+            "trial ends soon!"
         ),
     ]
 
@@ -76,6 +106,12 @@ class MessageGenerator:
             "🚀 🌟 Leveled up! {customer_name}'s growing with {new_plan} "
             "powers! Awesome upgrade! 💪"
         ),
+        # New messages
+        "💥 🚀 Boom! {customer_name} just went bigger and better with {new_plan}! 🎉",
+        "🔓 ⭐️ Growth mode activated! {customer_name} upgraded to {new_plan}! 💪",
+        "📈 🚀 {customer_name} is scaling up to {new_plan} - what a journey! 🌟",
+        "🎯 💪 Big moves! {customer_name} just unlocked {new_plan} features! 🎉",
+        "🌠 ⭐️ The sky's the limit! {customer_name} just upgraded to {new_plan}! 🚀",
     ]
 
     def _format_features(self, features: List[str]) -> str:

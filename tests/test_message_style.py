@@ -17,8 +17,32 @@ def test_payment_success_messages_are_celebratory() -> None:
     event = {"customer_name": "Acme Corp", "amount": "$500", "plan": "Pro"}
 
     message = generator.payment_success(event)
-    assert any(emoji in message for emoji in ["🎉", "💸", "🎊", "🚀", "💪"])
-    celebratory_phrases = ["Woohoo", "Awesome", "Yay", "Sweet", "Nice one", "Ka-ching"]
+    success_emojis = [
+        "🎉",
+        "💸",
+        "🎊",
+        "🚀",
+        "💪",
+        "🙌",
+        "💥",
+        "👀",
+        "🏆",
+        "🔐",
+    ]
+    assert any(emoji in message for emoji in success_emojis)
+    celebratory_phrases = [
+        "Woohoo",
+        "Awesome",
+        "Yay",
+        "Sweet",
+        "Nice one",
+        "Ka-ching",
+        "High five",
+        "Boom",
+        "Look at that",
+        "Winner winner",
+        "vault",
+    ]
     assert any(phrase in message for phrase in celebratory_phrases)
     assert event["customer_name"] in message
     assert event["amount"] in message
@@ -33,11 +57,32 @@ def test_payment_failure_messages_are_light_but_clear() -> None:
 
     event = {"customer_name": "Acme Corp", "amount": "$500", "reason": "card_expired"}
     message = generator.payment_failure(event)
-    assert any(emoji in message for emoji in ["😅", "🤔", "👀", "💭"])
-    light_phrases = ["Oops", "Uh-oh", "Looks like", "Seems like", "Hit a snag"]
+    failure_emojis = ["😅", "🤔", "👀", "💭", "👋", "🚧", "📢", "📞", "🔔"]
+    assert any(emoji in message for emoji in failure_emojis)
+    light_phrases = [
+        "Oops",
+        "Uh-oh",
+        "Looks like",
+        "Seems like",
+        "Hit a snag",
+        "Friendly nudge",
+        "Hey team",
+        "Attention needed",
+        "Time to reach out",
+        "Just a heads up",
+        "Heads up",
+    ]
     assert any(phrase in message for phrase in light_phrases)
     lower_message = message.lower()
-    assert "needs attention" in lower_message or "needs looking at" in lower_message
+    assert (
+        "needs attention" in lower_message
+        or "needs looking at" in lower_message
+        or "could use" in lower_message
+        or "speed bump" in lower_message
+        or "didn't quite land" in lower_message
+        or "needs some tlc" in lower_message
+        or "waiting for a retry" in lower_message
+    )
 
 
 def test_trial_ending_messages_are_encouraging() -> None:
@@ -54,16 +99,26 @@ def test_trial_ending_messages_are_encouraging() -> None:
     }
 
     message = generator.trial_ending(event)
-    assert any(emoji in message for emoji in ["✨", "🌟", "💫", "🚀"])
+    trial_emojis = ["✨", "🌟", "💫", "🚀", "🎯", "⏳", "🎁", "⏰", "🔍"]
+    assert any(emoji in message for emoji in trial_emojis)
     encouraging_phrases = [
         "loving",
         "crushing it",
         "rocking",
         "making the most of",
         "really getting into",
+        "trial adventure",
+        "trial countdown",
+        "free ride",
+        "tick tock",
+        "exploring like a pro",
     ]
     assert any(phrase in message.lower() for phrase in encouraging_phrases)
-    assert "API" in message or "Dashboard" in message
+    # All trial ending messages should reference features to highlight product usage
+    assert (
+        any(feature in message for feature in event["popular_features"])
+        or "our features" in message
+    )
 
 
 def test_upgrade_messages_are_extra_celebratory() -> None:
@@ -81,7 +136,10 @@ def test_upgrade_messages_are_extra_celebratory() -> None:
     }
 
     message = generator.plan_upgrade(event)
-    emoji_count = sum(message.count(emoji) for emoji in ["🎉", "🚀", "⭐️", "🌟", "💪"])
+    emoji_count = sum(
+        message.count(emoji)
+        for emoji in ["🎉", "🚀", "⭐️", "🌟", "💪", "💥", "🔓", "📈", "🎯", "🌠"]
+    )
     assert emoji_count >= 2
     enthusiastic_phrases = [
         "Awesome upgrade",
@@ -89,9 +147,22 @@ def test_upgrade_messages_are_extra_celebratory() -> None:
         "Power up",
         "Supercharged",
         "Next level",
+        "Boom",
+        "Growth mode",
+        "scaling up",
+        "Big moves",
+        "sky's the limit",
     ]
     assert any(phrase in message for phrase in enthusiastic_phrases)
-    growth_phrases = ["growing", "scaling", "expanding", "moving up"]
+    growth_phrases = [
+        "growing",
+        "scaling",
+        "expanding",
+        "moving up",
+        "bigger",
+        "unlocked",
+        "upgraded",
+    ]
     assert any(phrase in message.lower() for phrase in growth_phrases)
 
 

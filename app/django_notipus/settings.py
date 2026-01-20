@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from django.utils.functional import SimpleLazyObject
 
@@ -186,16 +187,40 @@ SOCIALACCOUNT_PROVIDERS = {
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "notipus"),
-        "USER": os.environ.get("DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "postgres"),
-        "HOST": os.environ.get("DB_HOST", "localhost"),
-        "PORT": os.environ.get("DB_PORT", "5432"),
+if "DATABASE_URL" in os.environ:
+    # Parse DATABASE_URL (used by Fly.io and other PaaS providers)
+    # Format: postgres://user:password@host:port/database?sslmode=disable
+    db_url = urlparse(os.environ["DATABASE_URL"])
+    db_options: dict[str, str] = {}
+
+    # Parse query string for options like sslmode
+    query_params = parse_qs(db_url.query)
+    if "sslmode" in query_params:
+        db_options["sslmode"] = query_params["sslmode"][0]
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": db_url.path.lstrip("/"),
+            "USER": db_url.username or "",
+            "PASSWORD": db_url.password or "",
+            "HOST": db_url.hostname or "localhost",
+            "PORT": str(db_url.port or 5432),
+            "OPTIONS": db_options,
+        }
     }
-}
+else:
+    # Fall back to individual environment variables (docker-compose)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DB_NAME", "notipus"),
+            "USER": os.environ.get("DB_USER", "postgres"),
+            "PASSWORD": os.environ.get("DB_PASSWORD", "postgres"),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
+        }
+    }
 
 # Cache configuration for Redis
 if "REDIS_URL" in os.environ:
