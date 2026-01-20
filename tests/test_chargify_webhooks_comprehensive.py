@@ -1,5 +1,8 @@
-"""
-Comprehensive tests for Chargify webhook implementation
+"""Comprehensive tests for Chargify webhook implementation.
+
+This module tests webhook signature validation, data parsing,
+deduplication, timestamp handling, and error scenarios for the
+Chargify provider.
 """
 
 import time
@@ -8,20 +11,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import RequestFactory
-
-from app.webhooks.providers import ChargifyProvider
-from app.webhooks.providers.base import InvalidDataError
+from webhooks.providers import ChargifyProvider
+from webhooks.providers.base import InvalidDataError
 
 
 class TestChargifyWebhookValidation:
-    """Test Chargify webhook signature validation"""
+    """Test Chargify webhook signature validation."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider instance for testing."""
         return ChargifyProvider(webhook_secret="test_secret_key")
 
     @pytest.fixture
-    def request_factory(self):
+    def request_factory(self) -> RequestFactory:
+        """Create a Django request factory."""
         return RequestFactory()
 
     def test_sha256_signature_validation(self, provider, request_factory):
@@ -91,8 +95,10 @@ class TestChargifyWebhookValidation:
         with patch("hmac.compare_digest", return_value=False):
             assert provider.validate_webhook(request) is False
 
-    def test_no_secret_configured_bypasses_validation(self, request_factory):
-        """Test that missing webhook secret bypasses validation"""
+    def test_no_secret_configured_bypasses_validation_in_debug(
+        self, request_factory, settings
+    ):
+        """Test that missing webhook secret bypasses validation in DEBUG mode only"""
         provider = ChargifyProvider(webhook_secret="")
 
         request = request_factory.post(
@@ -101,18 +107,38 @@ class TestChargifyWebhookValidation:
             content_type="application/x-www-form-urlencoded",
         )
 
+        # In DEBUG mode, empty secret should bypass validation
+        settings.DEBUG = True
         assert provider.validate_webhook(request) is True
+
+    def test_no_secret_configured_rejects_in_production(
+        self, request_factory, settings
+    ):
+        """Test that missing webhook secret rejects in production (DEBUG=False)"""
+        provider = ChargifyProvider(webhook_secret="")
+
+        request = request_factory.post(
+            "/webhook/chargify/",
+            data="event=payment_success",
+            content_type="application/x-www-form-urlencoded",
+        )
+
+        # In production mode, empty secret should reject
+        settings.DEBUG = False
+        assert provider.validate_webhook(request) is False
 
 
 class TestChargifyWebhookParsing:
-    """Test Chargify webhook data parsing"""
+    """Test Chargify webhook data parsing."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider instance for testing."""
         return ChargifyProvider(webhook_secret="test_secret")
 
     @pytest.fixture
-    def request_factory(self):
+    def request_factory(self) -> RequestFactory:
+        """Create a Django request factory."""
         return RequestFactory()
 
     def test_payment_success_parsing(self, provider, request_factory):
@@ -262,10 +288,12 @@ class TestChargifyWebhookParsing:
 
 
 class TestChargifyWebhookDeduplication:
-    """Test Chargify webhook deduplication logic"""
+    """Test Chargify webhook deduplication logic."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider with short dedup window for testing."""
+
         # Create a custom provider class for testing with shorter dedup window
         class TestChargifyProvider(ChargifyProvider):
             _DEDUP_WINDOW_SECONDS = 60  # 1 minute for testing
@@ -326,14 +354,16 @@ class TestChargifyWebhookDeduplication:
 
 
 class TestChargifyWebhookTimestampValidation:
-    """Test Chargify webhook timestamp validation"""
+    """Test Chargify webhook timestamp validation."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider instance for testing."""
         return ChargifyProvider(webhook_secret="test_secret")
 
     @pytest.fixture
-    def request_factory(self):
+    def request_factory(self) -> RequestFactory:
+        """Create a Django request factory."""
         return RequestFactory()
 
     def test_valid_timestamp_accepted(self, provider, request_factory):
@@ -402,10 +432,11 @@ class TestChargifyWebhookTimestampValidation:
 
 
 class TestChargifyShopifyOrderMatching:
-    """Test Shopify order reference extraction from Chargify memos"""
+    """Test Shopify order reference extraction from Chargify memos."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider instance for testing."""
         return ChargifyProvider(webhook_secret="test_secret")
 
     def test_explicit_shopify_order_extraction(self, provider):
@@ -448,14 +479,16 @@ class TestChargifyShopifyOrderMatching:
 
 
 class TestChargifyErrorHandling:
-    """Test error handling in Chargify webhook processing"""
+    """Test error handling in Chargify webhook processing."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider instance for testing."""
         return ChargifyProvider(webhook_secret="test_secret")
 
     @pytest.fixture
-    def request_factory(self):
+    def request_factory(self) -> RequestFactory:
+        """Create a Django request factory."""
         return RequestFactory()
 
     def test_malformed_amount_handling(self, provider, request_factory):
@@ -542,10 +575,11 @@ class TestChargifyErrorHandling:
 
 
 class TestChargifyProviderIntegration:
-    """Integration tests for Chargify provider"""
+    """Integration tests for Chargify provider."""
 
     @pytest.fixture
-    def provider(self):
+    def provider(self) -> ChargifyProvider:
+        """Create a Chargify provider instance for testing."""
         return ChargifyProvider(webhook_secret="test_secret")
 
     def test_customer_data_extraction(self, provider):

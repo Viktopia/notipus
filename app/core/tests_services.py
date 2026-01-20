@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from core.models import Company, Organization
+from core.models import Company, Integration, Organization, UserProfile
 from core.services.enrichment import DomainEnrichmentService
 from core.services.stripe import StripeAPI
 from django.test import TestCase
@@ -419,6 +419,125 @@ class BillingServiceTest(TestCase):
             "Error handling payment failure: Database error"
         )
 
+    @patch("webhooks.services.billing.logger")
+    def test_handle_subscription_updated_success(self, mock_logger):
+        """Test successful subscription update handling"""
+        subscription_data = {
+            "customer": "cus_test123",
+            "status": "active",
+            "items": {"data": [{"plan": {"id": "plan_pro"}}]},
+            "current_period_end": 1234567890,
+        }
+
+        BillingService.handle_subscription_updated(subscription_data)
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.subscription_plan, "plan_pro")
+        self.assertEqual(self.organization.subscription_status, "active")
+        self.assertEqual(self.organization.billing_cycle_anchor, 1234567890)
+
+        mock_logger.info.assert_called_once()
+        self.assertIn("active", mock_logger.info.call_args[0][0])
+
+    @patch("webhooks.services.billing.logger")
+    def test_handle_subscription_updated_status_changes(self, mock_logger):
+        """Test subscription update with various status changes"""
+        status_test_cases = [
+            ("trialing", "trial"),
+            ("past_due", "past_due"),
+            ("canceled", "cancelled"),
+            ("unpaid", "past_due"),
+        ]
+
+        for stripe_status, expected_internal_status in status_test_cases:
+            with self.subTest(stripe_status=stripe_status):
+                # Reset organization
+                self.organization.subscription_status = "active"
+                self.organization.save()
+
+                subscription_data = {
+                    "customer": "cus_test123",
+                    "status": stripe_status,
+                }
+
+                BillingService.handle_subscription_updated(subscription_data)
+
+                self.organization.refresh_from_db()
+                self.assertEqual(
+                    self.organization.subscription_status, expected_internal_status
+                )
+
+    @patch("webhooks.services.billing.logger")
+    def test_handle_subscription_updated_missing_customer(self, mock_logger):
+        """Test subscription update with missing customer ID"""
+        subscription_data = {"status": "active"}
+
+        BillingService.handle_subscription_updated(subscription_data)
+
+        mock_logger.error.assert_called_once_with(
+            "Missing customer ID in subscription data"
+        )
+
+    @patch("webhooks.services.billing.logger")
+    def test_handle_subscription_deleted_success(self, mock_logger):
+        """Test successful subscription deletion handling"""
+        subscription_data = {"customer": "cus_test123"}
+
+        BillingService.handle_subscription_deleted(subscription_data)
+
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.subscription_status, "cancelled")
+
+        mock_logger.info.assert_called_once_with(
+            "Marked subscription as cancelled for customer cus_test123"
+        )
+
+    @patch("webhooks.services.billing.logger")
+    def test_handle_subscription_deleted_missing_customer(self, mock_logger):
+        """Test subscription deletion with missing customer ID"""
+        subscription_data = {}
+
+        BillingService.handle_subscription_deleted(subscription_data)
+
+        mock_logger.error.assert_called_once_with(
+            "Missing customer ID in subscription data"
+        )
+
+    @patch("webhooks.services.billing.logger")
+    def test_handle_subscription_deleted_customer_not_found(self, mock_logger):
+        """Test subscription deletion for non-existent customer"""
+        subscription_data = {"customer": "cus_nonexistent"}
+
+        BillingService.handle_subscription_deleted(subscription_data)
+
+        mock_logger.warning.assert_called_once_with(
+            "No organization found for customer cus_nonexistent"
+        )
+
+    def test_extract_plan_id_nested_format(self):
+        """Test plan ID extraction from nested items.data format"""
+        subscription = {"items": {"data": [{"plan": {"id": "plan_nested"}}]}}
+
+        result = BillingService._extract_plan_id(subscription)
+
+        self.assertEqual(result, "plan_nested")
+
+    def test_extract_plan_id_direct_format(self):
+        """Test plan ID extraction from direct plan format"""
+        subscription = {"plan": {"id": "plan_direct"}}
+
+        result = BillingService._extract_plan_id(subscription)
+
+        self.assertEqual(result, "plan_direct")
+
+    def test_extract_plan_id_missing(self):
+        """Test plan ID extraction when plan is missing"""
+        subscription = {"items": {"data": [{}]}}
+
+        result = BillingService._extract_plan_id(subscription)
+
+        self.assertIsNone(result)
+
 
 class StripeAPITest(TestCase):
     """Test StripeAPI service"""
@@ -476,3 +595,185 @@ class StripeAPITest(TestCase):
 
         self.assertEqual(result, {"id": "cus_empty"})
         mock_create.assert_called_once_with()
+
+
+class DashboardServiceTest(TestCase):
+    """Test DashboardService"""
+
+    def setUp(self):
+        """Set up test data"""
+        from django.contrib.auth.models import User
+
+        self.organization = Organization.objects.create(
+            name="Test Organization",
+            shop_domain="test.myshopify.com",
+            stripe_customer_id="cus_test123",
+        )
+        self.user = User.objects.create_user(
+            username="testuser",
+            email="test@example.com",
+            password="testpass123",
+        )
+        self.user_profile = UserProfile.objects.create(
+            user=self.user,
+            organization=self.organization,
+        )
+
+    @patch("core.services.dashboard.rate_limiter")
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_get_dashboard_data_success(self, mock_db_service, mock_rate_limiter):
+        """Test successful dashboard data retrieval"""
+        from core.services.dashboard import DashboardService
+
+        # Mock rate limiter
+        mock_rate_limiter.check_rate_limit.return_value = (
+            True,
+            {"current_usage": 50, "limit": 1000, "remaining": 950},
+        )
+        mock_rate_limiter.get_usage_stats.return_value = {}
+
+        # Mock database service
+        mock_db_instance = Mock()
+        mock_db_instance.get_recent_webhook_activity.return_value = []
+        mock_db_service.return_value = mock_db_instance
+
+        service = DashboardService()
+        result = service.get_dashboard_data(self.user)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["organization"], self.organization)
+        self.assertEqual(result["user_profile"], self.user_profile)
+        self.assertIn("integrations", result)
+        self.assertIn("recent_activity", result)
+        self.assertIn("usage_data", result)
+        self.assertIn("trial_info", result)
+
+    @patch("core.services.dashboard.rate_limiter")
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_get_dashboard_data_no_profile(self, mock_db_service, mock_rate_limiter):
+        """Test dashboard data retrieval when user has no profile"""
+        from core.services.dashboard import DashboardService
+        from django.contrib.auth.models import User
+
+        user_without_profile = User.objects.create_user(
+            username="noprofile",
+            email="noprofile@example.com",
+            password="testpass123",
+        )
+
+        service = DashboardService()
+        result = service.get_dashboard_data(user_without_profile)
+
+        self.assertIsNone(result)
+
+    def test_get_integration_data(self):
+        """Test integration data retrieval"""
+        from core.services.dashboard import DashboardService
+
+        # Create some integrations
+        Integration.objects.create(
+            organization=self.organization,
+            integration_type="slack_notifications",
+            is_active=True,
+        )
+        Integration.objects.create(
+            organization=self.organization,
+            integration_type="shopify",
+            is_active=True,
+        )
+
+        service = DashboardService()
+        result = service._get_integration_data(self.organization)
+
+        self.assertTrue(result["has_slack"])
+        self.assertTrue(result["has_shopify"])
+        self.assertFalse(result["has_chargify"])
+        self.assertFalse(result["has_stripe"])
+
+    def test_get_trial_info_active_trial(self):
+        """Test trial info for active trial"""
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        # Set organization as trial
+        self.organization.subscription_status = "trial"
+        self.organization.trial_end_date = timezone.now() + timezone.timedelta(days=10)
+        self.organization.save()
+
+        service = DashboardService()
+        result = service._get_trial_info(self.organization)
+
+        self.assertTrue(result["is_trial"])
+        # Days remaining can be 9 or 10 depending on exact timing
+        self.assertIn(result["trial_days_remaining"], [9, 10])
+
+    def test_get_trial_info_not_trial(self):
+        """Test trial info for non-trial subscription"""
+        from core.services.dashboard import DashboardService
+
+        self.organization.subscription_status = "active"
+        self.organization.save()
+
+        service = DashboardService()
+        result = service._get_trial_info(self.organization)
+
+        self.assertFalse(result["is_trial"])
+        self.assertEqual(result["trial_days_remaining"], 0)
+
+    @patch("core.services.dashboard.rate_limiter")
+    def test_get_usage_data_success(self, mock_rate_limiter):
+        """Test usage data retrieval"""
+        from core.services.dashboard import DashboardService
+
+        mock_rate_limiter.check_rate_limit.return_value = (
+            True,
+            {"current_usage": 500, "limit": 1000, "remaining": 500},
+        )
+        mock_rate_limiter.get_usage_stats.return_value = {"monthly": []}
+
+        service = DashboardService()
+        result = service._get_usage_data(self.organization)
+
+        self.assertTrue(result["is_allowed"])
+        self.assertEqual(result["usage_percentage"], 50.0)
+
+    @patch("core.services.dashboard.rate_limiter")
+    def test_get_usage_data_error_handling(self, mock_rate_limiter):
+        """Test usage data error handling"""
+        from core.services.dashboard import DashboardService
+
+        mock_rate_limiter.check_rate_limit.side_effect = Exception("Redis error")
+
+        service = DashboardService()
+        result = service._get_usage_data(self.organization)
+
+        # Should return default values on error
+        self.assertTrue(result["is_allowed"])
+        self.assertEqual(result["usage_percentage"], 0)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_transform_activity_data(self, mock_db_service):
+        """Test activity data transformation"""
+        from core.services.dashboard import DashboardService
+
+        service = DashboardService()
+
+        raw_activity = [
+            {
+                "type": "payment_success",
+                "provider": "stripe",
+                "status": "completed",
+                "amount": "99.99",
+                "currency": "USD",
+                "timestamp": 1234567890,
+                "external_id": "pi_123",
+                "customer_id": "cus_123",
+            },
+        ]
+
+        result = service._transform_activity_data(raw_activity)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["type"], "payment_success")
+        self.assertEqual(result[0]["provider"], "stripe")
+        self.assertEqual(result[0]["amount"], "99.99")

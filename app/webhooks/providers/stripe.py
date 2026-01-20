@@ -1,5 +1,12 @@
+"""Stripe payment provider implementation.
+
+This module implements the PaymentProvider interface for Stripe,
+handling webhook validation, parsing, and customer data retrieval
+using the official Stripe SDK.
+"""
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 import stripe
 from django.conf import settings
@@ -11,22 +18,44 @@ logger = logging.getLogger(__name__)
 
 
 class StripeProvider(PaymentProvider):
-    """Handle Stripe webhooks using official Stripe SDK"""
+    """Handle Stripe webhooks using official Stripe SDK.
 
-    EVENT_TYPE_MAPPING = {
+    This provider validates webhook signatures using Stripe's built-in
+    verification and parses various subscription and payment events.
+
+    Attributes:
+        EVENT_TYPE_MAPPING: Maps Stripe event types to internal types.
+    """
+
+    EVENT_TYPE_MAPPING: ClassVar[dict[str, str]] = {
         "customer.subscription.created": "subscription_created",
+        "customer.subscription.updated": "subscription_updated",
+        "customer.subscription.deleted": "subscription_deleted",
         "invoice.payment_succeeded": "payment_success",
         "invoice.payment_failed": "payment_failure",
         "test": "test",
     }
 
-    def __init__(self, webhook_secret: str):
+    def __init__(self, webhook_secret: str) -> None:
+        """Initialize Stripe provider with webhook secret.
+
+        Args:
+            webhook_secret: Stripe webhook signing secret.
+        """
         super().__init__(webhook_secret)
-        # Configure Stripe API key
+        # Configure Stripe API key and version
         stripe.api_key = settings.STRIPE_SECRET_KEY
+        stripe.api_version = settings.STRIPE_API_VERSION
 
     def validate_webhook(self, request: HttpRequest) -> bool:
-        """Validate webhook signature using Stripe SDK"""
+        """Validate webhook signature using Stripe SDK.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            True if signature is valid, False otherwise.
+        """
         if settings.DISABLE_BILLING:
             return False
 
@@ -50,14 +79,24 @@ class StripeProvider(PaymentProvider):
             stripe.Webhook.construct_event(payload, signature, self.webhook_secret)
             return True
         except stripe.error.SignatureVerificationError as e:
-            logger.error(f"Stripe webhook signature verification failed: {str(e)}")
+            logger.error(f"Stripe webhook signature verification failed: {e!s}")
             return False
         except Exception as e:
-            logger.error(f"Stripe webhook validation error: {str(e)}")
+            logger.error(f"Stripe webhook validation error: {e!s}")
             return False
 
-    def _extract_stripe_event_info(self, event: Any) -> tuple:
-        """Extract event type and data from Stripe event object"""
+    def _extract_stripe_event_info(self, event: Any) -> tuple[str, Any]:
+        """Extract event type and data from Stripe event object.
+
+        Args:
+            event: Stripe event object.
+
+        Returns:
+            Tuple of (event_type, event_data).
+
+        Raises:
+            InvalidDataError: If event type is missing or unsupported.
+        """
         body_event_type = event.type
         if not body_event_type:
             raise InvalidDataError("Missing event type")
@@ -72,13 +111,27 @@ class StripeProvider(PaymentProvider):
 
         return event_type, data
 
-    def _handle_stripe_billing(self, event_type: str, data: Dict[str, Any]) -> str:
-        """Handle billing service calls and return amount"""
+    def _handle_stripe_billing(self, event_type: str, data: dict[str, Any]) -> str:
+        """Handle billing service calls and return amount.
+
+        Args:
+            event_type: The normalized event type.
+            data: Event data dictionary.
+
+        Returns:
+            Amount as a string.
+        """
         from ..services.billing import BillingService
 
         if event_type == "subscription_created":
             amount = str(data.get("plan", {}).get("amount", 0))
             BillingService.handle_subscription_created(data)
+        elif event_type == "subscription_updated":
+            amount = str(data.get("plan", {}).get("amount", 0))
+            BillingService.handle_subscription_updated(data)
+        elif event_type == "subscription_deleted":
+            amount = "0"
+            BillingService.handle_subscription_deleted(data)
         elif event_type == "payment_success":
             amount = str(data.get("amount_due", 0))
             BillingService.handle_payment_success(data)
@@ -94,10 +147,20 @@ class StripeProvider(PaymentProvider):
         self,
         event_type: str,
         customer_id: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         amount: str,
-    ) -> Dict[str, Any]:
-        """Build Stripe event data structure"""
+    ) -> dict[str, Any]:
+        """Build Stripe event data structure.
+
+        Args:
+            event_type: The normalized event type.
+            customer_id: Customer identifier.
+            data: Raw event data.
+            amount: Payment amount as string.
+
+        Returns:
+            Standardized event data dictionary.
+        """
         return {
             "type": event_type,
             "customer_id": customer_id,
@@ -107,8 +170,21 @@ class StripeProvider(PaymentProvider):
             "amount": float(amount),
         }
 
-    def parse_webhook(self, request: HttpRequest) -> Optional[Dict[str, Any]]:
-        """Parse webhook data using Stripe SDK"""
+    def parse_webhook(
+        self, request: HttpRequest, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """Parse webhook data using Stripe SDK.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: Additional arguments (unused).
+
+        Returns:
+            Parsed event data dictionary.
+
+        Raises:
+            InvalidDataError: If webhook data is invalid or missing fields.
+        """
         logger.info(
             "Parsing Stripe webhook data",
             extra={
@@ -130,9 +206,9 @@ class StripeProvider(PaymentProvider):
                 payload, signature, self.webhook_secret
             )
         except stripe.error.SignatureVerificationError as e:
-            raise InvalidDataError(f"Invalid webhook signature: {str(e)}") from e
+            raise InvalidDataError(f"Invalid webhook signature: {e!s}") from e
         except Exception as e:
-            raise InvalidDataError(f"Webhook parsing error: {str(e)}") from e
+            raise InvalidDataError(f"Webhook parsing error: {e!s}") from e
 
         # Extract event info using Stripe event object
         event_type, data = self._extract_stripe_event_info(event)
@@ -159,8 +235,15 @@ class StripeProvider(PaymentProvider):
         except (KeyError, ValueError, AttributeError) as e:
             raise InvalidDataError("Missing required fields") from e
 
-    def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
-        """Get customer data"""
+    def get_customer_data(self, customer_id: str) -> dict[str, Any]:
+        """Get customer data placeholder.
+
+        Args:
+            customer_id: The customer identifier.
+
+        Returns:
+            Dictionary with placeholder customer data.
+        """
         return {
             "company_name": "<COMPANY_NAME>",
             "email": "<EMAIL>",

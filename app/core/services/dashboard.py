@@ -1,10 +1,16 @@
-"""Dashboard service for handling dashboard data aggregation and processing."""
+"""Dashboard service for handling dashboard data aggregation and processing.
+
+This module provides services for preparing dashboard, billing, and
+integration overview data for the application frontend.
+"""
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any
 
-from core.models import Integration, Organization, UserProfile
+from core.models import Integration, Organization, Plan, UserProfile
+from django.contrib.auth.models import User
+from django.db.models import QuerySet
 from django.utils import timezone
 from webhooks.services.database_lookup import DatabaseLookupService
 from webhooks.services.rate_limiter import rate_limiter
@@ -13,20 +19,23 @@ logger = logging.getLogger(__name__)
 
 
 class DashboardService:
-    """Service class for dashboard data preparation and business logic."""
+    """Service class for dashboard data preparation and business logic.
 
-    def __init__(self):
+    Aggregates data from various sources to prepare dashboard displays.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the dashboard service with dependencies."""
         self.db_service = DatabaseLookupService()
 
-    def get_dashboard_data(self, user) -> Optional[Dict]:
-        """
-        Get all dashboard data for a user.
+    def get_dashboard_data(self, user: User) -> dict[str, Any] | None:
+        """Get all dashboard data for a user.
 
         Args:
-            user: Django User instance
+            user: Django User instance.
 
         Returns:
-            Dict with dashboard data or None if user has no profile
+            Dict with dashboard data or None if user has no profile.
         """
         try:
             user_profile = UserProfile.objects.get(user=user)
@@ -43,9 +52,16 @@ class DashboardService:
             "trial_info": self._get_trial_info(organization),
         }
 
-    def _get_integration_data(self, organization: Organization) -> Dict:
-        """Get integration status and data for the organization."""
-        integrations = Integration.objects.filter(
+    def _get_integration_data(self, organization: Organization) -> dict[str, Any]:
+        """Get integration status and data for the organization.
+
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            Dictionary with integration status flags.
+        """
+        integrations: QuerySet[Integration] = Integration.objects.filter(
             organization=organization, is_active=True
         )
 
@@ -61,20 +77,36 @@ class DashboardService:
             ).exists(),
         }
 
-    def _get_recent_activity(self, organization: Organization) -> List[Dict]:
-        """Get and process recent webhook activity for the organization."""
+    def _get_recent_activity(self, organization: Organization) -> list[dict[str, Any]]:
+        """Get and process recent webhook activity for the organization.
+
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            List of recent activity records.
+        """
         try:
             recent_activity_raw = self.db_service.get_recent_webhook_activity(
                 days=7, limit=15
             )
             return self._transform_activity_data(recent_activity_raw)
         except Exception as e:
-            logger.warning(f"Error getting recent activity: {str(e)}")
+            logger.warning(f"Error getting recent activity: {e!s}")
             return []
 
-    def _transform_activity_data(self, raw_activity: List[Dict]) -> List[Dict]:
-        """Transform raw Redis activity data to dashboard format."""
-        recent_activity = []
+    def _transform_activity_data(
+        self, raw_activity: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Transform raw Redis activity data to dashboard format.
+
+        Args:
+            raw_activity: List of raw activity records from Redis.
+
+        Returns:
+            List of transformed activity records.
+        """
+        recent_activity: list[dict[str, Any]] = []
 
         for record in raw_activity:
             try:
@@ -86,7 +118,7 @@ class DashboardService:
                 else:
                     timestamp = timezone.now()
 
-                activity_item = {
+                activity_item: dict[str, Any] = {
                     "type": record.get("type"),
                     "provider": record.get("provider"),
                     "status": record.get("status"),
@@ -104,13 +136,20 @@ class DashboardService:
                 recent_activity.append(activity_item)
 
             except Exception as e:
-                logger.warning(f"Error processing webhook activity record: {str(e)}")
+                logger.warning(f"Error processing webhook activity record: {e!s}")
                 continue
 
         return recent_activity
 
-    def _get_usage_data(self, organization: Organization) -> Dict:
-        """Get rate limiting and usage statistics for the organization."""
+    def _get_usage_data(self, organization: Organization) -> dict[str, Any]:
+        """Get rate limiting and usage statistics for the organization.
+
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            Dictionary with usage data and rate limit info.
+        """
         try:
             # Get rate limit info and usage stats
             is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
@@ -128,7 +167,7 @@ class DashboardService:
                 "usage_percentage": min(usage_percentage, 100),  # Cap at 100%
             }
         except Exception as e:
-            logger.error(f"Error getting usage data: {str(e)}")
+            logger.error(f"Error getting usage data: {e!s}")
             return {
                 "is_allowed": True,
                 "rate_limit_info": {},
@@ -136,8 +175,15 @@ class DashboardService:
                 "usage_percentage": 0,
             }
 
-    def _get_trial_info(self, organization: Organization) -> Dict:
-        """Get trial information for the organization."""
+    def _get_trial_info(self, organization: Organization) -> dict[str, Any]:
+        """Get trial information for the organization.
+
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            Dictionary with trial status and remaining days.
+        """
         trial_days_remaining = 0
         is_trial = organization.subscription_status == "trial"
 
@@ -154,12 +200,21 @@ class DashboardService:
 
 
 class BillingService:
-    """Service class for billing-related operations."""
+    """Service class for billing-related operations.
 
-    def get_available_plans(self, current_plan: str) -> List[Dict]:
-        """Get available plans for upgrade, excluding current plan."""
-        from core.models import Plan
+    Provides methods for retrieving plan information and
+    billing dashboard data.
+    """
 
+    def get_available_plans(self, current_plan: str) -> list[dict[str, Any]]:
+        """Get available plans for upgrade, excluding current plan.
+
+        Args:
+            current_plan: Name of the current subscription plan.
+
+        Returns:
+            List of available plan dictionaries.
+        """
         try:
             plans = Plan.objects.filter(is_active=True).exclude(name=current_plan)
             return [
@@ -177,13 +232,18 @@ class BillingService:
                 for plan in plans
             ]
         except Exception as e:
-            logger.error(f"Error getting available plans: {str(e)}")
+            logger.error(f"Error getting available plans: {e!s}")
             return []
 
-    def get_billing_dashboard_data(self, organization: Organization) -> Dict:
-        """Get billing dashboard data for an organization."""
-        from core.services.dashboard import DashboardService
+    def get_billing_dashboard_data(self, organization: Organization) -> dict[str, Any]:
+        """Get billing dashboard data for an organization.
 
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            Dictionary with billing dashboard information.
+        """
         dashboard_service = DashboardService()
         usage_data = dashboard_service._get_usage_data(organization)
         trial_info = dashboard_service._get_trial_info(organization)
@@ -198,16 +258,27 @@ class BillingService:
 
 
 class IntegrationService:
-    """Service class for integration-related operations."""
+    """Service class for integration-related operations.
 
-    def get_integration_overview(self, organization: Organization) -> Dict:
-        """Get integration overview data for the integrations page."""
-        current_integrations = Integration.objects.filter(
+    Provides methods for retrieving integration status and
+    overview data.
+    """
+
+    def get_integration_overview(self, organization: Organization) -> dict[str, Any]:
+        """Get integration overview data for the integrations page.
+
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            Dictionary with integration sources and destinations.
+        """
+        current_integrations: QuerySet[Integration] = Integration.objects.filter(
             organization=organization, is_active=True
         )
 
         # Event Sources - Services that send webhooks TO Notipus
-        event_sources = [
+        event_sources: list[dict[str, Any]] = [
             {
                 "id": "shopify",
                 "name": "Shopify",
@@ -224,7 +295,7 @@ class IntegrationService:
                 "id": "chargify",
                 "name": "Chargify / Maxio Advanced Billing",
                 "description": (
-                    "Subscription billing events " "(renewals, cancellations, upgrades)"
+                    "Subscription billing events (renewals, cancellations, upgrades)"
                 ),
                 "connected": current_integrations.filter(
                     integration_type="chargify"
@@ -235,7 +306,7 @@ class IntegrationService:
                 "id": "stripe_customer",
                 "name": "Stripe Payments",
                 "description": (
-                    "Customer payment events " "(successful payments, failed charges)"
+                    "Customer payment events (successful payments, failed charges)"
                 ),
                 "connected": current_integrations.filter(
                     integration_type="stripe_customer"
@@ -245,7 +316,7 @@ class IntegrationService:
         ]
 
         # Notification Destinations - Services that receive notifications FROM Notipus
-        notification_destinations = [
+        notification_destinations: list[dict[str, Any]] = [
             {
                 "id": "slack_notifications",
                 "name": "Slack",

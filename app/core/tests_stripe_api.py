@@ -46,7 +46,7 @@ class StripeAPITest(TestCase):
             "metadata": {"source": "test"},
         }
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         expected = {
             "id": "cus_test123",
@@ -67,7 +67,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -81,7 +81,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -95,7 +95,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -109,7 +109,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -123,7 +123,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -137,7 +137,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -149,7 +149,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
@@ -161,7 +161,7 @@ class StripeAPITest(TestCase):
         mock_customer.to_dict.return_value = {"id": "cus_empty"}
         mock_create.return_value = mock_customer
 
-        result = StripeAPI.create_stripe_customer({})
+        result = self.api.create_stripe_customer({})
 
         self.assertEqual(result, {"id": "cus_empty"})
         mock_create.assert_called_once_with()
@@ -183,7 +183,7 @@ class StripeAPITest(TestCase):
             "metadata": {"user_id": "123", "source": "webapp"},
         }
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertEqual(result["metadata"]["user_id"], "123")
         self.assertEqual(result["metadata"]["source"], "webapp")
@@ -217,7 +217,7 @@ class StripeAPITest(TestCase):
             },
         }
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertEqual(result["address"]["line1"], "123 Main St")
         self.assertEqual(result["address"]["city"], "San Francisco")
@@ -236,7 +236,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
         mock_logger.error.assert_called_once_with(
@@ -255,7 +255,7 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        result = self.api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
         expected_msg = f"Unexpected error creating Stripe customer: {error_msg}"
@@ -274,10 +274,89 @@ class StripeAPITest(TestCase):
 
         customer_data = {"email": "test@example.com"}
 
-        # Create new instance to trigger API key setting
-        StripeAPI()
-        result = StripeAPI.create_stripe_customer(customer_data)
+        # Create new instance to trigger API key setting (not self.api from setUp)
+        new_api = StripeAPI()
+        result = new_api.create_stripe_customer(customer_data)
 
         # Verify API key was set
         self.assertEqual(stripe_module.stripe.api_key, "sk_test_new_key")
         self.assertIsNotNone(result)
+
+    @patch("core.services.stripe.stripe.Account.retrieve")
+    def test_get_account_info_success(self, mock_retrieve) -> None:
+        """Test successful account info retrieval"""
+        # Mock successful account retrieval
+        mock_account = Mock()
+        mock_account.id = "acct_test123"
+        mock_account.email = "test@example.com"
+        mock_account.country = "US"
+        mock_account.default_currency = "usd"
+        mock_account.business_profile = Mock()
+        mock_account.business_profile.name = "Test Business"
+        mock_account.business_profile.url = "https://test.com"
+        mock_retrieve.return_value = mock_account
+
+        api = StripeAPI()
+        result = api.get_account_info()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], "acct_test123")
+        self.assertEqual(result["email"], "test@example.com")
+        self.assertEqual(result["country"], "US")
+        self.assertEqual(result["business_profile"]["name"], "Test Business")
+
+    @patch("core.services.stripe.stripe.Account.retrieve")
+    def test_get_account_info_invalid_api_key(self, mock_retrieve) -> None:
+        """Test account info retrieval with invalid API key"""
+        from stripe.error import AuthenticationError
+
+        mock_retrieve.side_effect = AuthenticationError("Invalid API key")
+
+        api = StripeAPI("sk_test_invalid")
+        result = api.get_account_info()
+
+        self.assertIsNone(result)
+
+    @patch("core.services.stripe.stripe.Account.retrieve")
+    def test_get_account_info_stripe_error(self, mock_retrieve) -> None:
+        """Test account info retrieval with Stripe error"""
+        from stripe.error import StripeError
+
+        mock_retrieve.side_effect = StripeError("API Error")
+
+        api = StripeAPI()
+        result = api.get_account_info()
+
+        self.assertIsNone(result)
+
+    @patch("core.services.stripe.stripe.Account.retrieve")
+    def test_get_account_info_no_business_profile(self, mock_retrieve) -> None:
+        """Test account info retrieval when business profile is None"""
+        mock_account = Mock()
+        mock_account.id = "acct_test123"
+        mock_account.email = "test@example.com"
+        mock_account.country = "US"
+        mock_account.default_currency = "usd"
+        mock_account.business_profile = None
+        mock_retrieve.return_value = mock_account
+
+        api = StripeAPI()
+        result = api.get_account_info()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], "acct_test123")
+        self.assertEqual(result["business_profile"], {})
+
+    def test_init_with_custom_api_key(self) -> None:
+        """Test StripeAPI initialization with custom API key"""
+        custom_key = "sk_test_custom123"
+        api = StripeAPI(api_key=custom_key)
+
+        self.assertEqual(api.api_key, custom_key)
+
+    @patch("core.services.stripe.settings.STRIPE_SECRET_KEY", "sk_test_default")
+    def test_init_with_default_api_key(self) -> None:
+        """Test StripeAPI initialization with default API key from settings"""
+        api = StripeAPI()
+
+        self.assertEqual(api.api_key, "sk_test_default")

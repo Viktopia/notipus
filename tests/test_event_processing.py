@@ -1,14 +1,25 @@
+"""Tests for event processing and notification formatting.
+
+This module tests the EventProcessor class for handling various
+webhook events and generating properly formatted notifications.
+"""
+
+from typing import Any
+
 import pytest
+from webhooks.models.notification import Notification
+from webhooks.services.event_processor import EventProcessor
 
-from app.webhooks.models.notification import Notification
-from app.webhooks.services.event_processor import EventProcessor
 
+def test_notification_formatting() -> None:
+    """Test that notifications are properly formatted.
 
-def test_notification_formatting():
-    """Test that notifications are properly formatted"""
+    Verifies a payment success event generates a valid notification
+    with correct title, color, and sections.
+    """
     processor = EventProcessor()
 
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
@@ -20,7 +31,7 @@ def test_notification_formatting():
         },
     }
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company_name": "Acme Corp",
         "team_size": "50",
         "plan_name": "Enterprise",
@@ -33,11 +44,14 @@ def test_notification_formatting():
     assert len(notification.sections) == 2  # Main event details + customer info
 
 
-def test_missing_required_customer_data():
-    """Test handling of missing required customer data"""
+def test_missing_required_customer_data() -> None:
+    """Test handling of missing required customer data.
+
+    Verifies company name defaults to 'Individual' when not provided.
+    """
     processor = EventProcessor()
 
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
@@ -45,7 +59,7 @@ def test_missing_required_customer_data():
         "status": "success",
     }
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "team_size": "50",  # Missing company_name
         "plan_name": "Enterprise",
     }
@@ -60,17 +74,20 @@ def test_missing_required_customer_data():
     assert company_field[1] == "Individual"
 
 
-def test_invalid_event_type():
-    """Test handling of invalid event type"""
+def test_invalid_event_type() -> None:
+    """Test handling of invalid event type.
+
+    Verifies ValueError is raised for unrecognized event types.
+    """
     processor = EventProcessor()
 
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "invalid_event",
         "customer_id": "cust_123",
         "amount": 29.99,
     }
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company_name": "Acme Corp",
         "team_size": "50",
         "plan_name": "Enterprise",
@@ -80,11 +97,14 @@ def test_invalid_event_type():
         processor.process_event(event_data, customer_data)
 
 
-def test_missing_event_data():
-    """Test handling of missing event data"""
+def test_missing_event_data() -> None:
+    """Test handling of missing event data.
+
+    Verifies ValueError is raised when event_data is None.
+    """
     processor = EventProcessor()
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company_name": "Acme Corp",
         "team_size": "50",
         "plan_name": "Enterprise",
@@ -94,11 +114,14 @@ def test_missing_event_data():
         processor.format_notification(None, customer_data)
 
 
-def test_missing_customer_data():
-    """Test handling of missing customer data"""
+def test_missing_customer_data() -> None:
+    """Test handling of missing customer data.
+
+    Verifies ValueError is raised when customer_data is None.
+    """
     processor = EventProcessor()
 
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
@@ -108,11 +131,14 @@ def test_missing_customer_data():
         processor.format_notification(event_data, None)
 
 
-def test_negative_amount():
-    """Test handling of negative amount"""
+def test_negative_amount() -> None:
+    """Test handling of negative amount.
+
+    Verifies ValueError is raised for negative payment amounts.
+    """
     processor = EventProcessor()
 
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": -29.99,
@@ -120,7 +146,7 @@ def test_negative_amount():
         "status": "success",
     }
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company_name": "Acme Corp",
         "team_size": "50",
         "plan_name": "Enterprise",
@@ -130,11 +156,14 @@ def test_negative_amount():
         processor.format_notification(event_data, customer_data)
 
 
-def test_invalid_currency():
-    """Test handling of invalid currency"""
+def test_invalid_currency() -> None:
+    """Test handling of invalid currency.
+
+    Verifies ValueError is raised for unsupported currency codes.
+    """
     processor = EventProcessor()
 
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
@@ -142,7 +171,7 @@ def test_invalid_currency():
         "status": "success",
     }
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company_name": "Acme Corp",
         "team_size": "50",
         "plan_name": "Enterprise",

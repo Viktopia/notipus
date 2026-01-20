@@ -86,10 +86,38 @@ def _add_rate_limit_headers(
             response[header_name] = header_value
 
 
+def _get_slack_webhook_url(organization: Optional[Organization]) -> Optional[str]:
+    """Get Slack webhook URL for an organization."""
+    if not organization:
+        return None
+
+    try:
+        slack_integration = Integration.objects.get(
+            organization=organization,
+            integration_type="slack_notifications",
+            is_active=True,
+        )
+        # Get webhook URL from incoming_webhook in oauth_credentials
+        incoming_webhook = slack_integration.oauth_credentials.get(
+            "incoming_webhook", {}
+        )
+        return incoming_webhook.get("url")
+    except Integration.DoesNotExist:
+        logger.warning(
+            f"No active Slack integration found for organization {organization.uuid}"
+        )
+        return None
+
+
 def _process_webhook_data(
-    event_data: Dict[str, Any], provider: Any, provider_name: str
+    event_data: Dict[str, Any],
+    provider: Any,
+    provider_name: str,
+    organization: Optional[Organization] = None,
 ) -> JsonResponse:
     """Process webhook data and return success response."""
+    from .services.slack_client import SlackClient
+
     # Get customer data
     customer_data = provider.get_customer_data(event_data["customer_id"])
 
@@ -98,8 +126,25 @@ def _process_webhook_data(
         event_data, customer_data
     )
 
-    # Send to Slack
-    settings.SLACK_CLIENT.send_message(notification)
+    # Send to Slack using organization-specific integration
+    slack_webhook_url = _get_slack_webhook_url(organization)
+
+    if slack_webhook_url:
+        slack_client = SlackClient(webhook_url=slack_webhook_url)
+        try:
+            slack_client.send_notification(notification)
+        except Exception as e:
+            logger.error(
+                f"Failed to send Slack notification for org "
+                f"{organization.uuid if organization else 'unknown'}: {str(e)}"
+            )
+            # Continue processing even if Slack notification fails
+    else:
+        logger.warning(
+            f"No Slack webhook URL configured for organization "
+            f"{organization.uuid if organization else 'unknown'}, "
+            f"skipping notification"
+        )
 
     return JsonResponse(
         create_success_response(f"{provider_name} webhook processed successfully"),
@@ -131,7 +176,9 @@ def _process_webhook(
 ) -> JsonResponse:
     """
     Common webhook processing logic with standardized error handling
-    and rate limiting
+    and rate limiting.
+
+    Uses organization-specific Slack integration for notifications.
     """
     try:
         # Handle rate limiting
@@ -155,8 +202,10 @@ def _process_webhook(
             _add_rate_limit_headers(response, rate_limit_info)
             return response
 
-        # Process webhook data
-        response = _process_webhook_data(event_data, provider, provider_name)
+        # Process webhook data with organization for Slack notifications
+        response = _process_webhook_data(
+            event_data, provider, provider_name, organization
+        )
         _add_rate_limit_headers(response, rate_limit_info)
         return response
 

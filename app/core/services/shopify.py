@@ -1,5 +1,4 @@
-"""
-Enhanced Shopify API service using the official Shopify Python library.
+"""Enhanced Shopify API service using the official Shopify Python library.
 
 This service provides secure and reliable access to Shopify's Admin API
 using the official shopifyapi library with proper session management.
@@ -9,7 +8,7 @@ No global Shopify configuration is used to maintain proper multi-tenancy.
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Any
 
 import shopify
 
@@ -17,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ShopifyAPI:
-    """
-    API client for Shopify operations using the official Shopify Python library.
+    """API client for Shopify operations using the official Shopify Python library.
 
     This class provides secure access to Shopify's Admin API with proper
     session management and error handling. Requires tenant-specific credentials.
@@ -26,19 +24,21 @@ class ShopifyAPI:
 
     @classmethod
     def _get_session(cls, shop_domain: str, access_token: str) -> shopify.Session:
-        """
-        Create and configure a Shopify session.
+        """Create and configure a Shopify session.
 
         Args:
-            shop_domain: The Shopify shop domain (e.g., 'mystore.myshopify.com')
-            access_token: The Shopify access token for API authentication
+            shop_domain: The Shopify shop domain (e.g., 'mystore.myshopify.com').
+            access_token: The Shopify access token for API authentication.
 
         Returns:
-            shopify.Session: Configured session for API access
+            Configured session for API access.
+
+        Raises:
+            Exception: If session creation fails.
         """
         try:
-            # Use the latest stable API version
-            api_version = "2024-01"
+            # Use the latest stable API version (updated January 2025)
+            api_version = "2025-01"
             session = shopify.Session(
                 shop_domain=shop_domain,
                 api_version=api_version,
@@ -46,20 +46,19 @@ class ShopifyAPI:
             )
             return session
         except Exception as e:
-            logger.error(f"Failed to create Shopify session: {str(e)}")
+            logger.error(f"Failed to create Shopify session: {e!s}")
             raise
 
     @classmethod
-    def get_shop_domain(cls, shop_domain: str, access_token: str) -> Optional[str]:
-        """
-        Get shop domain from Shopify API using the official library.
+    def get_shop_domain(cls, shop_domain: str, access_token: str) -> str | None:
+        """Get shop domain from Shopify API using the official library.
 
         Args:
-            shop_domain: The Shopify shop domain
-            access_token: The Shopify access token
+            shop_domain: The Shopify shop domain.
+            access_token: The Shopify access token.
 
         Returns:
-            Optional[str]: The shop's myshopify domain, or None if failed
+            The shop's myshopify domain, or None if failed.
         """
         try:
             session = cls._get_session(shop_domain, access_token)
@@ -72,22 +71,21 @@ class ShopifyAPI:
                 return shop.myshopify_domain if shop else None
 
         except Exception as e:
-            logger.error(f"Error fetching Shopify shop data: {str(e)}")
+            logger.error(f"Error fetching Shopify shop data: {e!s}")
             return None
 
     @classmethod
     def get_shop_info(
         cls, shop_domain: str, access_token: str
-    ) -> Optional[Dict[str, str]]:
-        """
-        Get comprehensive shop information from Shopify API.
+    ) -> dict[str, str] | None:
+        """Get comprehensive shop information from Shopify API.
 
         Args:
-            shop_domain: The Shopify shop domain
-            access_token: The Shopify access token
+            shop_domain: The Shopify shop domain.
+            access_token: The Shopify access token.
 
         Returns:
-            Optional[Dict[str, str]]: Shop information dictionary, or None if failed
+            Shop information dictionary, or None if failed.
         """
         try:
             session = cls._get_session(shop_domain, access_token)
@@ -113,23 +111,22 @@ class ShopifyAPI:
                 }
 
         except Exception as e:
-            logger.error(f"Error fetching Shopify shop info: {str(e)}")
+            logger.error(f"Error fetching Shopify shop info: {e!s}")
             return None
 
     @classmethod
     def get_customer(
         cls, customer_id: str, shop_domain: str, access_token: str
-    ) -> Optional[Dict]:
-        """
-        Retrieve customer information by ID.
+    ) -> dict[str, Any] | None:
+        """Retrieve customer information by ID.
 
         Args:
-            customer_id (str): Shopify customer ID
-            shop_domain: The Shopify shop domain
-            access_token: The Shopify access token
+            customer_id: Shopify customer ID.
+            shop_domain: The Shopify shop domain.
+            access_token: The Shopify access token.
 
         Returns:
-            Optional[Dict]: Customer data dictionary, or None if not found
+            Customer data dictionary, or None if not found.
         """
         try:
             session = cls._get_session(shop_domain, access_token)
@@ -157,23 +154,22 @@ class ShopifyAPI:
                 }
 
         except Exception as e:
-            logger.error(f"Error fetching customer {customer_id}: {str(e)}")
+            logger.error(f"Error fetching customer {customer_id}: {e!s}")
             return None
 
     @classmethod
     def get_order(
         cls, order_id: str, shop_domain: str, access_token: str
-    ) -> Optional[Dict]:
-        """
-        Retrieve order information by ID.
+    ) -> dict[str, Any] | None:
+        """Retrieve order information by ID.
 
         Args:
-            order_id (str): Shopify order ID
-            shop_domain: The Shopify shop domain
-            access_token: The Shopify access token
+            order_id: Shopify order ID.
+            shop_domain: The Shopify shop domain.
+            access_token: The Shopify access token.
 
         Returns:
-            Optional[Dict]: Order data dictionary, or None if not found
+            Order data dictionary, or None if not found.
         """
         try:
             session = cls._get_session(shop_domain, access_token)
@@ -201,5 +197,5 @@ class ShopifyAPI:
                 }
 
         except Exception as e:
-            logger.error(f"Error fetching order {order_id}: {str(e)}")
+            logger.error(f"Error fetching order {order_id}: {e!s}")
             return None

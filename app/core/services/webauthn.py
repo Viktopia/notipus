@@ -1,17 +1,18 @@
-"""
-WebAuthn service for handling passkey authentication.
+"""WebAuthn service for handling passkey authentication.
 
 This service provides secure passwordless authentication using WebAuthn/FIDO2
 standards for user registration and login flows.
 """
 
 import base64
+import hashlib
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.utils import timezone
 from webauthn import (
     generate_authentication_options,
@@ -35,16 +36,29 @@ logger = logging.getLogger(__name__)
 
 
 class WebAuthnService:
-    """Service for handling WebAuthn operations."""
+    """Service for handling WebAuthn operations.
 
-    def __init__(self):
+    Provides methods for generating registration and authentication
+    options, and verifying credentials.
+
+    Attributes:
+        rp_id: Relying Party identifier (domain).
+        rp_name: Human-readable Relying Party name.
+        origin: Expected origin URL for verification.
+    """
+
+    def __init__(self) -> None:
         """Initialize WebAuthn service with configuration."""
         self.rp_id = self._get_rp_id()
         self.rp_name = "Notipus"
         self.origin = self._get_origin()
 
     def _get_rp_id(self) -> str:
-        """Get the Relying Party ID from settings or environment."""
+        """Get the Relying Party ID from settings or environment.
+
+        Returns:
+            Relying Party ID string (domain name).
+        """
         # In production, this should be your domain (e.g., "notipus.com")
         # In development, use localhost
         if hasattr(settings, "WEBAUTHN_RP_ID"):
@@ -61,7 +75,11 @@ class WebAuthnService:
             return "notipus.com"  # Fallback
 
     def _get_origin(self) -> str:
-        """Get the origin URL for WebAuthn operations."""
+        """Get the origin URL for WebAuthn operations.
+
+        Returns:
+            Origin URL string.
+        """
         if hasattr(settings, "WEBAUTHN_ORIGIN"):
             return settings.WEBAUTHN_ORIGIN
 
@@ -70,15 +88,17 @@ class WebAuthnService:
         else:
             return f"https://{self.rp_id}"
 
-    def generate_registration_options(self, user: User) -> Dict[str, Any]:
-        """
-        Generate registration options for a new WebAuthn credential.
+    def generate_registration_options(self, user: User) -> dict[str, Any]:
+        """Generate registration options for a new WebAuthn credential.
 
         Args:
-            user: Django User instance
+            user: Django User instance.
 
         Returns:
-            Dictionary containing registration options for the client
+            Dictionary containing registration options for the client.
+
+        Raises:
+            Exception: If option generation fails.
         """
         try:
             # Get existing credentials to exclude them
@@ -119,19 +139,18 @@ class WebAuthnService:
     def verify_registration(
         self,
         user: User,
-        credential_data: Dict[str, Any],
+        credential_data: dict[str, Any],
         credential_name: str = "Passkey",
     ) -> bool:
-        """
-        Verify and store a new WebAuthn credential.
+        """Verify and store a new WebAuthn credential.
 
         Args:
-            user: Django User instance
-            credential_data: Registration response from client
-            credential_name: User-friendly name for the credential
+            user: Django User instance.
+            credential_data: Registration response from client.
+            credential_name: User-friendly name for the credential.
 
         Returns:
-            True if verification successful, False otherwise
+            True if verification successful, False otherwise.
         """
         try:
             # Get and validate challenge
@@ -183,20 +202,22 @@ class WebAuthnService:
             return False
 
     def generate_authentication_options(
-        self, username: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Generate authentication options for WebAuthn login.
+        self, username: str | None = None
+    ) -> dict[str, Any]:
+        """Generate authentication options for WebAuthn login.
 
         Args:
-            username: Optional username to filter credentials
+            username: Optional username to filter credentials.
 
         Returns:
-            Dictionary containing authentication options for the client
+            Dictionary containing authentication options for the client.
+
+        Raises:
+            Exception: If option generation fails.
         """
         try:
             # Get allowed credentials
-            allowed_credentials = []
+            allowed_credentials: list[PublicKeyCredentialDescriptor] = []
             if username:
                 try:
                     user = User.objects.get(username=username)
@@ -227,15 +248,14 @@ class WebAuthnService:
             logger.error(f"Error generating authentication options: {e}")
             raise
 
-    def verify_authentication(self, credential_data: Dict[str, Any]) -> Optional[User]:
-        """
-        Verify WebAuthn authentication and return the authenticated user.
+    def verify_authentication(self, credential_data: dict[str, Any]) -> User | None:
+        """Verify WebAuthn authentication and return the authenticated user.
 
         Args:
-            credential_data: Authentication response from client
+            credential_data: Authentication response from client.
 
         Returns:
-            User instance if authentication successful, None otherwise
+            User instance if authentication successful, None otherwise.
         """
         try:
             # Get and validate challenge
@@ -301,25 +321,25 @@ class WebAuthnService:
 
     def generate_signup_registration_options(
         self, username: str, email: str
-    ) -> Dict[str, Any]:
-        """
-        Generate registration options for WebAuthn signup flow.
+    ) -> dict[str, Any]:
+        """Generate registration options for WebAuthn signup flow.
 
         This method generates registration options for users who don't exist yet
         during the signup process.
 
         Args:
-            username: The desired username for the new account
-            email: The email address for the new account
+            username: The desired username for the new account.
+            email: The email address for the new account.
 
         Returns:
-            Dictionary containing registration options for the client
+            Dictionary containing registration options for the client.
+
+        Raises:
+            Exception: If option generation fails.
         """
         try:
             # Generate a temporary user ID for the registration
             # We'll use a hash of username + email to ensure uniqueness
-            import hashlib
-
             temp_user_id = hashlib.sha256(f"{username}:{email}".encode()).hexdigest()[
                 :16
             ]
@@ -349,8 +369,6 @@ class WebAuthnService:
                 challenge=challenge_str,
                 user=None,  # No user yet, this is for signup
                 challenge_type="signup_registration",
-                # Store username and email in challenge for later retrieval
-                # We'll use a JSON field or extend the model if needed
             )
 
             # Convert to JSON-serializable format
@@ -361,18 +379,17 @@ class WebAuthnService:
             raise
 
     def complete_signup_registration(
-        self, credential_data: Dict[str, Any], username: str, email: str
-    ) -> Optional[User]:
-        """
-        Complete WebAuthn registration and create the user account.
+        self, credential_data: dict[str, Any], username: str, email: str
+    ) -> User | None:
+        """Complete WebAuthn registration and create the user account.
 
         Args:
-            credential_data: Registration response from client
-            username: The username for the new account
-            email: The email address for the new account
+            credential_data: Registration response from client.
+            username: The username for the new account.
+            email: The email address for the new account.
 
         Returns:
-            Created User instance if successful, None otherwise
+            Created User instance if successful, None otherwise.
         """
         try:
             # Get and validate challenge
@@ -398,9 +415,6 @@ class WebAuthnService:
 
             if verification.verified:
                 # Create the user account atomically with the WebAuthn credential
-                from django.contrib.auth.models import User
-                from django.db import transaction
-
                 with transaction.atomic():
                     # Create user without password (passwordless account)
                     user = User.objects.create_user(
@@ -438,11 +452,16 @@ class WebAuthnService:
             logger.error(f"Error during signup registration: {e}")
             return None
 
-    def _get_user_credentials(self, user: User) -> List[PublicKeyCredentialDescriptor]:
+    def _get_user_credentials(self, user: User) -> list[PublicKeyCredentialDescriptor]:
+        """Get existing credentials for a user as PublicKeyCredentialDescriptor objects.
+
+        Args:
+            user: Django User instance.
+
+        Returns:
+            List of credential descriptors.
         """
-        Get existing credentials for a user as PublicKeyCredentialDescriptor objects.
-        """
-        credentials = []
+        credentials: list[PublicKeyCredentialDescriptor] = []
         for cred in WebAuthnCredential.objects.filter(user=user):
             credentials.append(
                 PublicKeyCredentialDescriptor(
@@ -452,14 +471,13 @@ class WebAuthnService:
         return credentials
 
     def cleanup_expired_challenges(self, hours: int = 1) -> int:
-        """
-        Clean up expired WebAuthn challenges.
+        """Clean up expired WebAuthn challenges.
 
         Args:
-            hours: Hours after which challenges are considered expired
+            hours: Hours after which challenges are considered expired.
 
         Returns:
-            Number of challenges cleaned up
+            Number of challenges cleaned up.
         """
         cutoff_time = timezone.now() - timezone.timedelta(hours=hours)
         count, _ = WebAuthnChallenge.objects.filter(created_at__lt=cutoff_time).delete()

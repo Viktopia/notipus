@@ -1,5 +1,13 @@
+"""Core Django models for the Notipus application.
+
+This module contains all the core domain models including organizations,
+users, integrations, billing, and authentication-related models.
+"""
+
 import re
 import uuid
+from datetime import datetime
+from typing import Any, ClassVar
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -8,25 +16,38 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 
-def get_trial_end_date():
-    """Return trial end date 14 days from now"""
+def get_trial_end_date() -> datetime:
+    """Return trial end date 14 days from now.
+
+    Returns:
+        datetime: Trial end date.
+    """
     return timezone.now() + timezone.timedelta(days=14)
 
 
 class Organization(models.Model):
-    """
-    An organization represents a tenant in our multi-tenant SaaS.
+    """An organization represents a tenant in our multi-tenant SaaS.
+
     Each organization has its own integrations, users, and settings.
+    Organizations are the primary billing and access control entity.
+
+    Attributes:
+        uuid: Unique identifier for webhook URLs.
+        name: Display name of the organization.
+        slug: URL-friendly identifier.
+        shop_domain: Associated Shopify domain.
+        subscription_plan: Current billing plan.
+        subscription_status: Current subscription state.
     """
 
-    STRIPE_PLANS = (
+    STRIPE_PLANS: ClassVar[tuple[tuple[str, str], ...]] = (
         ("trial", "14-Day Trial"),
         ("basic", "Basic Plan - $29/month"),
         ("pro", "Pro Plan - $99/month"),
         ("enterprise", "Enterprise Plan - $299/month"),
     )
 
-    STATUS_CHOICES = (
+    STATUS_CHOICES: ClassVar[tuple[tuple[str, str], ...]] = (
         ("active", "Active"),
         ("trial", "Trial"),
         ("suspended", "Suspended"),
@@ -58,16 +79,31 @@ class Organization(models.Model):
     class Meta:
         app_label = "core"
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the organization.
+
+        Returns:
+            Organization name and shop domain.
+        """
         return f"{self.name} ({self.shop_domain})"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Save the organization, generating a unique slug if needed.
+
+        Args:
+            *args: Positional arguments for parent save method.
+            **kwargs: Keyword arguments for parent save method.
+        """
         if not self.slug:
             self._generate_unique_slug()
         super().save(*args, **kwargs)
 
-    def _generate_unique_slug(self):
-        """Generate a unique slug in a race-condition-safe manner"""
+    def _generate_unique_slug(self) -> None:
+        """Generate a unique slug in a race-condition-safe manner.
+
+        Uses atomic transactions and select_for_update to prevent
+        duplicate slugs in concurrent requests.
+        """
         base_slug = slugify(self.name)
         slug = base_slug
         counter = 1
@@ -105,28 +141,47 @@ class Organization(models.Model):
                     break
 
     @property
-    def webhook_token(self):
-        """Return UUID as webhook token for URL obfuscation"""
+    def webhook_token(self) -> str:
+        """Return UUID as webhook token for URL obfuscation.
+
+        Returns:
+            String representation of the UUID.
+        """
         return str(self.uuid)
 
     @property
-    def is_trial(self):
-        """Check if organization is on trial"""
+    def is_trial(self) -> bool:
+        """Check if organization is on trial.
+
+        Returns:
+            True if on trial, False otherwise.
+        """
         return self.subscription_status == "trial"
 
     @property
-    def is_active(self):
-        """Check if organization is active"""
+    def is_active(self) -> bool:
+        """Check if organization is active.
+
+        Returns:
+            True if active or on trial, False otherwise.
+        """
         return self.subscription_status in ["active", "trial"]
 
 
 class OrganizationUser(models.Model):
-    """
-    Junction table for organization membership with roles.
+    """Junction table for organization membership with roles.
+
     A user can belong to multiple organizations with different roles.
+    This enables multi-organization membership for enterprise users.
+
+    Attributes:
+        user: The Django user.
+        organization: The organization they belong to.
+        role: Their role within the organization.
+        is_active: Whether membership is currently active.
     """
 
-    ROLE_CHOICES = (
+    ROLE_CHOICES: ClassVar[tuple[tuple[str, str], ...]] = (
         ("owner", "Owner"),
         ("admin", "Administrator"),
         ("member", "Member"),
@@ -143,17 +198,30 @@ class OrganizationUser(models.Model):
         app_label = "core"
         unique_together = ("user", "organization")
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the membership.
+
+        Returns:
+            Username, organization name, and role.
+        """
         return f"{self.user.username} - {self.organization.name} ({self.role})"
 
 
 class Integration(models.Model):
-    """
-    Integrations for organizations - now supports both customer payment providers
-    and workspace-specific notification integrations.
+    """Integrations for organizations.
+
+    Supports both customer payment providers and workspace-specific
+    notification integrations. Each organization can have one of each type.
+
+    Attributes:
+        organization: The owning organization.
+        integration_type: Type of integration (stripe, shopify, etc.).
+        oauth_credentials: OAuth tokens and credentials.
+        webhook_secret: Secret for webhook validation.
+        is_active: Whether the integration is currently enabled.
     """
 
-    INTEGRATION_TYPES = (
+    INTEGRATION_TYPES: ClassVar[tuple[tuple[str, str], ...]] = (
         # Customer payment providers (organization-specific)
         ("stripe_customer", "Stripe Customer Payments"),
         ("shopify", "Shopify Ecommerce"),
@@ -186,33 +254,56 @@ class Integration(models.Model):
         app_label = "core"
         unique_together = ["organization", "integration_type"]
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the integration.
+
+        Returns:
+            Organization name and integration type display.
+        """
         return f"{self.organization.name} - {self.get_integration_type_display()}"
 
-    # Properties for Slack integration
     @property
-    def slack_team_id(self):
-        """Get Slack team ID from OAuth credentials."""
+    def slack_team_id(self) -> str | None:
+        """Get Slack team ID from OAuth credentials.
+
+        Returns:
+            Slack team ID or None if not available.
+        """
         return self.oauth_credentials.get("team", {}).get("id")
 
     @property
-    def slack_channel(self):
-        """Get Slack channel from integration settings."""
+    def slack_channel(self) -> str:
+        """Get Slack channel from integration settings.
+
+        Returns:
+            Slack channel name, defaults to #general.
+        """
         return self.integration_settings.get("channel", "#general")
 
     @property
-    def slack_bot_token(self):
-        """Get Slack bot token from OAuth credentials."""
+    def slack_bot_token(self) -> str | None:
+        """Get Slack bot token from OAuth credentials.
+
+        Returns:
+            Slack bot token or None if not available.
+        """
         return self.oauth_credentials.get("access_token")
 
 
 class GlobalBillingIntegration(models.Model):
-    """
-    Global integrations for Notipus's own billing and authentication.
-    These are not tied to any specific organization.
+    """Global integrations for Notipus's own billing and authentication.
+
+    These are not tied to any specific organization and are used for
+    platform-wide functionality like Stripe billing for Notipus itself.
+
+    Attributes:
+        integration_type: Type of global integration.
+        oauth_credentials: OAuth tokens and credentials.
+        webhook_secret: Secret for webhook validation.
+        is_active: Whether the integration is enabled.
     """
 
-    INTEGRATION_TYPES = (
+    INTEGRATION_TYPES: ClassVar[tuple[tuple[str, str], ...]] = (
         ("stripe_billing", "Stripe Billing (Notipus Revenue)"),
         ("slack_auth", "Slack Authentication (Global)"),
     )
@@ -238,12 +329,30 @@ class GlobalBillingIntegration(models.Model):
         verbose_name_plural = "Global Billing Integrations"
         ordering = ["integration_type"]
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the global integration.
+
+        Returns:
+            Integration type display name.
+        """
         return f"Global {self.get_integration_type_display()}"
 
 
-def validate_domain(value):
-    """Validate domain format and return cleaned domain"""
+def validate_domain(value: str) -> str:
+    """Validate domain format and return cleaned domain.
+
+    Removes protocol prefixes and validates the domain format
+    against a standard domain name pattern.
+
+    Args:
+        value: Raw domain input string.
+
+    Returns:
+        Cleaned and validated domain string.
+
+    Raises:
+        ValidationError: If domain format is invalid.
+    """
     # Remove protocol if present and clean
     domain = (
         value.replace("https://", "").replace("http://", "").replace("www.", "").lower()
@@ -251,7 +360,8 @@ def validate_domain(value):
 
     # Validate format - must have at least one dot for TLD
     domain_pattern = re.compile(
-        r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$"
+        r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+        r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$"
     )
 
     if not domain_pattern.match(domain):
@@ -261,28 +371,78 @@ def validate_domain(value):
 
 
 class Company(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+    """Company model for storing enriched brand/company data.
+
+    Used by DomainEnrichmentService to cache brand information
+    retrieved from enrichment providers like Brandfetch.
+
+    Attributes:
+        name: Company display name.
+        domain: Unique domain identifier.
+        logo_url: URL to company logo.
+        brand_info: JSON blob with additional brand data.
+    """
+
+    name = models.CharField(max_length=255, blank=True, default="")
     domain = models.CharField(max_length=255, unique=True, validators=[validate_domain])
+    logo_url = models.URLField(max_length=500, blank=True, default="")
+    brand_info = models.JSONField(default=dict, blank=True)
 
-    def __str__(self):
-        return f"{self.name} ({self.domain})"
+    class Meta:
+        app_label = "core"
+        verbose_name_plural = "Companies"
 
-    def save(self, *args, **kwargs):
+    def __str__(self) -> str:
+        """Return string representation of the company.
+
+        Returns:
+            Company name (or domain) with domain in parentheses.
+        """
+        display_name = self.name or self.domain
+        return f"{display_name} ({self.domain})"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Save the company after validation.
+
+        Args:
+            *args: Positional arguments for parent save method.
+            **kwargs: Keyword arguments for parent save method.
+        """
         self.full_clean()  # This calls clean() and validators
         super().save(*args, **kwargs)
 
-    def clean(self):
+    def clean(self) -> None:
+        """Clean and validate model fields.
+
+        Ensures domain is properly formatted and validated.
+        """
         # Clean and validate domain
         if self.domain:
             self.domain = validate_domain(self.domain)
 
 
 class UsageLimit(models.Model):
+    """Usage limits per subscription plan.
+
+    Defines the monthly limits for registrations and notifications
+    for each subscription plan tier.
+
+    Attributes:
+        plan: The subscription plan name.
+        max_monthly_registrations: Maximum registrations per month.
+        max_monthly_notifications: Maximum notifications per month.
+    """
+
     plan = models.CharField(max_length=20, choices=Organization.STRIPE_PLANS)
     max_monthly_registrations = models.IntegerField()
     max_monthly_notifications = models.IntegerField()
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the usage limit.
+
+        Returns:
+            Plan name and registration limit.
+        """
         return (
             f"{self.get_plan_display()} - "
             f"{self.max_monthly_registrations} registrations"
@@ -290,15 +450,41 @@ class UsageLimit(models.Model):
 
 
 class UserProfile(models.Model):
+    """Extended user profile with organization membership.
+
+    Links Django users to their primary organization and
+    stores Slack integration data.
+
+    Attributes:
+        user: The associated Django user.
+        slack_user_id: Slack user identifier.
+        organization: Primary organization membership.
+    """
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     slack_user_id = models.CharField(max_length=255, unique=True)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the user profile.
+
+        Returns:
+            Username and organization name.
+        """
         return f"{self.user.username} ({self.organization.name})"
 
 
 class NotificationSettings(models.Model):
+    """Notification preferences for an organization.
+
+    Allows organizations to customize which event types
+    generate Slack notifications.
+
+    Attributes:
+        organization: The organization these settings belong to.
+        notify_*: Boolean flags for each notification type.
+    """
+
     organization = models.OneToOneField(
         Organization, on_delete=models.CASCADE, related_name="notification_settings"
     )
@@ -328,13 +514,28 @@ class NotificationSettings(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of notification settings.
+
+        Returns:
+            Organization name with settings label.
+        """
         return f"Notification Settings for {self.organization.name}"
 
 
 class Plan(models.Model):
-    """
-    Plan definitions with usage limits for organizations.
+    """Plan definitions with usage limits for organizations.
+
+    Defines available subscription plans with their pricing,
+    limits, and feature sets.
+
+    Attributes:
+        name: Internal plan identifier.
+        display_name: Human-readable plan name.
+        price_monthly: Monthly price in USD.
+        max_users: Maximum users allowed.
+        max_integrations: Maximum integrations allowed.
+        features: List of included features.
     """
 
     name = models.CharField(max_length=50, unique=True)
@@ -363,13 +564,27 @@ class Plan(models.Model):
     class Meta:
         app_label = "core"
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the plan.
+
+        Returns:
+            Plan display name.
+        """
         return self.display_name
 
 
 class WebAuthnCredential(models.Model):
-    """
-    Store WebAuthn credentials for passwordless authentication.
+    """Store WebAuthn credentials for passwordless authentication.
+
+    Stores the public key and metadata for registered passkeys,
+    enabling passwordless login via WebAuthn/FIDO2.
+
+    Attributes:
+        user: The user who owns this credential.
+        credential_id: Base64-encoded credential ID.
+        public_key: Base64-encoded public key.
+        sign_count: Counter to detect credential cloning.
+        name: User-friendly name for the credential.
     """
 
     user = models.ForeignKey(
@@ -396,13 +611,25 @@ class WebAuthnCredential(models.Model):
         verbose_name = "WebAuthn Credential"
         verbose_name_plural = "WebAuthn Credentials"
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the credential.
+
+        Returns:
+            Username and credential name.
+        """
         return f"{self.user.username} - {self.name}"
 
 
 class WebAuthnChallenge(models.Model):
-    """
-    Temporary storage for WebAuthn challenges during authentication flow.
+    """Temporary storage for WebAuthn challenges during authentication flow.
+
+    Stores challenges for both registration and authentication flows,
+    with automatic cleanup of expired challenges.
+
+    Attributes:
+        challenge: Base64-encoded challenge string.
+        user: Associated user (null for registration challenges).
+        challenge_type: Type of challenge (registration or authentication).
     """
 
     challenge = models.CharField(max_length=255, unique=True)  # Base64 encoded
@@ -412,9 +639,10 @@ class WebAuthnChallenge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Challenge type
-    CHALLENGE_TYPES = (
+    CHALLENGE_TYPES: ClassVar[tuple[tuple[str, str], ...]] = (
         ("registration", "Registration"),
         ("authentication", "Authentication"),
+        ("signup_registration", "Signup Registration"),
     )
     challenge_type = models.CharField(max_length=20, choices=CHALLENGE_TYPES)
 
@@ -423,6 +651,11 @@ class WebAuthnChallenge(models.Model):
         verbose_name = "WebAuthn Challenge"
         verbose_name_plural = "WebAuthn Challenges"
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return string representation of the challenge.
+
+        Returns:
+            Challenge type and associated user (or Anonymous).
+        """
         user_str = self.user.username if self.user else "Anonymous"
         return f"{self.challenge_type} challenge for {user_str}"

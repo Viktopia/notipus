@@ -1,41 +1,66 @@
+"""Pytest configuration and fixtures for the test suite.
+
+This module provides common fixtures for testing webhook handling,
+authentication, and notification processing.
+"""
+
+from typing import Any, Generator
 from unittest.mock import Mock, patch
 
 import pytest
+from django.http import HttpRequest
+from django.test import Client
 from django.test.client import RequestFactory
-from django.urls import reverse
+
+# Test organization UUID for multi-tenant webhook endpoints
+TEST_ORG_UUID = "12345678-1234-5678-1234-567812345678"
 
 
 @pytest.fixture
-def mock_webhook_validation():
-    """Mock webhook validation for tests"""
+def mock_webhook_validation() -> Generator[Any, None, None]:
+    """Mock webhook validation for tests.
 
-    def mock_format_notification(*args, **kwargs):
+    Yields:
+        Mock format_notification function.
+    """
+
+    def mock_format_notification(*args: Any, **kwargs: Any) -> dict[str, Any]:
         return {"blocks": [], "color": "#28a745"}
 
     with patch(
-        "app.webhooks.services.event_processor.EventProcessor.format_notification",
+        "webhooks.services.event_processor.EventProcessor.format_notification",
         mock_format_notification,
     ):
         yield mock_format_notification
 
 
 @pytest.fixture
-def client():
-    """Django test client"""
-    from django.test import Client
+def client() -> Client:
+    """Create a Django test client.
 
+    Returns:
+        Django test Client instance.
+    """
     return Client()
 
 
 @pytest.fixture
-def request_factory():
-    """Django RequestFactory for mocking requests"""
+def request_factory() -> RequestFactory:
+    """Create a Django RequestFactory for mocking requests.
+
+    Returns:
+        Django RequestFactory instance.
+    """
     return RequestFactory()
 
 
 @pytest.fixture
-def mock_slack_response():
-    """Mock successful Slack API response"""
+def mock_slack_response() -> Mock:
+    """Create a mock successful Slack API response.
+
+    Returns:
+        Mock response object with ok=True.
+    """
     mock_response = Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"ok": True}
@@ -43,16 +68,37 @@ def mock_slack_response():
 
 
 @pytest.fixture
-def mock_shopify_request(request_factory):
-    """Mock Shopify webhook request"""
+def test_organization_uuid() -> str:
+    """Return a test organization UUID for webhook endpoints.
+
+    Returns:
+        Test organization UUID string.
+    """
+    return TEST_ORG_UUID
+
+
+@pytest.fixture
+def mock_shopify_request(request_factory: RequestFactory) -> HttpRequest:
+    """Create a mock Shopify webhook request.
+
+    Note: This fixture creates a mock request for testing providers directly.
+    For integration tests, use the customer webhook endpoints with
+    test_organization_uuid fixture.
+
+    Args:
+        request_factory: Django RequestFactory instance.
+
+    Returns:
+        Mock HttpRequest for Shopify webhook.
+    """
     headers = {
-        "X-Shopify-Topic": "orders/paid",
-        "X-Shopify-Shop-Domain": "test.myshopify.com",
-        "X-Shopify-Hmac-SHA256": "test_signature",
-        "X-Shopify-Order-Id": "123456789",
-        "X-Shopify-Api-Version": "2024-01",
+        "HTTP_X_SHOPIFY_TOPIC": "orders/paid",
+        "HTTP_X_SHOPIFY_SHOP_DOMAIN": "test.myshopify.com",
+        "HTTP_X_SHOPIFY_HMAC_SHA256": "test_signature",
+        "HTTP_X_SHOPIFY_ORDER_ID": "123456789",
+        "HTTP_X_SHOPIFY_API_VERSION": "2025-01",
     }
-    data = {
+    data: dict[str, Any] = {
         "id": 123456789,
         "order_number": 1001,
         "customer": {
@@ -68,8 +114,9 @@ def mock_shopify_request(request_factory):
         "currency": "USD",
         "financial_status": "paid",
     }
+    # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        reverse("shopify_webhook"),
+        f"/webhooks/customer/{TEST_ORG_UUID}/shopify/",
         data=data,
         content_type="application/json",
         **headers,
@@ -78,14 +125,23 @@ def mock_shopify_request(request_factory):
 
 
 @pytest.fixture
-def mock_shopify_customer_request(request_factory):
-    """Mock Shopify customer webhook request"""
+def mock_shopify_customer_request(request_factory: RequestFactory) -> HttpRequest:
+    """Create a mock Shopify customer webhook request.
+
+    Note: This fixture creates a mock request for testing providers directly.
+
+    Args:
+        request_factory: Django RequestFactory instance.
+
+    Returns:
+        Mock HttpRequest for Shopify customer webhook.
+    """
     headers = {
-        "X-Shopify-Topic": "customers/update",
-        "X-Shopify-Shop-Domain": "test.myshopify.com",
-        "X-Shopify-Hmac-SHA256": "test_signature",
+        "HTTP_X_SHOPIFY_TOPIC": "customers/update",
+        "HTTP_X_SHOPIFY_SHOP_DOMAIN": "test.myshopify.com",
+        "HTTP_X_SHOPIFY_HMAC_SHA256": "test_signature",
     }
-    data = {
+    data: dict[str, Any] = {
         "id": 456,
         "email": "test@example.com",
         "accepts_marketing": True,
@@ -119,8 +175,9 @@ def mock_shopify_customer_request(request_factory):
             },
         ],
     }
+    # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        reverse("shopify_customer_webhook"),
+        f"/webhooks/customer/{TEST_ORG_UUID}/shopify/",
         data=data,
         content_type="application/json",
         **headers,
@@ -129,13 +186,22 @@ def mock_shopify_customer_request(request_factory):
 
 
 @pytest.fixture
-def mock_chargify_request(request_factory):
-    """Mock Chargify webhook request"""
+def mock_chargify_request(request_factory: RequestFactory) -> HttpRequest:
+    """Create a mock Chargify webhook request.
+
+    Note: This fixture creates a mock request for testing providers directly.
+
+    Args:
+        request_factory: Django RequestFactory instance.
+
+    Returns:
+        Mock HttpRequest for Chargify webhook.
+    """
     headers = {
-        "X-Chargify-Webhook-Id": "test_webhook_1",
-        "X-Chargify-Webhook-Signature-Hmac-Sha-256": "test_signature",
+        "HTTP_X_CHARGIFY_WEBHOOK_ID": "test_webhook_1",
+        "HTTP_X_CHARGIFY_WEBHOOK_SIGNATURE_HMAC_SHA_256": "test_signature",
     }
-    data = {
+    data: dict[str, str] = {
         "event": "payment_success",
         "id": "12345",
         "payload[subscription][id]": "sub_789",
@@ -148,8 +214,9 @@ def mock_chargify_request(request_factory):
         "payload[transaction][amount_in_cents]": "10000",
         "created_at": "2024-03-15T10:00:00Z",
     }
+    # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        reverse("chargify_webhook"),
+        f"/webhooks/customer/{TEST_ORG_UUID}/chargify/",
         data=data,
         content_type="application/x-www-form-urlencoded",
         **headers,
