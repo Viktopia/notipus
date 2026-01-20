@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -31,7 +32,11 @@ SECRET_KEY = os.environ.get("SECRET_DJANGO_KEY", _default_secret_key)
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 # Security validation: Ensure secret key is secure in production
-if not DEBUG and SECRET_KEY == _default_secret_key:
+# Allow build-time commands (collectstatic, etc.) that don't need a secure key
+_build_commands = {"collectstatic", "compress", "compilemessages"}
+_is_build_command = len(sys.argv) > 1 and sys.argv[1] in _build_commands
+
+if not DEBUG and SECRET_KEY == _default_secret_key and not _is_build_command:
     raise ValueError(
         "SECURITY ERROR: Default secret key detected in production. "
         "Set SECRET_DJANGO_KEY environment variable to a secure random value."
