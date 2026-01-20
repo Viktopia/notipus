@@ -1,9 +1,7 @@
-{% comment %}
-    IMPORTANT: This template MUST have .html extension (not .html.j2)
-    Django-allauth's template discovery only recognizes .html files
-{% endcomment %}
 {% extends "core/base.html.j2" %}
 {% load socialaccount %}
+{# IMPORTANT: This template MUST have .html extension (not .html.j2)
+   Django-allauth's template discovery only recognizes .html files #}
 
 {% block title %}Sign In with {{ provider.name }} - Notipus{% endblock %}
 

@@ -28,7 +28,7 @@ _default_secret_key = "django-insecure-dev-key-change-in-production"
 SECRET_KEY = os.environ.get("SECRET_DJANGO_KEY", _default_secret_key)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 # Security validation: Ensure secret key is secure in production
 if not DEBUG and SECRET_KEY == _default_secret_key:
