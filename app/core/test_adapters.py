@@ -101,6 +101,15 @@ class TestCustomSocialAccountAdapter(TestCase):
         # Username should remain unchanged
         assert result.username == "already_set"
 
+    def test_is_auto_signup_allowed_returns_true(self) -> None:
+        """Test that is_auto_signup_allowed always returns True."""
+        request = self.factory.get("/")
+        sociallogin = MagicMock()
+
+        result = self.adapter.is_auto_signup_allowed(request, sociallogin)
+
+        assert result is True
+
 
 @pytest.mark.django_db
 class TestCustomSocialAccountAdapterIntegration:

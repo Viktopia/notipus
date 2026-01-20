@@ -173,6 +173,10 @@ LOGOUT_REDIRECT_URL = "/"
 # Social account settings
 SOCIALACCOUNT_AUTO_SIGNUP = True  # Skip signup form if we have enough data
 SOCIALACCOUNT_ADAPTER = "core.adapters.CustomSocialAccountAdapter"
+# Auto-authenticate existing users by verified email from social provider
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+# Auto-connect social account to existing local account with matching email
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 
 # Social account providers
 SOCIALACCOUNT_PROVIDERS = {

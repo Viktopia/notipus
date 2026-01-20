@@ -15,6 +15,21 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
     seamless signup flow without requiring manual username input.
     """
 
+    def is_auto_signup_allowed(self, request, sociallogin):
+        """Determine if auto-signup is allowed for this social login.
+
+        Always returns True to skip the intermediate signup form,
+        since we auto-generate usernames from email addresses.
+
+        Args:
+            request: The HTTP request object.
+            sociallogin: The social login object.
+
+        Returns:
+            True to allow auto-signup without showing the form.
+        """
+        return True
+
     def populate_user(self, request, sociallogin, data):
         """Populate user instance with data from social provider.
 
