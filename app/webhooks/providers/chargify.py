@@ -1,4 +1,9 @@
-# providers/chargify.py
+"""Chargify (Maxio Advanced Billing) payment provider implementation.
+
+This module implements the PaymentProvider interface for Chargify,
+handling webhook validation, parsing, and customer data retrieval.
+"""
+
 import hashlib
 import hmac
 import logging
@@ -6,7 +11,7 @@ import re
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, ClassVar
 
 from django.http import HttpRequest
 
@@ -16,9 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 class ChargifyProvider(PaymentProvider):
-    """Chargify (Maxio Advanced Billing) payment provider implementation"""
+    """Chargify (Maxio Advanced Billing) payment provider implementation.
 
-    EVENT_TYPE_MAPPING = {
+    Handles webhook validation using HMAC signatures (SHA-256 preferred,
+    with MD5 fallback), deduplication, and parsing of various subscription
+    and payment events.
+
+    Attributes:
+        EVENT_TYPE_MAPPING: Maps Chargify event names to internal types.
+    """
+
+    EVENT_TYPE_MAPPING: ClassVar[dict[str, str]] = {
         # Payment events
         "payment_success": "payment_success",
         "payment_failure": "payment_failure",
@@ -50,19 +63,38 @@ class ChargifyProvider(PaymentProvider):
         "component_allocation_change": "component_allocation_change",
     }
 
-    # Class-level cache for recently processed webhook IDs
-    _webhook_cache = OrderedDict()
-    _CACHE_MAX_SIZE = 1000
-    _DEDUP_WINDOW_SECONDS = 300  # 5 minutes
-    _TIMESTAMP_TOLERANCE_SECONDS = 300  # 5 minutes tolerance for webhook timestamps
+    # Class-level constants
+    _CACHE_MAX_SIZE: ClassVar[int] = 1000
+    _DEDUP_WINDOW_SECONDS: ClassVar[int] = 300  # 5 minutes
+    _TIMESTAMP_TOLERANCE_SECONDS: ClassVar[int] = 300  # 5 minutes tolerance
 
-    def __init__(self, webhook_secret: str):
-        """Initialize provider with webhook secret"""
+    def __init__(self, webhook_secret: str) -> None:
+        """Initialize provider with webhook secret.
+
+        Args:
+            webhook_secret: Secret key for webhook signature validation.
+        """
         super().__init__(webhook_secret)
-        self._current_webhook_data = None
+        self._current_webhook_data: dict[str, Any] | None = None
+        # Instance-level cache for recently processed webhook IDs.
+        # Note: This cache is per-instance, meaning deduplication only works
+        # within a single request lifecycle. For cross-request deduplication
+        # in production, consider using Redis or another persistent store.
+        # The instance-level cache is intentional to ensure test isolation.
+        self._webhook_cache: OrderedDict[str, float] = OrderedDict()
 
     def _check_webhook_duplicate(self, webhook_id: str) -> bool:
-        """Check if a webhook ID has been processed recently (proper idempotency)"""
+        """Check if a webhook ID has been processed recently.
+
+        Implements proper idempotency by tracking recently processed
+        webhook IDs with a time-based cleanup.
+
+        Args:
+            webhook_id: The webhook identifier to check.
+
+        Returns:
+            True if this is a duplicate webhook, False otherwise.
+        """
         if not webhook_id:
             logger.warning("No webhook ID provided for deduplication check")
             return False
@@ -71,9 +103,9 @@ class ChargifyProvider(PaymentProvider):
 
         # Clean up old entries
         cutoff = now - self._DEDUP_WINDOW_SECONDS
-        self._webhook_cache = OrderedDict(
-            (k, v) for k, v in self._webhook_cache.items() if v > cutoff
-        )
+        expired_keys = [k for k, v in self._webhook_cache.items() if v <= cutoff]
+        for key in expired_keys:
+            del self._webhook_cache[key]
 
         # Check if webhook ID has been processed
         if webhook_id in self._webhook_cache:
@@ -88,7 +120,14 @@ class ChargifyProvider(PaymentProvider):
         return False
 
     def _validate_webhook_timestamp(self, request: HttpRequest) -> bool:
-        """Validate webhook timestamp to prevent replay attacks"""
+        """Validate webhook timestamp to prevent replay attacks.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            True if timestamp is valid or not present, False if invalid.
+        """
         timestamp_header = request.headers.get("X-Chargify-Webhook-Timestamp")
         if not timestamp_header:
             # Timestamp is optional, so continue if not present
@@ -121,7 +160,17 @@ class ChargifyProvider(PaymentProvider):
             return False
 
     def validate_webhook(self, request: HttpRequest) -> bool:
-        """Validate webhook signature and timestamp"""
+        """Validate webhook signature and timestamp.
+
+        Validates using SHA-256 HMAC if available, falling back to MD5
+        for backward compatibility.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            True if webhook is valid, False otherwise.
+        """
         from django.conf import settings as django_settings
 
         try:
@@ -235,8 +284,18 @@ class ChargifyProvider(PaymentProvider):
             )
             return False
 
-    def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
-        """Get customer data from stored webhook data"""
+    def get_customer_data(self, customer_id: str) -> dict[str, Any]:
+        """Get customer data from stored webhook data.
+
+        Args:
+            customer_id: The customer identifier.
+
+        Returns:
+            Dictionary of customer information.
+
+        Raises:
+            CustomerNotFoundError: If no webhook data is available.
+        """
         if not self._current_webhook_data:
             raise CustomerNotFoundError("No webhook data available")
 
@@ -271,14 +330,23 @@ class ChargifyProvider(PaymentProvider):
             }
         except (KeyError, ValueError) as e:
             raise CustomerNotFoundError(
-                f"Failed to extract customer data: {str(e)}"
+                f"Failed to extract customer data: {e!s}"
             ) from e
 
-    def _extract_chargify_fields(self, data: Dict[str, Any]) -> tuple:
-        """Extract subscription, customer, and transaction data from webhook"""
-        subscription = {}
-        customer = {}
-        transaction = {}
+    def _extract_chargify_fields(
+        self, data: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """Extract subscription, customer, and transaction data from webhook.
+
+        Args:
+            data: Raw webhook form data.
+
+        Returns:
+            Tuple of (subscription, customer, transaction) dictionaries.
+        """
+        subscription: dict[str, Any] = {}
+        customer: dict[str, Any] = {}
+        transaction: dict[str, Any] = {}
 
         for key, value in data.items():
             if key.startswith("payload[subscription][customer]["):
@@ -297,9 +365,17 @@ class ChargifyProvider(PaymentProvider):
         return subscription, customer, transaction
 
     def _determine_chargify_status(
-        self, event_type: str, subscription: Dict[str, Any]
+        self, event_type: str, subscription: dict[str, Any]
     ) -> str:
-        """Determine status based on event type and subscription state"""
+        """Determine status based on event type and subscription state.
+
+        Args:
+            event_type: The webhook event type.
+            subscription: Subscription data dictionary.
+
+        Returns:
+            Status string.
+        """
         if event_type == "payment_failure":
             return "failed"
         elif event_type == "payment_success":
@@ -310,9 +386,17 @@ class ChargifyProvider(PaymentProvider):
             return subscription.get("state", "unknown")
 
     def _extract_chargify_amount(
-        self, transaction: Dict[str, Any], subscription: Dict[str, Any]
+        self, transaction: dict[str, Any], subscription: dict[str, Any]
     ) -> float:
-        """Extract amount from transaction or subscription data"""
+        """Extract amount from transaction or subscription data.
+
+        Args:
+            transaction: Transaction data dictionary.
+            subscription: Subscription data dictionary.
+
+        Returns:
+            Amount in dollars (converted from cents).
+        """
         if transaction.get("amount_in_cents"):
             return float(transaction["amount_in_cents"]) / 100
         elif subscription.get("total_revenue_in_cents"):
@@ -321,9 +405,17 @@ class ChargifyProvider(PaymentProvider):
             return 0
 
     def _build_chargify_customer_data(
-        self, customer: Dict[str, Any], subscription: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Build customer data structure"""
+        self, customer: dict[str, Any], subscription: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build customer data structure.
+
+        Args:
+            customer: Customer data dictionary.
+            subscription: Subscription data dictionary.
+
+        Returns:
+            Standardized customer data dictionary.
+        """
         return {
             "id": customer.get("id"),
             "email": customer.get("email"),
@@ -340,12 +432,26 @@ class ChargifyProvider(PaymentProvider):
         customer_id: str,
         amount: float,
         status: str,
-        data: Dict[str, Any],
-        subscription: Dict[str, Any],
-        customer_data: Dict[str, Any],
+        data: dict[str, Any],
+        subscription: dict[str, Any],
+        customer_data: dict[str, Any],
         failure_reason: str | None,
-    ) -> Dict[str, Any]:
-        """Build final response structure"""
+    ) -> dict[str, Any]:
+        """Build final response structure.
+
+        Args:
+            event_type: The webhook event type.
+            customer_id: Customer identifier.
+            amount: Payment amount.
+            status: Event status.
+            data: Raw webhook data.
+            subscription: Subscription data.
+            customer_data: Customer data dictionary.
+            failure_reason: Reason for failure if applicable.
+
+        Returns:
+            Standardized event data dictionary.
+        """
         return {
             "type": self.EVENT_TYPE_MAPPING.get(event_type, event_type),
             "customer_id": str(customer_id),
@@ -366,8 +472,18 @@ class ChargifyProvider(PaymentProvider):
             "customer_data": customer_data,
         }
 
-    def _parse_webhook_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse webhook data into standardized format"""
+    def _parse_webhook_data(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Parse webhook data into standardized format.
+
+        Args:
+            data: Raw webhook form data.
+
+        Returns:
+            Standardized event data dictionary.
+
+        Raises:
+            InvalidDataError: If required fields are missing.
+        """
         event_type = data.get("event")
         if not event_type:
             raise InvalidDataError("Missing event type")
@@ -409,8 +525,18 @@ class ChargifyProvider(PaymentProvider):
             failure_reason,
         )
 
-    def _validate_chargify_request(self, request: HttpRequest) -> Dict[str, Any]:
-        """Validate Chargify webhook request and return form data"""
+    def _validate_chargify_request(self, request: HttpRequest) -> dict[str, Any]:
+        """Validate Chargify webhook request and return form data.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            Form data dictionary.
+
+        Raises:
+            InvalidDataError: If content type is invalid or data is missing.
+        """
         if request.content_type != "application/x-www-form-urlencoded":
             raise InvalidDataError("Invalid content type")
 
@@ -420,8 +546,18 @@ class ChargifyProvider(PaymentProvider):
 
         return data
 
-    def _get_chargify_event_info(self, data: Dict[str, Any]) -> tuple:
-        """Extract event type and customer ID from webhook data"""
+    def _get_chargify_event_info(self, data: dict[str, Any]) -> tuple[str, str]:
+        """Extract event type and customer ID from webhook data.
+
+        Args:
+            data: Form data dictionary.
+
+        Returns:
+            Tuple of (event_type, customer_id).
+
+        Raises:
+            InvalidDataError: If required fields are missing.
+        """
         event_type = data.get("event")
         if not event_type:
             raise InvalidDataError("Missing event type")
@@ -433,9 +569,22 @@ class ChargifyProvider(PaymentProvider):
         return event_type, customer_id
 
     def _handle_chargify_event(
-        self, event_type: str, customer_id: str, data: Dict[str, Any], webhook_id: str
-    ) -> Dict[str, Any]:
-        """Route webhook event to appropriate handler with proper deduplication"""
+        self, event_type: str, customer_id: str, data: dict[str, Any], webhook_id: str
+    ) -> dict[str, Any]:
+        """Route webhook event to appropriate handler with deduplication.
+
+        Args:
+            event_type: The webhook event type.
+            customer_id: Customer identifier.
+            data: Form data dictionary.
+            webhook_id: Webhook identifier for deduplication.
+
+        Returns:
+            Parsed event data dictionary.
+
+        Raises:
+            InvalidDataError: If webhook is duplicate or event type unsupported.
+        """
         # Check for duplicates using webhook ID (proper idempotency)
         if self._check_webhook_duplicate(webhook_id):
             raise InvalidDataError(f"Duplicate webhook: {webhook_id}")
@@ -466,8 +615,21 @@ class ChargifyProvider(PaymentProvider):
             )
             raise InvalidDataError(f"Unsupported event type: {event_type}")
 
-    def parse_webhook(self, request: HttpRequest) -> Dict[str, Any]:
-        """Parse Chargify webhook data"""
+    def parse_webhook(
+        self, request: HttpRequest, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """Parse Chargify webhook data.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: Additional arguments (unused).
+
+        Returns:
+            Parsed event data dictionary.
+
+        Raises:
+            InvalidDataError: If webhook data is invalid.
+        """
         logger.info(
             "Parsing Chargify webhook data",
             extra={
@@ -487,12 +649,18 @@ class ChargifyProvider(PaymentProvider):
         event_type, customer_id = self._get_chargify_event_info(data)
 
         # Handle the event
-        return self._handle_chargify_event(
-            event_type, customer_id, data, request.headers.get("X-Chargify-Webhook-Id")
-        )
+        webhook_id = request.headers.get("X-Chargify-Webhook-Id", "")
+        return self._handle_chargify_event(event_type, customer_id, data, webhook_id)
 
     def _parse_shopify_order_ref(self, memo: str) -> str | None:
-        """Extract Shopify order reference from transaction memo."""
+        """Extract Shopify order reference from transaction memo.
+
+        Args:
+            memo: Transaction memo text.
+
+        Returns:
+            Shopify order reference if found, None otherwise.
+        """
         if not memo:
             return None
 
@@ -513,8 +681,18 @@ class ChargifyProvider(PaymentProvider):
 
         return None
 
-    def _parse_payment_success(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse payment_success webhook data"""
+    def _parse_payment_success(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Parse payment_success webhook data.
+
+        Args:
+            data: Form data dictionary.
+
+        Returns:
+            Parsed event data dictionary.
+
+        Raises:
+            InvalidDataError: If required fields are missing.
+        """
         amount = data.get("payload[transaction][amount_in_cents]")
         if not amount:
             raise InvalidDataError("Missing amount")
@@ -553,8 +731,18 @@ class ChargifyProvider(PaymentProvider):
             "customer_data": customer_data,
         }
 
-    def _parse_payment_failure(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse payment_failure webhook data"""
+    def _parse_payment_failure(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Parse payment_failure webhook data.
+
+        Args:
+            data: Form data dictionary.
+
+        Returns:
+            Parsed event data dictionary.
+
+        Raises:
+            InvalidDataError: If required fields are missing.
+        """
         amount = data.get("payload[transaction][amount_in_cents]")
         if not amount:
             raise InvalidDataError("Missing amount")
@@ -579,8 +767,15 @@ class ChargifyProvider(PaymentProvider):
             "customer_data": customer_data,
         }
 
-    def _parse_subscription_state_change(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse subscription_state_change webhook data"""
+    def _parse_subscription_state_change(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Parse subscription_state_change webhook data.
+
+        Args:
+            data: Form data dictionary.
+
+        Returns:
+            Parsed event data dictionary.
+        """
         customer_data = self.get_customer_data(
             data["payload[subscription][customer][id]"]
         )
@@ -600,8 +795,18 @@ class ChargifyProvider(PaymentProvider):
             "customer_data": customer_data,
         }
 
-    def get_event_type(self, event_data: Dict[str, Any]) -> str:
-        """Get event type from webhook data"""
+    def get_event_type(self, event_data: dict[str, Any]) -> str:
+        """Get event type from webhook data.
+
+        Args:
+            event_data: Parsed event data dictionary.
+
+        Returns:
+            Event type string.
+
+        Raises:
+            InvalidDataError: If event type is missing.
+        """
         if not event_data or "type" not in event_data:
             raise InvalidDataError("Invalid event type")
         return event_data["type"]

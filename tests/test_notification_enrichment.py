@@ -1,14 +1,25 @@
+"""Tests for notification enrichment with customer context.
+
+This module tests the NotificationEnricher class for adding
+payment history, usage metrics, and customer insights to notifications.
+"""
+
 from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-
-from app.webhooks.enrichment import NotificationEnricher
-from app.webhooks.providers.base import PaymentEvent, PaymentProvider
+from webhooks.enrichment import NotificationEnricher
+from webhooks.providers.base import PaymentEvent, PaymentProvider
 
 
 @pytest.fixture
-def mock_provider():
+def mock_provider() -> MagicMock:
+    """Create a mock payment provider with test data.
+
+    Returns:
+        MagicMock configured with payment history, usage metrics,
+        customer data, and related events.
+    """
     provider = MagicMock(spec=PaymentProvider)
     provider.get_payment_history.return_value = [
         {
@@ -57,7 +68,12 @@ def mock_provider():
 
 
 @pytest.fixture
-def sample_payment_event():
+def sample_payment_event() -> PaymentEvent:
+    """Create a sample payment failure event.
+
+    Returns:
+        PaymentEvent for a failed payment with retry info.
+    """
     return PaymentEvent(
         id="evt_123",
         event_type="payment_failure",
@@ -73,7 +89,12 @@ def sample_payment_event():
 
 
 @pytest.fixture
-def sample_trial_event():
+def sample_trial_event() -> PaymentEvent:
+    """Create a sample trial end event.
+
+    Returns:
+        PaymentEvent for a trial ending.
+    """
     return PaymentEvent(
         id="evt_456",
         event_type="trial_end",
@@ -86,24 +107,40 @@ def sample_trial_event():
     )
 
 
-def test_payment_failure_includes_payment_history(mock_provider, sample_payment_event):
-    """Test that payment failure notifications include relevant payment history"""
+def test_payment_failure_includes_payment_history(
+    mock_provider: MagicMock, sample_payment_event: PaymentEvent
+) -> None:
+    """Test that payment failure notifications include relevant payment history.
+
+    Verifies the enricher fetches payment history for context.
+    """
     enricher = NotificationEnricher(provider=mock_provider)
     notification = enricher.enrich_notification(sample_payment_event)
     assert notification.customer_context is not None
     assert mock_provider.get_payment_history.called
 
 
-def test_trial_ending_includes_usage_metrics(mock_provider, sample_trial_event):
-    """Test that trial ending notifications include relevant usage data"""
+def test_trial_ending_includes_usage_metrics(
+    mock_provider: MagicMock, sample_trial_event: PaymentEvent
+) -> None:
+    """Test that trial ending notifications include relevant usage data.
+
+    Verifies the enricher fetches usage metrics to highlight engagement.
+    """
     enricher = NotificationEnricher(provider=mock_provider)
     notification = enricher.enrich_notification(sample_trial_event)
     assert notification.customer_context is not None
     assert mock_provider.get_usage_metrics.called
 
 
-def test_customer_context_is_comprehensive(mock_provider, sample_payment_event):
-    """Test that customer context includes all relevant business metrics"""
+def test_customer_context_is_comprehensive(
+    mock_provider: MagicMock, sample_payment_event: PaymentEvent
+) -> None:
+    """Test that customer context includes all relevant business metrics.
+
+    Verifies customer data, metrics, payment history, and insights
+    are all present in the notification sections.
+    """
     enricher = NotificationEnricher(provider=mock_provider)
     notification = enricher.enrich_notification(sample_payment_event)
 
@@ -134,8 +171,13 @@ def test_customer_context_is_comprehensive(mock_provider, sample_payment_event):
     assert "$299.99" in insights_section.text
 
 
-def test_action_items_are_specific_and_actionable(mock_provider, sample_payment_event):
-    """Test that generated action items are specific and actionable"""
+def test_action_items_are_specific_and_actionable(
+    mock_provider: MagicMock, sample_payment_event: PaymentEvent
+) -> None:
+    """Test that generated action items are specific and actionable.
+
+    Verifies at least one section contains action-related content.
+    """
     enricher = NotificationEnricher(provider=mock_provider)
     notification = enricher.enrich_notification(sample_payment_event)
     assert notification.sections is not None
@@ -143,8 +185,13 @@ def test_action_items_are_specific_and_actionable(mock_provider, sample_payment_
     assert any("action" in section.text.lower() for section in notification.sections)
 
 
-def test_notification_correlates_related_events(mock_provider, sample_payment_event):
-    """Test that notifications include correlated events for context"""
+def test_notification_correlates_related_events(
+    mock_provider: MagicMock, sample_payment_event: PaymentEvent
+) -> None:
+    """Test that notifications include correlated events for context.
+
+    Verifies related events are fetched and available in customer context.
+    """
     # Overriding return data for get_related_events
     mock_provider.get_related_events.return_value = [
         {"event_type": "payment_failure", "timestamp": "2024-03-15T10:00:00Z"},

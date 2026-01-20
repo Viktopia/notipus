@@ -1,5 +1,11 @@
+"""Event processor for webhook notifications.
+
+This module handles processing events from various providers and
+formatting them into Slack notifications.
+"""
+
 import logging
-from typing import Any, Dict
+from typing import Any, ClassVar
 
 from ..models.notification import Notification, Section
 from .database_lookup import DatabaseLookupService
@@ -8,9 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 class EventProcessor:
-    """Process events from various providers and format notifications"""
+    """Process events from various providers and format notifications.
 
-    VALID_EVENT_TYPES = {
+    This class handles the core event processing logic, including
+    cross-reference lookups and notification formatting.
+
+    Attributes:
+        VALID_EVENT_TYPES: Set of recognized event type strings.
+    """
+
+    VALID_EVENT_TYPES: ClassVar[set[str]] = {
         "payment_success",
         "payment_failure",
         "subscription_created",
@@ -21,13 +34,25 @@ class EventProcessor:
         "customer_updated",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the event processor with database lookup service."""
         self.db_lookup = DatabaseLookupService()
 
     def process_event(
-        self, event_data: Dict[str, Any], customer_data: Dict[str, Any]
+        self, event_data: dict[str, Any], customer_data: dict[str, Any]
     ) -> Notification:
-        """Process an event and return a notification"""
+        """Process an event and return a notification.
+
+        Args:
+            event_data: Dictionary containing event type and metadata.
+            customer_data: Dictionary containing customer information.
+
+        Returns:
+            A Notification object ready for Slack delivery.
+
+        Raises:
+            ValueError: If event_data is missing or has invalid type.
+        """
         if not event_data or "type" not in event_data:
             raise ValueError("Missing event type")
 
@@ -38,9 +63,20 @@ class EventProcessor:
         return self.format_notification(event_data, customer_data)
 
     def format_notification(
-        self, event_data: Dict[str, Any], customer_data: Dict[str, Any]
+        self, event_data: dict[str, Any], customer_data: dict[str, Any]
     ) -> Notification:
-        """Format event data into a notification"""
+        """Format event data into a notification.
+
+        Args:
+            event_data: Dictionary containing event type and metadata.
+            customer_data: Dictionary containing customer information.
+
+        Returns:
+            A Notification object formatted for Slack.
+
+        Raises:
+            ValueError: If required data is missing or invalid.
+        """
         if not event_data:
             raise ValueError("Missing event data")
         if not customer_data:
@@ -88,9 +124,16 @@ class EventProcessor:
         )
 
     def _enrich_with_cross_references(
-        self, event_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Enrich event data with cross-references and store in database"""
+        self, event_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Enrich event data with cross-references and store in database.
+
+        Args:
+            event_data: Original event data dictionary.
+
+        Returns:
+            Enriched copy of event data with cross-reference information.
+        """
         # Make a copy to avoid modifying the original
         enriched_data = event_data.copy()
 
@@ -146,17 +189,31 @@ class EventProcessor:
 
         return enriched_data
 
-    def _has_cross_references(self, event_data: Dict[str, Any]) -> bool:
-        """Check if event data has cross-reference information"""
+    def _has_cross_references(self, event_data: dict[str, Any]) -> bool:
+        """Check if event data has cross-reference information.
+
+        Args:
+            event_data: Event data dictionary.
+
+        Returns:
+            True if cross-references exist, False otherwise.
+        """
         metadata = event_data.get("metadata", {})
         return bool(
             metadata.get("related_payment_ref") or metadata.get("related_order_ref")
         )
 
-    def _create_cross_reference_section(self, event_data: Dict[str, Any]) -> Section:
-        """Create a section showing cross-reference information"""
+    def _create_cross_reference_section(self, event_data: dict[str, Any]) -> Section:
+        """Create a section showing cross-reference information.
+
+        Args:
+            event_data: Event data with cross-references.
+
+        Returns:
+            Section containing related transaction information.
+        """
         metadata = event_data.get("metadata", {})
-        fields = {}
+        fields: dict[str, str] = {}
 
         if metadata.get("related_payment_ref"):
             fields["Related Payment"] = (
@@ -169,10 +226,18 @@ class EventProcessor:
         return Section("🔗 Related Transactions", fields)
 
     def _create_main_section(
-        self, event_data: Dict[str, Any], customer_data: Dict[str, Any]
+        self, event_data: dict[str, Any], customer_data: dict[str, Any]
     ) -> Section:
-        """Create the main event information section"""
-        fields = {}
+        """Create the main event information section.
+
+        Args:
+            event_data: Event data dictionary.
+            customer_data: Customer data dictionary.
+
+        Returns:
+            Section containing event details.
+        """
+        fields: dict[str, str] = {}
 
         # Event type and status
         fields["Event"] = event_data["type"].replace("_", " ").title()
@@ -203,9 +268,16 @@ class EventProcessor:
 
         return Section("📊 Event Details", fields)
 
-    def _create_customer_section(self, customer_data: Dict[str, Any]) -> Section:
-        """Create the customer information section"""
-        fields = {}
+    def _create_customer_section(self, customer_data: dict[str, Any]) -> Section:
+        """Create the customer information section.
+
+        Args:
+            customer_data: Customer data dictionary.
+
+        Returns:
+            Section containing customer information.
+        """
+        fields: dict[str, str] = {}
 
         # Company and contact info
         company_name = customer_data.get("company_name") or customer_data.get(
@@ -230,8 +302,16 @@ class EventProcessor:
 
         return Section("👤 Customer Info", fields)
 
-    def _get_title(self, event_data: Dict[str, Any], company_name: str) -> str:
-        """Generate notification title"""
+    def _get_title(self, event_data: dict[str, Any], company_name: str) -> str:
+        """Generate notification title.
+
+        Args:
+            event_data: Event data dictionary.
+            company_name: Company name for the title.
+
+        Returns:
+            Formatted notification title string.
+        """
         event_type = event_data["type"]
 
         if event_type == "payment_success":
@@ -246,7 +326,14 @@ class EventProcessor:
             return f"{event_type.replace('_', ' ').title()} for {company_name}"
 
     def _get_notification_style(self, event_type: str) -> tuple[str, str]:
-        """Get color and emoji for notification based on event type"""
+        """Get color and emoji for notification based on event type.
+
+        Args:
+            event_type: The type of event.
+
+        Returns:
+            Tuple of (hex_color, emoji) for the notification.
+        """
         if event_type == "payment_success":
             return "#28a745", "💰"  # Green, money emoji
         elif event_type == "payment_failure":

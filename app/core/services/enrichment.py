@@ -1,5 +1,11 @@
+"""Domain enrichment service for company brand information.
+
+This module provides services for enriching company domain data
+with brand information from external providers.
+"""
+
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.models import Company
 from core.providers.brandfetch import BrandfetchProvider
@@ -8,15 +14,22 @@ logger = logging.getLogger(__name__)
 
 
 class DomainEnrichmentService:
-    """Service for enriching company domain data"""
+    """Service for enriching company domain data.
+
+    Uses external providers to fetch brand information and
+    caches results in the Company model.
+
+    Attributes:
+        providers: List of initialized enrichment providers.
+    """
 
     def __init__(self) -> None:
-        """Initialize the enrichment service with available providers"""
-        self.providers: List[Any] = []
+        """Initialize the enrichment service with available providers."""
+        self.providers: list[Any] = []
         self._initialize_providers()
 
     def _initialize_providers(self) -> None:
-        """Initialize enrichment providers based on available API keys"""
+        """Initialize enrichment providers based on available API keys."""
         try:
             brandfetch_provider = BrandfetchProvider()
             if brandfetch_provider.api_key:
@@ -25,13 +38,20 @@ class DomainEnrichmentService:
             else:
                 logger.warning("Brandfetch API key not available, skipping provider")
         except Exception as e:
-            logger.error(f"Failed to initialize Brandfetch provider: {str(e)}")
+            logger.error(f"Failed to initialize Brandfetch provider: {e!s}")
 
         if not self.providers:
             logger.warning("No domain enrichment providers available")
 
-    def enrich_domain(self, domain: str) -> Optional[Company]:
-        """Enrich a domain with company information"""
+    def enrich_domain(self, domain: str) -> Company | None:
+        """Enrich a domain with company information.
+
+        Args:
+            domain: Domain name to enrich.
+
+        Returns:
+            Company instance with enrichment data, or None on failure.
+        """
         if not domain:
             logger.warning("Empty domain provided for enrichment")
             return None
@@ -52,8 +72,8 @@ class DomainEnrichmentService:
                 return company
 
             # Try to enrich with each provider
-            enrichment_data = {}
-            successful_provider = None
+            enrichment_data: dict[str, Any] = {}
+            successful_provider: Any = None
             for provider in self.providers:
                 try:
                     data = provider.enrich_domain(domain)
@@ -68,7 +88,7 @@ class DomainEnrichmentService:
                 except Exception as e:
                     logger.error(
                         f"Provider {provider.__class__.__name__} failed for "
-                        f"{domain}: {str(e)}"
+                        f"{domain}: {e!s}"
                     )
                     continue
 
@@ -87,16 +107,22 @@ class DomainEnrichmentService:
             return company
 
         except Exception as e:
-            logger.error(f"Error enriching domain {domain}: {str(e)}", exc_info=True)
+            logger.error(f"Error enriching domain {domain}: {e!s}", exc_info=True)
             return None
 
     def _update_company(
         self,
         company: Company,
-        data: Dict[str, Any],
-        provider_name: Optional[str] = None,
+        data: dict[str, Any],
+        provider_name: str | None = None,
     ) -> None:
-        """Update company record with enrichment data"""
+        """Update company record with enrichment data.
+
+        Args:
+            company: Company model instance to update.
+            data: Enrichment data dictionary.
+            provider_name: Name of the provider that supplied the data.
+        """
         if not data:
             return
 
@@ -110,9 +136,17 @@ class DomainEnrichmentService:
         # Save with specific fields for performance
         self._save_company(company, updated_fields)
 
-    def _update_basic_fields(self, company: Company, data: Dict[str, Any]) -> list[str]:
-        """Update basic company fields and return list of updated fields"""
-        updated_fields = []
+    def _update_basic_fields(self, company: Company, data: dict[str, Any]) -> list[str]:
+        """Update basic company fields and return list of updated fields.
+
+        Args:
+            company: Company model instance.
+            data: Enrichment data dictionary.
+
+        Returns:
+            List of field names that were updated.
+        """
+        updated_fields: list[str] = []
 
         if "name" in data and data["name"]:
             company.name = data["name"]
@@ -125,9 +159,15 @@ class DomainEnrichmentService:
         return updated_fields
 
     def _store_brand_info(
-        self, company: Company, data: Dict[str, Any], provider_name: Optional[str]
+        self, company: Company, data: dict[str, Any], provider_name: str | None
     ) -> None:
-        """Store enrichment data in brand_info field"""
+        """Store enrichment data in brand_info field.
+
+        Args:
+            company: Company model instance.
+            data: Enrichment data dictionary.
+            provider_name: Name of the provider that supplied the data.
+        """
         if provider_name:
             self._store_provider_specific_data(company, data, provider_name)
         else:
@@ -135,9 +175,15 @@ class DomainEnrichmentService:
             company.brand_info = data
 
     def _store_provider_specific_data(
-        self, company: Company, data: Dict[str, Any], provider_name: str
+        self, company: Company, data: dict[str, Any], provider_name: str
     ) -> None:
-        """Store data under provider-specific key in brand_info"""
+        """Store data under provider-specific key in brand_info.
+
+        Args:
+            company: Company model instance.
+            data: Enrichment data dictionary.
+            provider_name: Provider name for namespacing.
+        """
         if not company.brand_info:
             company.brand_info = {}
 
@@ -151,7 +197,12 @@ class DomainEnrichmentService:
                 company.brand_info[provider_name] = provider_data
 
     def _save_company(self, company: Company, updated_fields: list[str]) -> None:
-        """Save company with optimized field updates"""
+        """Save company with optimized field updates.
+
+        Args:
+            company: Company model instance.
+            updated_fields: List of fields that were updated.
+        """
         if updated_fields:
             company.save(update_fields=updated_fields)
         else:

@@ -1,8 +1,14 @@
+"""Database lookup service for webhook records.
+
+This module provides services for storing and retrieving webhook
+records in Redis with TTL-based expiration.
+"""
+
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from django.core.cache import cache
 from django.utils import timezone
@@ -11,22 +17,53 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseLookupService:
-    """Service for managing webhook records in Redis with TTL"""
+    """Service for managing webhook records in Redis with TTL.
+
+    Stores payment and order records with automatic expiration and
+    provides lookup capabilities for cross-referencing events.
+
+    Attributes:
+        lookup_window_hours: Hours to look back for matches.
+        ttl_seconds: Time-to-live for webhook records.
+    """
 
     def __init__(self) -> None:
+        """Initialize the database lookup service."""
         self.lookup_window_hours = 24  # Look for matches within 24 hours
         self.ttl_seconds = 60 * 60 * 24  # 24 hours TTL for webhook records
 
     def _get_webhook_key(self, webhook_type: str, timestamp: str) -> str:
-        """Generate Redis key for webhook record"""
+        """Generate Redis key for webhook record.
+
+        Args:
+            webhook_type: Type of webhook (payment, order, etc.).
+            timestamp: Timestamp string for uniqueness.
+
+        Returns:
+            Formatted Redis key string.
+        """
         return f"webhook:{webhook_type}:{timestamp}"
 
     def _get_activity_key(self, date_str: str) -> str:
-        """Generate Redis key for daily activity list"""
+        """Generate Redis key for daily activity list.
+
+        Args:
+            date_str: Date string in YYYY-MM-DD format.
+
+        Returns:
+            Formatted Redis key for activity list.
+        """
         return f"webhook_activity:{date_str}"
 
-    def store_payment_record(self, event_data: Dict[str, Any]) -> bool:
-        """Store a payment record in Redis with TTL"""
+    def store_payment_record(self, event_data: dict[str, Any]) -> bool:
+        """Store a payment record in Redis with TTL.
+
+        Args:
+            event_data: Dictionary containing payment event data.
+
+        Returns:
+            True if storage was successful, False otherwise.
+        """
         try:
             provider = event_data.get("provider", "").lower()
             if not provider:
@@ -112,15 +149,18 @@ class DatabaseLookupService:
             return True
 
         except Exception as e:
-            logger.error(
-                f"Error storing payment record in Redis: {str(e)}", exc_info=True
-            )
+            logger.error(f"Error storing payment record in Redis: {e!s}", exc_info=True)
             return False
 
-    def _validate_order_data(
-        self, event_data: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        """Validate and extract order data fields."""
+    def _validate_order_data(self, event_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Validate and extract order data fields.
+
+        Args:
+            event_data: Raw event data dictionary.
+
+        Returns:
+            Validated data dictionary, or None if validation fails.
+        """
         platform = event_data.get("provider", "").lower()
         if platform not in ["shopify"]:
             logger.warning(f"Unsupported platform for order: {platform}")
@@ -152,15 +192,29 @@ class DatabaseLookupService:
         }
 
     def _normalize_order_status(self, status: str) -> str:
-        """Normalize order status."""
+        """Normalize order status to standard values.
+
+        Args:
+            status: Raw status string.
+
+        Returns:
+            Normalized status string.
+        """
         if status in ["successful", "completed", "fulfilled"]:
             return "paid"
         elif status in ["cancelled", "canceled"]:
             return "cancelled"
         return status
 
-    def _parse_order_date(self, order_date_str: Optional[str]) -> datetime:
-        """Parse order date from string or return current time."""
+    def _parse_order_date(self, order_date_str: str | None) -> datetime:
+        """Parse order date from string or return current time.
+
+        Args:
+            order_date_str: ISO format date string or None.
+
+        Returns:
+            Parsed datetime or current time if parsing fails.
+        """
         if not order_date_str:
             return timezone.now()
 
@@ -169,8 +223,15 @@ class DatabaseLookupService:
         except (ValueError, AttributeError):
             return timezone.now()
 
-    def _create_order_record(self, validated_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create webhook record for order."""
+    def _create_order_record(self, validated_data: dict[str, Any]) -> dict[str, Any]:
+        """Create webhook record for order.
+
+        Args:
+            validated_data: Validated order data dictionary.
+
+        Returns:
+            Formatted webhook record dictionary.
+        """
         now = timezone.now()
         order_date = self._parse_order_date(validated_data["order_date"])
         status = self._normalize_order_status(validated_data["status"])
@@ -190,8 +251,15 @@ class DatabaseLookupService:
             "timestamp": now.timestamp(),
         }
 
-    def store_order_record(self, event_data: Dict[str, Any]) -> bool:
-        """Store an order record in Redis with TTL"""
+    def store_order_record(self, event_data: dict[str, Any]) -> bool:
+        """Store an order record in Redis with TTL.
+
+        Args:
+            event_data: Dictionary containing order event data.
+
+        Returns:
+            True if storage was successful, False otherwise.
+        """
         try:
             # Validate and extract order data
             validated_data = self._validate_order_data(event_data)
@@ -218,13 +286,15 @@ class DatabaseLookupService:
             return True
 
         except Exception as e:
-            logger.error(
-                f"Error storing order record in Redis: {str(e)}", exc_info=True
-            )
+            logger.error(f"Error storing order record in Redis: {e!s}", exc_info=True)
             return False
 
     def _add_to_activity_list(self, webhook_key: str) -> None:
-        """Add webhook key to daily activity list with cleanup."""
+        """Add webhook key to daily activity list with cleanup.
+
+        Args:
+            webhook_key: Redis key for the webhook record.
+        """
         now = timezone.now()
         date_str = now.strftime("%Y-%m-%d")
         activity_key = self._get_activity_key(date_str)
@@ -248,14 +318,22 @@ class DatabaseLookupService:
 
     def get_recent_webhook_activity(
         self, days: int = 7, limit: int = 50
-    ) -> List[Dict[str, Any]]:
-        """Get recent webhook activity from Redis"""
+    ) -> list[dict[str, Any]]:
+        """Get recent webhook activity from Redis.
+
+        Args:
+            days: Number of days to look back.
+            limit: Maximum number of records to return.
+
+        Returns:
+            List of webhook activity records, sorted by timestamp.
+        """
         try:
-            activity_records = []
+            activity_records: list[dict[str, Any]] = []
 
             # Get activity from last N days
             for i in range(days):
-                date = timezone.now() - timezone.timedelta(days=i)
+                date = timezone.now() - timedelta(days=i)
                 date_str = date.strftime("%Y-%m-%d")
                 activity_key = self._get_activity_key(date_str)
 
@@ -280,14 +358,19 @@ class DatabaseLookupService:
 
         except Exception as e:
             logger.error(
-                f"Error retrieving webhook activity from Redis: {str(e)}", exc_info=True
+                f"Error retrieving webhook activity from Redis: {e!s}", exc_info=True
             )
             return []
 
-    def lookup_chargify_payment_for_shopify_order(
-        self, order_ref: str
-    ) -> Optional[str]:
-        """Look up Chargify payment for Shopify order (simplified for Redis)"""
+    def lookup_chargify_payment_for_shopify_order(self, order_ref: str) -> str | None:
+        """Look up Chargify payment for Shopify order.
+
+        Args:
+            order_ref: Shopify order reference.
+
+        Returns:
+            Related Chargify payment reference, or None if not found.
+        """
         try:
             # For now, just log the lookup attempt
             # In a full implementation, this would search through recent webhook records
@@ -295,13 +378,18 @@ class DatabaseLookupService:
             return None
 
         except Exception as e:
-            logger.error(f"Error looking up payment reference: {str(e)}", exc_info=True)
+            logger.error(f"Error looking up payment reference: {e!s}", exc_info=True)
             return None
 
-    def lookup_shopify_order_for_chargify_payment(
-        self, order_ref: str
-    ) -> Optional[str]:
-        """Look up Shopify order for Chargify payment (simplified for Redis)"""
+    def lookup_shopify_order_for_chargify_payment(self, order_ref: str) -> str | None:
+        """Look up Shopify order for Chargify payment.
+
+        Args:
+            order_ref: Chargify order reference.
+
+        Returns:
+            Related Shopify order reference, or None if not found.
+        """
         try:
             # For now, just log the lookup attempt
             # In a full implementation, this would search through recent webhook records
@@ -313,5 +401,5 @@ class DatabaseLookupService:
             return None
 
         except Exception as e:
-            logger.error(f"Error looking up order reference: {str(e)}", exc_info=True)
+            logger.error(f"Error looking up order reference: {e!s}", exc_info=True)
             return None

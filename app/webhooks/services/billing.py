@@ -1,5 +1,11 @@
+"""Billing service for handling Stripe webhook events.
+
+This module processes billing-related webhook events from Stripe
+and updates organization subscription status accordingly.
+"""
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.models import Organization
 
@@ -7,11 +13,23 @@ logger = logging.getLogger(__name__)
 
 
 class BillingService:
-    """Service for handling billing-related webhook events from Stripe"""
+    """Service for handling billing-related webhook events from Stripe.
+
+    Provides static methods for processing various subscription and
+    payment events and updating organization records.
+    """
 
     @staticmethod
-    def _get_customer_id(data: Dict[str, Any], data_type: str) -> Optional[str]:
-        """Extract customer ID from webhook data."""
+    def _get_customer_id(data: dict[str, Any], data_type: str) -> str | None:
+        """Extract customer ID from webhook data.
+
+        Args:
+            data: Webhook data dictionary.
+            data_type: Description of data type for logging.
+
+        Returns:
+            Customer ID string, or None if not found.
+        """
         customer_id = data.get("customer")
         if not customer_id:
             logger.error(f"Missing customer ID in {data_type} data")
@@ -19,11 +37,16 @@ class BillingService:
         return customer_id
 
     @staticmethod
-    def _extract_plan_id(subscription: Dict[str, Any]) -> Optional[str]:
-        """
-        Extract plan ID from subscription data.
+    def _extract_plan_id(subscription: dict[str, Any]) -> str | None:
+        """Extract plan ID from subscription data.
 
         Handles multiple Stripe API formats (nested and direct).
+
+        Args:
+            subscription: Subscription data dictionary.
+
+        Returns:
+            Plan ID string, or None if not found.
         """
         # Try the nested items.data[0].plan.id format (Stripe API >= 2020)
         items = subscription.get("items", {})
@@ -43,8 +66,12 @@ class BillingService:
         return None
 
     @staticmethod
-    def handle_subscription_created(subscription: Dict[str, Any]) -> None:
-        """Handle subscription created event"""
+    def handle_subscription_created(subscription: dict[str, Any]) -> None:
+        """Handle subscription created event.
+
+        Args:
+            subscription: Subscription data from Stripe webhook.
+        """
         try:
             customer_id = BillingService._get_customer_id(subscription, "subscription")
             if not customer_id:
@@ -73,11 +100,15 @@ class BillingService:
                 logger.warning(f"No organization found for customer {customer_id}")
 
         except Exception as e:
-            logger.error(f"Error handling subscription created: {str(e)}")
+            logger.error(f"Error handling subscription created: {e!s}")
 
     @staticmethod
-    def handle_subscription_updated(subscription: Dict[str, Any]) -> None:
-        """Handle subscription updated event (plan changes, status changes)"""
+    def handle_subscription_updated(subscription: dict[str, Any]) -> None:
+        """Handle subscription updated event (plan changes, status changes).
+
+        Args:
+            subscription: Subscription data from Stripe webhook.
+        """
         try:
             customer_id = BillingService._get_customer_id(subscription, "subscription")
             if not customer_id:
@@ -98,7 +129,7 @@ class BillingService:
             }
             internal_status = status_mapping.get(status, "active")
 
-            update_data = {"subscription_status": internal_status}
+            update_data: dict[str, Any] = {"subscription_status": internal_status}
 
             # Update plan if changed
             plan_id = BillingService._extract_plan_id(subscription)
@@ -124,11 +155,15 @@ class BillingService:
                 logger.warning(f"No organization found for customer {customer_id}")
 
         except Exception as e:
-            logger.error(f"Error handling subscription updated: {str(e)}")
+            logger.error(f"Error handling subscription updated: {e!s}")
 
     @staticmethod
-    def handle_subscription_deleted(subscription: Dict[str, Any]) -> None:
-        """Handle subscription deleted/cancelled event"""
+    def handle_subscription_deleted(subscription: dict[str, Any]) -> None:
+        """Handle subscription deleted/cancelled event.
+
+        Args:
+            subscription: Subscription data from Stripe webhook.
+        """
         try:
             customer_id = BillingService._get_customer_id(subscription, "subscription")
             if not customer_id:
@@ -146,11 +181,15 @@ class BillingService:
                 logger.warning(f"No organization found for customer {customer_id}")
 
         except Exception as e:
-            logger.error(f"Error handling subscription deleted: {str(e)}")
+            logger.error(f"Error handling subscription deleted: {e!s}")
 
     @staticmethod
-    def handle_payment_success(invoice: Dict[str, Any]) -> None:
-        """Handle successful payment event"""
+    def handle_payment_success(invoice: dict[str, Any]) -> None:
+        """Handle successful payment event.
+
+        Args:
+            invoice: Invoice data from Stripe webhook.
+        """
         try:
             customer_id = invoice.get("customer")
             if not customer_id:
@@ -160,7 +199,7 @@ class BillingService:
             period_end = invoice.get("period_end")
 
             # Prepare update data
-            update_data = {"subscription_status": "active"}
+            update_data: dict[str, Any] = {"subscription_status": "active"}
             if period_end:
                 update_data["billing_cycle_anchor"] = period_end
 
@@ -176,11 +215,15 @@ class BillingService:
                 logger.warning(f"No organization found for customer {customer_id}")
 
         except Exception as e:
-            logger.error(f"Error handling payment success: {str(e)}")
+            logger.error(f"Error handling payment success: {e!s}")
 
     @staticmethod
-    def handle_payment_failed(invoice: Dict[str, Any]) -> None:
-        """Handle failed payment event"""
+    def handle_payment_failed(invoice: dict[str, Any]) -> None:
+        """Handle failed payment event.
+
+        Args:
+            invoice: Invoice data from Stripe webhook.
+        """
         try:
             customer_id = invoice.get("customer")
             if not customer_id:
@@ -199,4 +242,4 @@ class BillingService:
                 logger.warning(f"No organization found for customer {customer_id}")
 
         except Exception as e:
-            logger.error(f"Error handling payment failure: {str(e)}")
+            logger.error(f"Error handling payment failure: {e!s}")

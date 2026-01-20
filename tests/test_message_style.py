@@ -1,8 +1,17 @@
-from app.webhooks.message_generator import MessageGenerator
+"""Tests for message generator style and tone.
+
+This module tests that generated messages maintain the brand voice
+with appropriate emojis, celebratory phrases, and conversational tone.
+"""
+
+from webhooks.message_generator import MessageGenerator
 
 
-def test_payment_success_messages_are_celebratory():
-    """Test that payment success messages have a fun, celebratory tone"""
+def test_payment_success_messages_are_celebratory() -> None:
+    """Test that payment success messages have a fun, celebratory tone.
+
+    Verifies emojis and celebratory phrases are included.
+    """
     generator = MessageGenerator()
 
     event = {"customer_name": "Acme Corp", "amount": "$500", "plan": "Pro"}
@@ -15,8 +24,11 @@ def test_payment_success_messages_are_celebratory():
     assert event["amount"] in message
 
 
-def test_payment_failure_messages_are_light_but_clear():
-    """Test that payment failure messages maintain humor while being clear"""
+def test_payment_failure_messages_are_light_but_clear() -> None:
+    """Test that payment failure messages maintain humor while being clear.
+
+    Verifies appropriate emojis and phrases for failure notifications.
+    """
     generator = MessageGenerator()
 
     event = {"customer_name": "Acme Corp", "amount": "$500", "reason": "card_expired"}
@@ -28,8 +40,11 @@ def test_payment_failure_messages_are_light_but_clear():
     assert "needs attention" in lower_message or "needs looking at" in lower_message
 
 
-def test_trial_ending_messages_are_encouraging():
-    """Test that trial ending messages are encouraging and positive"""
+def test_trial_ending_messages_are_encouraging() -> None:
+    """Test that trial ending messages are encouraging and positive.
+
+    Verifies messages highlight product usage and encourage conversion.
+    """
     generator = MessageGenerator()
 
     event = {
@@ -51,8 +66,11 @@ def test_trial_ending_messages_are_encouraging():
     assert "API" in message or "Dashboard" in message
 
 
-def test_upgrade_messages_are_extra_celebratory():
-    """Test that upgrade messages are extra enthusiastic"""
+def test_upgrade_messages_are_extra_celebratory() -> None:
+    """Test that upgrade messages are extra enthusiastic.
+
+    Verifies multiple emojis and enthusiastic growth-focused language.
+    """
     generator = MessageGenerator()
 
     event = {
@@ -77,8 +95,12 @@ def test_upgrade_messages_are_extra_celebratory():
     assert any(phrase in message.lower() for phrase in growth_phrases)
 
 
-def test_messages_maintain_brand_voice():
-    """Test that all messages maintain our brand voice regardless of situation"""
+def test_messages_maintain_brand_voice() -> None:
+    """Test that all messages maintain our brand voice regardless of situation.
+
+    Verifies no formal corporate language, includes emojis, uses customer
+    name, and stays concise.
+    """
     generator = MessageGenerator()
     events = [
         {"type": "payment_success", "customer_name": "Acme"},

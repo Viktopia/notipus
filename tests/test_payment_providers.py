@@ -1,16 +1,25 @@
+"""Tests for payment provider webhook parsing and validation.
+
+This module tests Chargify, Shopify, and Stripe webhook handling
+including signature validation, data parsing, and deduplication.
+"""
+
 import json
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from webhooks.providers import ChargifyProvider, PaymentProvider, ShopifyProvider
+from webhooks.providers.base import InvalidDataError
+from webhooks.services.event_processor import EventProcessor
 
-from app.webhooks.providers import ChargifyProvider, PaymentProvider, ShopifyProvider
-from app.webhooks.providers.base import InvalidDataError
-from app.webhooks.services.event_processor import EventProcessor
 
+def test_payment_provider_interface() -> None:
+    """Test that payment providers implement the required interface.
 
-def test_payment_provider_interface():
-    """Test that payment providers implement the required interface"""
-    providers = [
+    Verifies all providers are instances of PaymentProvider.
+    """
+    providers: list[PaymentProvider] = [
         ChargifyProvider(webhook_secret="test_secret"),
         ShopifyProvider(webhook_secret="test_secret"),
     ]
@@ -19,8 +28,12 @@ def test_payment_provider_interface():
         assert isinstance(provider, PaymentProvider)
 
 
-def test_chargify_payment_failure_parsing():
-    """Verify Chargify payment failure webhook parsing works correctly"""
+def test_chargify_payment_failure_parsing() -> None:
+    """Verify Chargify payment failure webhook parsing works correctly.
+
+    Tests that payment failure events are correctly parsed with
+    customer data, amount, and metadata.
+    """
     provider = ChargifyProvider(webhook_secret="test_secret")
 
     # Create a mock request (analogous to Flask request)
@@ -52,6 +65,7 @@ def test_chargify_payment_failure_parsing():
     }
 
     event = provider.parse_webhook(mock_request)
+    assert event is not None
     assert event["type"] == "payment_failure"
     assert event["customer_id"] == "cust_456"
     assert event["amount"] == 29.99
@@ -62,8 +76,12 @@ def test_chargify_payment_failure_parsing():
     assert event["customer_data"]["plan_name"] == "Enterprise Plan"
 
 
-def test_shopify_order_parsing():
-    """Verify Shopify order webhook parsing works correctly"""
+def test_shopify_order_parsing() -> None:
+    """Verify Shopify order webhook parsing works correctly.
+
+    Tests that orders/paid events are correctly parsed with
+    customer, order, and line item data.
+    """
     provider = ShopifyProvider(webhook_secret="test_secret")
 
     # Create a mock request
@@ -76,7 +94,7 @@ def test_shopify_order_parsing():
         "X-Shopify-Order-Id": "123456789",
         "X-Shopify-Api-Version": "2024-01",
     }
-    shopify_data = {
+    shopify_data: dict[str, Any] = {
         "id": 123456789,
         "order_number": 1001,
         "customer": {
@@ -135,6 +153,7 @@ def test_shopify_order_parsing():
     mock_request.data = json.dumps(shopify_data).encode("utf-8")
 
     event = provider.parse_webhook(mock_request)
+    assert event is not None
     assert event["type"] == "payment_success"
     assert event["customer_id"] == "456"
     assert event["amount"] == 29.99
@@ -144,8 +163,11 @@ def test_shopify_order_parsing():
     assert event["metadata"]["fulfillment_status"] == "fulfilled"
 
 
-def test_chargify_webhook_validation():
-    """Verify Chargify webhook signature validation"""
+def test_chargify_webhook_validation() -> None:
+    """Verify Chargify webhook signature validation.
+
+    Tests HMAC signature validation for Chargify webhooks.
+    """
     provider = ChargifyProvider(webhook_secret="test_secret")
 
     # Create a mock request with headers
@@ -166,8 +188,11 @@ def test_chargify_webhook_validation():
         assert provider.validate_webhook(mock_request) is True
 
 
-def test_shopify_webhook_validation():
-    """Verify Shopify webhook signature validation"""
+def test_shopify_webhook_validation() -> None:
+    """Verify Shopify webhook signature validation.
+
+    Tests HMAC-SHA256 signature validation and required headers.
+    """
     provider = ShopifyProvider("test_secret")
 
     # Create a mock request with a valid signature
@@ -216,8 +241,11 @@ def test_shopify_webhook_validation():
 
 
 @pytest.mark.usefixtures("mock_webhook_validation")
-def test_shopify_test_webhook(monkeypatch):
-    """Verify handling of Shopify test webhooks"""
+def test_shopify_test_webhook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify handling of Shopify test webhooks.
+
+    Test webhooks should be ignored and return None.
+    """
     provider = ShopifyProvider("test_secret")
 
     # Create a mock request
@@ -236,8 +264,12 @@ def test_shopify_test_webhook(monkeypatch):
     assert event is None
 
 
-def test_shopify_invalid_webhook_data():
-    """Verify handling of invalid Shopify webhook data"""
+def test_shopify_invalid_webhook_data() -> None:
+    """Verify handling of invalid Shopify webhook data.
+
+    Tests various invalid data scenarios including wrong content type,
+    empty data, missing customer ID, and invalid amount.
+    """
     provider = ShopifyProvider("test_secret")
 
     # Create a mock request
@@ -272,8 +304,11 @@ def test_shopify_invalid_webhook_data():
         provider.parse_webhook(mock_request)
 
 
-def test_invalid_webhook_data():
-    """Verify handling of invalid webhook data for Chargify"""
+def test_invalid_webhook_data() -> None:
+    """Verify handling of invalid webhook data for Chargify.
+
+    Tests that empty form data raises InvalidDataError.
+    """
     chargify = ChargifyProvider(webhook_secret="test_secret")
 
     # Test Chargify with invalid data
@@ -290,8 +325,11 @@ def test_invalid_webhook_data():
         chargify.parse_webhook(mock_chargify_request)
 
 
-def test_chargify_subscription_state_change():
-    """Verify Chargify subscription state change webhook parsing"""
+def test_chargify_subscription_state_change() -> None:
+    """Verify Chargify subscription state change webhook parsing.
+
+    Tests that subscription cancellation events are correctly parsed.
+    """
     provider = ChargifyProvider(webhook_secret="test_secret")
     provider._webhook_cache.clear()  # Clear cache before test
 
@@ -317,6 +355,7 @@ def test_chargify_subscription_state_change():
     }
 
     event = provider.parse_webhook(mock_request)
+    assert event is not None
     assert event["type"] == "subscription_state_change"
     assert event["customer_id"] == "cust_456"
     assert event["status"] == "canceled"
@@ -326,8 +365,11 @@ def test_chargify_subscription_state_change():
     assert event["customer_data"]["plan_name"] == "Enterprise Plan"
 
 
-def test_shopify_customer_data_update():
-    """Verify Shopify customers/update webhook parsing"""
+def test_shopify_customer_data_update() -> None:
+    """Verify Shopify customers/update webhook parsing.
+
+    Tests that customer update events include company and profile data.
+    """
     provider = ShopifyProvider(webhook_secret="test_secret")
 
     mock_request = Mock()
@@ -337,7 +379,7 @@ def test_shopify_customer_data_update():
         "X-Shopify-Shop-Domain": "test.myshopify.com",
         "X-Shopify-Hmac-SHA256": "test_signature",
     }
-    mock_data = {
+    mock_data: dict[str, Any] = {
         "id": 456,
         "email": "test@example.com",
         "accepts_marketing": True,
@@ -381,8 +423,12 @@ def test_shopify_customer_data_update():
     assert event["customer_data"]["company"] == "Updated Company Name"
 
 
-def test_chargify_webhook_deduplication():
-    """Verify Chargify webhook deduplication logic"""
+def test_chargify_webhook_deduplication() -> None:
+    """Verify Chargify webhook deduplication logic.
+
+    Tests that duplicate webhook IDs are rejected while
+    different webhook IDs are processed.
+    """
     provider = ChargifyProvider("")
     provider._DEDUP_WINDOW_SECONDS = (
         60  # Set deduplication window to 60 seconds for testing
@@ -395,7 +441,7 @@ def test_chargify_webhook_deduplication():
     mock_request.headers = {
         "X-Chargify-Webhook-Id": "test_webhook_1",
     }
-    form_data = {
+    form_data: dict[str, str] = {
         "event": "payment_success",
         "id": "12345",
         "payload[subscription][id]": "sub_789",
@@ -435,12 +481,15 @@ def test_chargify_webhook_deduplication():
     assert event2["customer_id"] == "cust_123"
 
 
-def test_event_processor_notification_formatting():
-    """Verify EventProcessor formats notifications correctly for different events"""
+def test_event_processor_notification_formatting() -> None:
+    """Verify EventProcessor formats notifications correctly for different events.
+
+    Tests both payment success and failure event formatting.
+    """
     processor = EventProcessor()
 
     # Test successful payment event
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
@@ -451,7 +500,7 @@ def test_event_processor_notification_formatting():
             "plan": "enterprise",
         },
     }
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company": "Acme Corp",
         "team_size": "50",
         "plan": "Enterprise",
@@ -482,12 +531,15 @@ def test_event_processor_notification_formatting():
     assert "card_declined" in failure_reason_field
 
 
-def test_chargify_memo_parsing():
-    """Verify Chargify memo field parsing for Shopify order references"""
+def test_chargify_memo_parsing() -> None:
+    """Verify Chargify memo field parsing for Shopify order references.
+
+    Tests various memo formats to extract Shopify order IDs.
+    """
     provider = ChargifyProvider(webhook_secret="test_secret")
 
     # Test different memo formats
-    test_cases = [
+    test_cases: list[tuple[str, str | None]] = [
         (
             "Wire payment received for $233.76 24th December '24\n"
             "$228.90 allocated to Shopify Order 2067",
@@ -519,8 +571,11 @@ def test_chargify_memo_parsing():
         assert ref == expected_ref, f"Failed to parse memo: {memo}"
 
 
-def test_chargify_payment_success_with_shopify_ref():
-    """Verify payment_success webhook includes Shopify order reference when present"""
+def test_chargify_payment_success_with_shopify_ref() -> None:
+    """Verify payment_success webhook includes Shopify order reference when present.
+
+    Tests that memo parsing extracts Shopify order references.
+    """
     provider = ChargifyProvider(webhook_secret="test_secret")
 
     # Create a mock request
@@ -549,18 +604,22 @@ def test_chargify_payment_success_with_shopify_ref():
     }
 
     event = provider.parse_webhook(mock_request)
+    assert event is not None
     assert event["type"] == "payment_success"
     assert event["metadata"]["shopify_order_ref"] == "1234"
     assert "memo" in event["metadata"]  # Full memo should be preserved
 
 
-def test_shopify_order_ref_matching():
-    """Verify Shopify and Chargify events are correctly linked by order reference"""
+def test_shopify_order_ref_matching() -> None:
+    """Verify Shopify and Chargify events are correctly linked by order reference.
+
+    Tests that cross-reference enrichment works without errors.
+    """
     processor = EventProcessor()
 
     # Test that the processor can handle events with cross-references
     # This is now handled internally through the _enrich_with_cross_references method
-    chargify_event = {
+    chargify_event: dict[str, Any] = {
         "type": "payment_success",
         "provider": "chargify",
         "customer_id": "cust_123",
@@ -572,7 +631,7 @@ def test_shopify_order_ref_matching():
         },
     }
 
-    customer_data = {
+    customer_data: dict[str, Any] = {
         "company_name": "Test Company",
         "team_size": "10",
     }

@@ -30,6 +30,8 @@ dev = [
     "types-requests>=2.31.0.20240218",
     "pytest-django>=4.11.1,<5.0.0",
     "djlint>=1.36.4,<2.0.0",
+    "django-stubs>=5.0.0",
+    "django-stubs-ext>=5.0.0",
 ]
 
 [tool.ruff]
@@ -69,4 +71,40 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
 ]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+# Django plugin is disabled because the project uses a nested module structure
+# (app/ directory with pythonpath configuration) that causes mypy to see models
+# under both "app.core.models" and "core.models", triggering duplicate model
+# registration errors. To enable full Django type checking:
+# 1. Restructure to have a single canonical import path, OR
+# 2. Run mypy from within the app/ directory with PYTHONPATH set
+# plugins = ["mypy_django_plugin.main"]
+
+# [tool.django-stubs]
+# django_settings_module = "django_notipus.test_settings"
+# strict_settings = false
+
+[[tool.mypy.overrides]]
+module = "*.migrations.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "stripe.*",
+    "shopify.*",
+    "webauthn.*",
+    "allauth.*",
+]
+ignore_missing_imports = true
 

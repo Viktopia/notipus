@@ -6,10 +6,9 @@ import json
 from unittest.mock import Mock, patch
 
 import pytest
-
-from app.core.services.shopify import ShopifyAPI
-from app.webhooks.providers.base import CustomerNotFoundError, InvalidDataError
-from app.webhooks.providers.shopify import ShopifyProvider
+from core.services.shopify import ShopifyAPI
+from webhooks.providers.base import CustomerNotFoundError, InvalidDataError
+from webhooks.providers.shopify import ShopifyProvider
 
 
 class TestShopifyProvider:
@@ -407,9 +406,9 @@ class TestShopifyProvider:
 class TestShopifyAPI:
     """Comprehensive tests for ShopifyAPI service"""
 
-    @patch("app.core.services.shopify.shopify.Session")
-    @patch("app.core.services.shopify.shopify.Session.temp")
-    @patch("app.core.services.shopify.shopify.Shop.current")
+    @patch("core.services.shopify.shopify.Session")
+    @patch("core.services.shopify.shopify.Session.temp")
+    @patch("core.services.shopify.shopify.Shop.current")
     def test_get_shop_domain_success(self, mock_shop_current, mock_temp, mock_session):
         """Test successful shop domain retrieval using official library"""
         # Mock session creation
@@ -428,7 +427,7 @@ class TestShopifyAPI:
 
         assert result == "test.myshopify.com"
 
-    @patch("app.core.services.shopify.shopify.Session")
+    @patch("core.services.shopify.shopify.Session")
     def test_get_session_failure(self, mock_session):
         """Test session creation failure"""
         mock_session.side_effect = Exception("Session creation failed")
@@ -436,8 +435,8 @@ class TestShopifyAPI:
         with pytest.raises(Exception, match="Session creation failed"):
             ShopifyAPI._get_session("test.myshopify.com", "test_token")
 
-    @patch("app.core.services.shopify.ShopifyAPI._get_session")
-    @patch("app.core.services.shopify.shopify.Session.temp")
+    @patch("core.services.shopify.ShopifyAPI._get_session")
+    @patch("core.services.shopify.shopify.Session.temp")
     def test_get_shop_domain_exception(self, mock_temp, mock_get_session):
         """Test shop domain retrieval with exception"""
         mock_get_session.side_effect = Exception("API error")

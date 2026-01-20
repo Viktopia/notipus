@@ -1,10 +1,16 @@
-# providers/shopify.py
+"""Shopify payment provider implementation.
+
+This module implements the PaymentProvider interface for Shopify,
+handling webhook validation, parsing, and customer data retrieval
+using HMAC-SHA256 signature verification.
+"""
+
 import base64
 import hashlib
 import hmac
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 from django.http import HttpRequest
 
@@ -14,14 +20,16 @@ logger = logging.getLogger(__name__)
 
 
 class ShopifyProvider(PaymentProvider):
-    """
-    Handle Shopify webhooks and customer data using the official Shopify Python library.
+    """Handle Shopify webhooks and customer data.
 
-    This provider leverages the official shopifyapi library for improved security,
-    validation, and compatibility with Shopify's evolving API.
+    This provider validates webhook signatures using HMAC-SHA256
+    verification as recommended by Shopify's documentation.
+
+    Attributes:
+        EVENT_TYPE_MAPPING: Maps Shopify topics to internal event types.
     """
 
-    EVENT_TYPE_MAPPING = {
+    EVENT_TYPE_MAPPING: ClassVar[dict[str, str]] = {
         "orders/paid": "payment_success",
         "orders/cancelled": "payment_cancelled",
         "customers/update": "customers/update",
@@ -29,12 +37,26 @@ class ShopifyProvider(PaymentProvider):
     }
 
     def __init__(self, webhook_secret: str) -> None:
-        """Initialize provider with webhook secret"""
+        """Initialize provider with webhook secret.
+
+        Args:
+            webhook_secret: Secret key for webhook signature validation.
+        """
         super().__init__(webhook_secret)
-        self._current_webhook_data: Optional[Dict[str, Any]] = None
+        self._current_webhook_data: dict[str, Any] | None = None
 
     def _validate_shopify_request(self, request: HttpRequest) -> str:
-        """Validate Shopify webhook request and return topic"""
+        """Validate Shopify webhook request and return topic.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            The webhook topic string.
+
+        Raises:
+            InvalidDataError: If content type or topic is invalid.
+        """
         if request.content_type != "application/json":
             raise InvalidDataError("Invalid content type")
 
@@ -44,10 +66,24 @@ class ShopifyProvider(PaymentProvider):
 
         return topic
 
-    def _parse_shopify_json(self, request: HttpRequest) -> Dict[str, Any]:
-        """Parse and validate Shopify JSON data"""
+    def _parse_shopify_json(self, request: HttpRequest) -> dict[str, Any]:
+        """Parse and validate Shopify JSON data.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            Parsed JSON data dictionary.
+
+        Raises:
+            InvalidDataError: If JSON is invalid or empty.
+        """
         try:
-            data = json.loads(request.data)
+            # Support both request.data (DRF/pre-parsed) and request.body (Django raw).
+            # DRF views may pre-parse JSON into request.data as a dict, while Django
+            # views provide raw bytes in request.body. This handles both cases.
+            body = getattr(request, "data", None) or request.body
+            data = json.loads(body) if isinstance(body, (str, bytes)) else body
         except (json.JSONDecodeError, AttributeError) as e:
             raise InvalidDataError("Invalid JSON data") from e
 
@@ -59,14 +95,32 @@ class ShopifyProvider(PaymentProvider):
         return data
 
     def _is_test_webhook(self, topic: str, request: HttpRequest) -> bool:
-        """Check if this is a test webhook"""
+        """Check if this is a test webhook.
+
+        Args:
+            topic: The webhook topic.
+            request: The incoming HTTP request.
+
+        Returns:
+            True if this is a test webhook, False otherwise.
+        """
         return (
             topic == "test"
             or request.headers.get("X-Shopify-Test", "").lower() == "true"
         )
 
-    def _extract_shopify_customer_id(self, data: Dict[str, Any]) -> str:
-        """Extract customer ID from Shopify webhook data"""
+    def _extract_shopify_customer_id(self, data: dict[str, Any]) -> str:
+        """Extract customer ID from Shopify webhook data.
+
+        Args:
+            data: Parsed webhook data.
+
+        Returns:
+            Customer ID string.
+
+        Raises:
+            InvalidDataError: If customer ID cannot be extracted.
+        """
         try:
             if "customer" in data:
                 customer_id = str(data["customer"]["id"])
@@ -89,11 +143,24 @@ class ShopifyProvider(PaymentProvider):
         self,
         event_type: str,
         customer_id: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         topic: str,
-    ) -> Dict[str, Any]:
-        """Build Shopify event data structure"""
-        event_data = {
+    ) -> dict[str, Any]:
+        """Build Shopify event data structure.
+
+        Args:
+            event_type: The internal event type.
+            customer_id: Customer identifier.
+            data: Raw webhook data.
+            topic: The Shopify webhook topic.
+
+        Returns:
+            Standardized event data dictionary.
+
+        Raises:
+            InvalidDataError: If required fields have invalid formats.
+        """
+        event_data: dict[str, Any] = {
             "type": event_type,
             "customer_id": customer_id,
             "provider": "shopify",
@@ -133,8 +200,21 @@ class ShopifyProvider(PaymentProvider):
 
         return event_data
 
-    def parse_webhook(self, request: HttpRequest) -> Optional[Dict[str, Any]]:
-        """Parse Shopify webhook data"""
+    def parse_webhook(
+        self, request: HttpRequest, **kwargs: Any
+    ) -> dict[str, Any] | None:
+        """Parse Shopify webhook data.
+
+        Args:
+            request: The incoming HTTP request.
+            **kwargs: Additional arguments (unused).
+
+        Returns:
+            Parsed event data dictionary, or None for test webhooks.
+
+        Raises:
+            InvalidDataError: If webhook data is invalid.
+        """
         # Validate request
         topic = self._validate_shopify_request(request)
 
@@ -159,8 +239,18 @@ class ShopifyProvider(PaymentProvider):
         # Build and return event data
         return self._build_shopify_event_data(event_type, customer_id, data, topic)
 
-    def get_customer_data(self, customer_id: str) -> Dict[str, Any]:
-        """Get customer data from stored webhook data"""
+    def get_customer_data(self, customer_id: str) -> dict[str, Any]:
+        """Get customer data from stored webhook data.
+
+        Args:
+            customer_id: The customer identifier.
+
+        Returns:
+            Dictionary of customer information.
+
+        Raises:
+            CustomerNotFoundError: If no webhook data is available.
+        """
         if not self._current_webhook_data:
             raise CustomerNotFoundError("No webhook data available")
 
@@ -184,11 +274,20 @@ class ShopifyProvider(PaymentProvider):
         }
 
     def validate_webhook(self, request: HttpRequest) -> bool:
-        """
-        Validate the webhook signature using manual HMAC verification.
+        """Validate the webhook signature using HMAC verification.
 
-        This method validates Shopify webhooks using the standard HMAC-SHA256
-        verification process as recommended in Shopify's documentation.
+        This method validates Shopify webhooks using the standard
+        HMAC-SHA256 verification process as recommended in Shopify's
+        documentation.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            True if signature is valid, False otherwise.
+
+        Raises:
+            TypeError: If request body is not bytes.
         """
         hmac_header = request.headers.get("X-Shopify-Hmac-SHA256")
         if not hmac_header:
@@ -201,11 +300,15 @@ class ShopifyProvider(PaymentProvider):
         return self._manual_validate_webhook(request)
 
     def _manual_validate_webhook(self, request: HttpRequest) -> bool:
-        """
-        Fallback manual webhook validation method.
+        """Validate webhook using manual HMAC calculation.
 
-        This is kept for backward compatibility in case the official
-        validation method fails.
+        This is the primary validation method using HMAC-SHA256.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            True if signature is valid, False otherwise.
         """
         hmac_header = request.headers.get("X-Shopify-Hmac-SHA256")
         if not hmac_header:
