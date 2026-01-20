@@ -17,9 +17,5 @@ services:
     # Enable live code reloading for development
     volumes:
       - ./app:/app
-      - static_volume:/app/staticfiles
-
-  # Disable nginx healthcheck for faster development startup
-  nginx:
-    healthcheck:
-      disable: true
+    ports:
+      - "8000:8000"

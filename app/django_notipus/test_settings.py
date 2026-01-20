@@ -1,4 +1,5 @@
 from .settings import *  # noqa: F403
+from .settings import MIDDLEWARE  # noqa: F401
 
 # Override database to use SQLite for tests
 DATABASES = {
@@ -11,6 +12,9 @@ DATABASES = {
 # Test-specific environment overrides
 SECRET_KEY = "test-secret-key-for-testing-only"
 DEBUG = True
+
+# Remove whitenoise middleware for tests (staticfiles directory doesn't exist)
+MIDDLEWARE = [m for m in MIDDLEWARE if "whitenoise" not in m]
 
 # Override settings for tests
 DISABLE_BILLING = True
