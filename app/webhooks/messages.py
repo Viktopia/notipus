@@ -10,10 +10,43 @@ class MessageGenerator:
 
     # Fun emojis for different event types
     EMOJIS = {
-        "payment_success": ["🎉", "💰", "🌟", "✨", "🎊", "🚀"],
-        "payment_failure": ["😅", "🤔", "🔄", "💫", "🎯"],
-        "subscription_updated": ["📈", "🆙", "💪", "🌈", "🎨"],
-        "trial_end": ["⏰", "🎭", "🎪", "🎢", "🎡"],
+        "payment_success": [
+            "🎉",
+            "💰",
+            "🌟",
+            "✨",
+            "🎊",
+            "🚀",
+            "🙌",
+            "💥",
+            "👀",
+            "🏆",
+            "🔐",
+        ],
+        "payment_failure": [
+            "😅",
+            "🤔",
+            "🔄",
+            "💫",
+            "🎯",
+            "👋",
+            "🚧",
+            "📢",
+            "📞",
+            "🔔",
+        ],
+        "subscription_updated": [
+            "📈",
+            "🆙",
+            "💪",
+            "🌈",
+            "🎨",
+            "💥",
+            "🔓",
+            "🎯",
+            "🌠",
+        ],
+        "trial_end": ["⏰", "🎭", "🎪", "🎢", "🎡", "🎯", "⏳", "🎁", "🔍"],
         "refund": ["↩️", "🔄", "🎪", "🎭"],
     }
 
@@ -21,9 +54,15 @@ class MessageGenerator:
     SUCCESS_MESSAGES = [
         "Ka-ching! 💰 Another happy payment from {customer}!",
         "Money in the bank! 🎉 {customer} just dropped some coins in our jar!",
-        "Woohoo! {customer} just made it rain! 💸",
+        "Woohoo! {customer} just showed us some love! 💸",
         "Cha-ching! 🌟 {customer} keeps the party going!",
         "Another successful payment! {customer} is on fire! 🔥",
+        # New messages
+        "High five! 🙌 {customer} just came through!",
+        "Boom! 💥 {customer} is keeping the dream alive!",
+        "Look at that! 👀 {customer} just dropped a payment - you love to see it!",
+        "Winner winner! 🏆 {customer} just paid up!",
+        "The vault just got heavier! 🔐 {customer} came through!",
     ]
 
     FAILURE_MESSAGES = [
@@ -33,8 +72,14 @@ class MessageGenerator:
             "playing hide and seek"
         ),
         "Time for a payment adventure! 🗺️ {customer} needs our help",
-        "Quick heads up! 🎯 {customer}'s payment is doing the moonwalk",
-        "Payment party postponed! 🎪 {customer} needs a helping hand",
+        "Quick heads up! 🎯 {customer}'s payment needs a little nudge",
+        "Small bump in the road! 🎪 {customer} needs a helping hand",
+        # New messages
+        "Friendly nudge! 👋 {customer}'s payment could use a quick check",
+        "Hey team! 🚧 {customer}'s payment hit a speed bump",
+        "Attention needed! 📢 {customer}'s payment didn't quite land",
+        "Time to reach out! 📞 {customer}'s payment needs some TLC",
+        "Just a heads up! 🔔 {customer}'s payment is waiting for a retry",
     ]
 
     UPGRADE_MESSAGES = [
@@ -43,6 +88,12 @@ class MessageGenerator:
         "To infinity and beyond! 🚀 {customer} just upgraded!",
         "Achievement unlocked! 🏆 {customer} leveled up their plan!",
         "Super upgrade time! ⭐ {customer} is reaching for the stars!",
+        # New messages
+        "Boom! 💥 {customer} just went bigger and better!",
+        "Growth mode activated! 🔓 {customer} upgraded their plan!",
+        "{customer} is scaling up! 📈 What a journey!",
+        "Big moves! 🎯 {customer} just unlocked more features!",
+        "The sky's the limit! 🌠 {customer} just upgraded!",
     ]
 
     TRIAL_END_MESSAGES = [
@@ -51,6 +102,12 @@ class MessageGenerator:
         "Last call for trial magic! ✨ {customer}'s journey continues",
         "Trial end in sight! 🔭 Let's make sure {customer} is loving it",
         "Final countdown! 🚀 {customer}'s trial is nearing the finish line",
+        # New messages
+        "{customer} is wrapping up their trial adventure! 🎯 Time to chat!",
+        "Trial countdown for {customer}! ⏳ They've been loving the product!",
+        "{customer}'s free ride is coming to an end! 🎁 Let's help them commit!",
+        "Tick tock! ⏰ {customer}'s trial is in the home stretch!",
+        "{customer} has been exploring like a pro! 🔍 Trial ends soon!",
     ]
 
     def generate_message(self, notification: EnrichedNotification) -> Dict[str, Any]:
