@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from core.views import custom_404, custom_500
 from django.contrib import admin
 from django.urls import include, path
 
@@ -26,3 +27,7 @@ urlpatterns = [
         "webhook/", include("webhooks.urls")
     ),  # Mount webhooks at /webhook/ to match tests
 ]
+
+# Custom error handlers
+handler404 = custom_404
+handler500 = custom_500

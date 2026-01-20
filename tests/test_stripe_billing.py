@@ -109,7 +109,7 @@ class TestStripeAPICheckout:
             mock_create: Mock for Stripe checkout session create.
             stripe_api: StripeAPI fixture.
         """
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         mock_create.side_effect = StripeError("Test error")
 
@@ -191,7 +191,7 @@ class TestStripeAPIPortal:
             mock_create: Mock for Stripe billing portal session create.
             stripe_api: StripeAPI fixture.
         """
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         mock_create.side_effect = StripeError("Test error")
 
@@ -279,7 +279,7 @@ class TestStripeAPIPrices:
             mock_list: Mock for Stripe price list.
             stripe_api: StripeAPI fixture.
         """
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         mock_list.side_effect = StripeError("Test error")
 
@@ -495,7 +495,7 @@ class TestStripeAPIInvoices:
             mock_list: Mock for Stripe invoice list.
             stripe_api: StripeAPI fixture.
         """
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         mock_list.side_effect = StripeError("Test error")
 
@@ -566,7 +566,7 @@ class TestStripeAPISubscriptions:
             mock_list: Mock for Stripe subscription list.
             stripe_api: StripeAPI fixture.
         """
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         mock_list.side_effect = StripeError("Test error")
 

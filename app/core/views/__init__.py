@@ -26,6 +26,10 @@ from .dashboard import (
     dashboard,
     organization_settings,
 )
+from .errors import (
+    custom_404,
+    custom_500,
+)
 from .integrations import (
     connect_shopify,
     connect_stripe,
@@ -91,4 +95,7 @@ __all__ = [
     "webauthn_credentials",
     "webauthn_signup_begin",
     "webauthn_signup_complete",
+    # Error handlers
+    "custom_404",
+    "custom_500",
 ]

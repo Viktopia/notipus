@@ -1,230 +1,250 @@
 {% extends "core/base.html.j2" %}
 
-{% block title %}Connect Chargify - Notipus{% endblock %}
+{% block title %}
+    Connect Chargify - Notipus
+{% endblock title %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-    <!-- Header -->
-    <div class="bg-white shadow-sm">
-        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            <div class="md:flex md:items-center md:justify-between">
-                <div class="flex-1 min-w-0">
-                    <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate">
-                        💰 Connect Chargify / Maxio
-                    </h2>
-                    <p class="mt-1 text-lg text-gray-600">Receive subscription and billing webhooks from your Chargify (Maxio Advanced Billing) account</p>
-                </div>
-                <div class="mt-4 flex md:mt-0 md:ml-4">
-                    <a href="{% url 'core:integrations' %}"
-                       class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200">
-                        ← Back to Integrations
-                    </a>
+    <div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+        <!-- Header -->
+        <div class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                <div class="md:flex md:items-center md:justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate">💰 Connect Chargify / Maxio</h2>
+                        <p class="mt-1 text-lg text-gray-600">
+                            Receive subscription and billing webhooks from your Chargify (Maxio Advanced Billing) account
+                        </p>
+                    </div>
+                    <div class="mt-4 flex md:mt-0 md:ml-4">
+                        <a href="{% url 'core:integrations' %}"
+                           class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200">
+                            ← Back to Integrations
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Main content -->
-    <div class="max-w-4xl mx-auto py-8 sm:px-6 lg:px-8">
-        {% if existing_integration %}
-            <!-- Already Connected -->
-            <div class="bg-green-50 border border-green-200 rounded-xl p-6 mb-8">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-green-800">
-                            Chargify is connected!
-                        </h3>
-                        <div class="mt-2 text-sm text-green-700">
-                            <p>Your Chargify account is successfully connected. You can update your webhook secret below if needed.</p>
+        <!-- Main content -->
+        <div class="max-w-4xl mx-auto py-8 sm:px-6 lg:px-8">
+            {% if existing_integration %}
+                <!-- Already Connected -->
+                <div class="bg-green-50 border border-green-200 rounded-xl p-6 mb-8">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-green-400"
+                                 fill="currentColor"
+                                 viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-green-800">Chargify is connected!</h3>
+                            <div class="mt-2 text-sm text-green-700">
+                                <p>Your Chargify account is successfully connected. You can update your webhook secret below if needed.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        {% endif %}
+            {% endif %}
 
-        <!-- Integration Setup -->
-        <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
-            <div class="flex items-center mb-6">
-                <div class="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                    <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-                    </svg>
-                </div>
-                <div class="ml-4">
-                    <h3 class="text-xl font-semibold text-gray-900">Chargify / Maxio Integration Setup</h3>
-                    <p class="text-gray-600">Configure webhook notifications from your Chargify (Maxio Advanced Billing) account</p>
-                </div>
-            </div>
-
-            <form method="post" class="space-y-6">
-                {% csrf_token %}
-
-                <!-- Webhook Secret -->
-                <div>
-                    <label for="webhook_secret" class="block text-sm font-medium text-gray-700">
-                        Webhook Secret
-                    </label>
-                    <div class="mt-1">
-                        <input type="password"
-                               name="webhook_secret"
-                               id="webhook_secret"
-                               value="{% if existing_integration %}{{ existing_integration.webhook_secret }}{% endif %}"
-                               class="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                               placeholder="Enter your Chargify webhook secret"
-                               required>
-                    </div>
-                    <p class="mt-2 text-sm text-gray-500">
-                        You can find your webhook secret in your Chargify dashboard under Settings → Webhooks, or in Maxio Advanced Billing under the same location.
-                    </p>
-                </div>
-
-                <!-- Submit Button -->
-                <div class="flex justify-end">
-                    <button type="submit"
-                            class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all duration-200">
-                        <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+            <!-- Integration Setup -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+                <div class="flex items-center mb-6">
+                    <div class="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <svg class="h-6 w-6 text-blue-600"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1">
+                            </path>
                         </svg>
-                        {% if existing_integration %}Update{% else %}Connect{% endif %} Chargify
-                    </button>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-xl font-semibold text-gray-900">Chargify / Maxio Integration Setup</h3>
+                        <p class="text-gray-600">Configure webhook notifications from your Chargify (Maxio Advanced Billing) account</p>
+                    </div>
                 </div>
-            </form>
-        </div>
 
-        <!-- Webhook URL Configuration -->
-        <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                📡 Webhook Configuration
-            </h3>
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
 
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        Webhook URL
-                    </label>
-                    <div class="flex">
-                        <input type="text"
-                               value="{{ webhook_url }}"
-                               readonly
-                               class="flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-l-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5">
-                        <button onclick="copyToClipboard('{{ webhook_url }}')"
-                                class="inline-flex items-center px-3 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 focus:ring-2 focus:ring-primary-500">
-                            📋 Copy
+                    <!-- Webhook Secret -->
+                    <div>
+                        <label for="webhook_secret" class="block text-sm font-medium text-gray-700">Webhook Secret</label>
+                        <div class="mt-1">
+                            <input type="password"
+                                   name="webhook_secret"
+                                   id="webhook_secret"
+                                   value="{% if existing_integration %}{{ existing_integration.webhook_secret }}{% endif %}"
+                                   class="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                   placeholder="Enter your Chargify webhook secret"
+                                   required>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-500">
+                            You can find your webhook secret in your Chargify dashboard under Settings → Webhooks, or in Maxio Advanced Billing under the same location.
+                        </p>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="flex justify-end">
+                        <button type="submit"
+                                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all duration-200">
+                            <svg class="mr-2 h-5 w-5"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
+                                </path>
+                            </svg>
+                            {% if existing_integration %}
+                                Update
+                            {% else %}
+                                Connect
+                            {% endif %}
+                            Chargify
                         </button>
                     </div>
-                    <p class="mt-2 text-sm text-gray-500">
-                        Add this URL to your Chargify webhook endpoints.
-                    </p>
-                </div>
+                </form>
             </div>
-        </div>
 
-        <!-- Setup Instructions -->
-        <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                📋 Setup Instructions
-            </h3>
+            <!-- Webhook URL Configuration -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">📡 Webhook Configuration</h3>
 
-            <div class="space-y-4">
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
-                            1
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Webhook URL</label>
+                        <div class="flex">
+                            <input type="text"
+                                   value="{{ webhook_url }}"
+                                   readonly
+                                   class="flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-l-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5">
+                            <button onclick="copyToClipboard('{{ webhook_url }}')"
+                                    class="inline-flex items-center px-3 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 focus:ring-2 focus:ring-primary-500">
+                                📋 Copy
+                            </button>
                         </div>
-                    </div>
-                    <div class="ml-3">
-                        <h4 class="text-sm font-medium text-gray-900">Log in to your Chargify/Maxio account</h4>
-                        <p class="text-sm text-gray-500">Go to your Chargify dashboard (or Maxio Advanced Billing) and navigate to Settings → Webhooks</p>
-                    </div>
-                </div>
-
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
-                            2
-                        </div>
-                    </div>
-                    <div class="ml-3">
-                        <h4 class="text-sm font-medium text-gray-900">Add the webhook URL</h4>
-                        <p class="text-sm text-gray-500">Copy the webhook URL above and add it as a new webhook endpoint in Chargify or Maxio Advanced Billing</p>
-                    </div>
-                </div>
-
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
-                            3
-                        </div>
-                    </div>
-                    <div class="ml-3">
-                        <h4 class="text-sm font-medium text-gray-900">Copy the webhook secret</h4>
-                        <p class="text-sm text-gray-500">Find your webhook secret in Chargify/Maxio and paste it in the form above</p>
-                    </div>
-                </div>
-
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
-                            4
-                        </div>
-                    </div>
-                    <div class="ml-3">
-                        <h4 class="text-sm font-medium text-gray-900">Test the connection</h4>
-                        <p class="text-sm text-gray-500">Send a test webhook from Chargify/Maxio to verify the integration is working</p>
+                        <p class="mt-2 text-sm text-gray-500">Add this URL to your Chargify webhook endpoints.</p>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Benefits -->
-        <div class="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-            <h3 class="text-lg font-semibold text-blue-900 mb-4">
-                🎯 What you'll get with Chargify/Maxio integration:
-            </h3>
-            <ul class="space-y-2 text-blue-800">
-                <li class="flex items-center">
-                    <svg class="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                    </svg>
-                    Real-time notifications for subscription events
-                </li>
-                <li class="flex items-center">
-                    <svg class="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                    </svg>
-                    Automatic payment failure alerts
-                </li>
-                <li class="flex items-center">
-                    <svg class="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                    </svg>
-                    Customer lifecycle notifications
-                </li>
-                <li class="flex items-center">
-                    <svg class="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                    </svg>
-                    Intelligent notifications to your preferred channels
-                </li>
-            </ul>
+            <!-- Setup Instructions -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">📋 Setup Instructions</h3>
+
+                <div class="space-y-4">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
+                                1
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Log in to your Chargify/Maxio account</h4>
+                            <p class="text-sm text-gray-500">
+                                Go to your Chargify dashboard (or Maxio Advanced Billing) and navigate to Settings → Webhooks
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
+                                2
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Add the webhook URL</h4>
+                            <p class="text-sm text-gray-500">
+                                Copy the webhook URL above and add it as a new webhook endpoint in Chargify or Maxio Advanced Billing
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
+                                3
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Copy the webhook secret</h4>
+                            <p class="text-sm text-gray-500">Find your webhook secret in Chargify/Maxio and paste it in the form above</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-600 font-medium text-sm">
+                                4
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Test the connection</h4>
+                            <p class="text-sm text-gray-500">Send a test webhook from Chargify/Maxio to verify the integration is working</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Benefits -->
+            <div class="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                <h3 class="text-lg font-semibold text-blue-900 mb-4">🎯 What you'll get with Chargify/Maxio integration:</h3>
+                <ul class="space-y-2 text-blue-800">
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-blue-500 mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Real-time notifications for subscription events
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-blue-500 mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Automatic payment failure alerts
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-blue-500 mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Customer lifecycle notifications
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-blue-500 mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Intelligent notifications to your preferred channels
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- JavaScript for copy to clipboard -->
-<script>
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(function() {
-        // You could add a toast notification here
-        alert('Webhook URL copied to clipboard!');
-    }, function(err) {
-        console.error('Could not copy text: ', err);
-    });
-}
-</script>
-{% endblock %}
+    <!-- JavaScript for copy to clipboard -->
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                // You could add a toast notification here
+                alert('Webhook URL copied to clipboard!');
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+            });
+        }
+    </script>
+{% endblock content %}

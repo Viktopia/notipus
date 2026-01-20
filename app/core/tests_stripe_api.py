@@ -60,7 +60,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Customer.create")
     def test_create_stripe_customer_stripe_error(self, mock_create) -> None:
         """Test customer creation with Stripe error"""
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         # Mock Stripe error
         mock_create.side_effect = StripeError("Test Stripe error")
@@ -74,7 +74,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Customer.create")
     def test_create_stripe_customer_api_error(self, mock_create) -> None:
         """Test customer creation with API error"""
-        from stripe.error import APIError
+        from stripe import APIError
 
         # Mock API error
         mock_create.side_effect = APIError("API connection failed")
@@ -88,7 +88,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Customer.create")
     def test_create_stripe_customer_card_error(self, mock_create) -> None:
         """Test customer creation with card error"""
-        from stripe.error import CardError
+        from stripe import CardError
 
         # Mock card error
         mock_create.side_effect = CardError("Card declined", None, "card_declined")
@@ -102,7 +102,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Customer.create")
     def test_create_stripe_customer_rate_limit_error(self, mock_create) -> None:
         """Test customer creation with rate limit error"""
-        from stripe.error import RateLimitError
+        from stripe import RateLimitError
 
         # Mock rate limit error
         mock_create.side_effect = RateLimitError("Rate limit exceeded")
@@ -116,7 +116,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Customer.create")
     def test_create_stripe_customer_authentication_error(self, mock_create) -> None:
         """Test customer creation with authentication error"""
-        from stripe.error import AuthenticationError
+        from stripe import AuthenticationError
 
         # Mock authentication error
         mock_create.side_effect = AuthenticationError("Invalid API key")
@@ -130,7 +130,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Customer.create")
     def test_create_stripe_customer_permission_error(self, mock_create) -> None:
         """Test customer creation with permission error"""
-        from stripe.error import PermissionError
+        from stripe import PermissionError
 
         # Mock permission error
         mock_create.side_effect = PermissionError("Insufficient permissions")
@@ -228,7 +228,7 @@ class StripeAPITest(TestCase):
         self, mock_logger, mock_create
     ) -> None:
         """Test that Stripe errors are properly logged"""
-        from stripe.error import CardError
+        from stripe import CardError
 
         # Mock card error
         error_msg = "Your card was declined"
@@ -308,7 +308,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Account.retrieve")
     def test_get_account_info_invalid_api_key(self, mock_retrieve) -> None:
         """Test account info retrieval with invalid API key"""
-        from stripe.error import AuthenticationError
+        from stripe import AuthenticationError
 
         mock_retrieve.side_effect = AuthenticationError("Invalid API key")
 
@@ -320,7 +320,7 @@ class StripeAPITest(TestCase):
     @patch("core.services.stripe.stripe.Account.retrieve")
     def test_get_account_info_stripe_error(self, mock_retrieve) -> None:
         """Test account info retrieval with Stripe error"""
-        from stripe.error import StripeError
+        from stripe import StripeError
 
         mock_retrieve.side_effect = StripeError("API Error")
 
