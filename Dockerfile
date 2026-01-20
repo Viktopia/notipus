@@ -44,7 +44,7 @@ RUN mkdir -p static/dist static/webfonts && \
 RUN uv run --no-dev python manage.py collectstatic --noinput
 
 # Port that the application will use
-EXPOSE 8000
+EXPOSE 8080
 
 # Command to start the server
-CMD ["uv", "run", "--no-dev", "gunicorn", "--bind", "0.0.0.0:8000", "django_notipus.wsgi:application"]
+CMD ["uv", "run", "--no-dev", "gunicorn", "--bind", "0.0.0.0:8080", "django_notipus.wsgi:application"]
