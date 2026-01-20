@@ -166,3 +166,13 @@ site
 # created by virtualenv automatically
 venv/**/*
 fly.toml
+
+# Node.js / Bun
+node_modules/
+
+# Frontend build output (built inside container)
+app/static/dist/
+app/static/webfonts/
+
+# Django collectstatic output (built inside container)
+app/staticfiles/

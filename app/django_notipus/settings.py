@@ -71,11 +71,19 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.slack",
     "allauth.socialaccount.providers.shopify",
-    "django_extensions",
     # Local apps
     "webhooks",
     "core",
 ]
+
+# Add django-extensions in development (dev dependency only)
+if DEBUG:
+    try:
+        import django_extensions  # noqa: F401
+
+        INSTALLED_APPS.append("django_extensions")
+    except ImportError:
+        pass
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
