@@ -243,3 +243,167 @@ class BillingService:
 
         except Exception as e:
             logger.error(f"Error handling payment failure: {e!s}")
+
+    @staticmethod
+    def handle_checkout_completed(session: dict[str, Any]) -> None:
+        """Handle checkout.session.completed event.
+
+        This is triggered when a customer completes checkout and the
+        subscription is created. Links the subscription to the organization.
+
+        Args:
+            session: Checkout session data from Stripe webhook.
+        """
+        try:
+            customer_id = session.get("customer")
+            if not customer_id:
+                logger.error("Missing customer ID in checkout session")
+                return
+
+            # Extract metadata with organization and plan info
+            metadata = session.get("metadata", {})
+            organization_id = metadata.get("organization_id")
+            plan_name = metadata.get("plan_name")
+
+            subscription_id = session.get("subscription")
+
+            # Update organization with new subscription status
+            update_data: dict[str, Any] = {
+                "subscription_status": "active",
+                "payment_method_added": True,
+            }
+
+            if plan_name:
+                update_data["subscription_plan"] = plan_name
+
+            # Find organization by customer ID or organization ID from metadata
+            if organization_id:
+                updated_count = Organization.objects.filter(id=organization_id).update(
+                    **update_data
+                )
+            else:
+                updated_count = Organization.objects.filter(
+                    stripe_customer_id=customer_id
+                ).update(**update_data)
+
+            if updated_count > 0:
+                logger.info(
+                    f"Checkout completed for customer {customer_id}, "
+                    f"subscription: {subscription_id}, plan: {plan_name}"
+                )
+            else:
+                logger.warning(
+                    f"No organization found for checkout session. "
+                    f"Customer: {customer_id}, Org ID: {organization_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error handling checkout completed: {e!s}")
+
+    @staticmethod
+    def handle_trial_ending(subscription: dict[str, Any]) -> None:
+        """Handle trial ending notification (3 days before trial ends).
+
+        This event is fired when a subscription's trial is about to end.
+        Can be used to send reminder notifications to customers.
+
+        Args:
+            subscription: Subscription data from Stripe webhook.
+        """
+        try:
+            customer_id = BillingService._get_customer_id(subscription, "trial ending")
+            if not customer_id:
+                return
+
+            trial_end = subscription.get("trial_end")
+
+            # Find organization and log the event
+            org = Organization.objects.filter(stripe_customer_id=customer_id).first()
+
+            if org:
+                logger.info(
+                    f"Trial ending soon for organization {org.name} "
+                    f"(customer: {customer_id}), trial_end: {trial_end}"
+                )
+                # TODO: Send notification email to organization admins
+                # TODO: Trigger Slack notification if configured
+            else:
+                logger.warning(f"Trial ending for unknown customer {customer_id}")
+
+        except Exception as e:
+            logger.error(f"Error handling trial ending: {e!s}")
+
+    @staticmethod
+    def handle_invoice_paid(invoice: dict[str, Any]) -> None:
+        """Handle invoice.paid event.
+
+        This confirms that an invoice was paid successfully.
+        Similar to payment_success but for invoice-specific events.
+
+        Args:
+            invoice: Invoice data from Stripe webhook.
+        """
+        try:
+            customer_id = invoice.get("customer")
+            if not customer_id:
+                logger.error("Missing customer ID in paid invoice")
+                return
+
+            # Mark organization as active with payment method confirmed
+            update_data: dict[str, Any] = {
+                "subscription_status": "active",
+                "payment_method_added": True,
+            }
+
+            # Update billing cycle anchor if period_end is present
+            period_end = invoice.get("period_end")
+            if period_end:
+                update_data["billing_cycle_anchor"] = period_end
+
+            updated_count = Organization.objects.filter(
+                stripe_customer_id=customer_id
+            ).update(**update_data)
+
+            if updated_count > 0:
+                logger.info(f"Invoice paid for customer {customer_id}")
+            else:
+                logger.warning(f"No organization found for paid invoice: {customer_id}")
+
+        except Exception as e:
+            logger.error(f"Error handling invoice paid: {e!s}")
+
+    @staticmethod
+    def handle_payment_action_required(invoice: dict[str, Any]) -> None:
+        """Handle invoice.payment_action_required event.
+
+        This is triggered when a payment requires customer action,
+        such as 3D Secure authentication.
+
+        Args:
+            invoice: Invoice data from Stripe webhook.
+        """
+        try:
+            customer_id = invoice.get("customer")
+            if not customer_id:
+                logger.error("Missing customer ID in action required invoice")
+                return
+
+            hosted_invoice_url = invoice.get("hosted_invoice_url")
+
+            # Find organization and log the event
+            org = Organization.objects.filter(stripe_customer_id=customer_id).first()
+
+            if org:
+                logger.warning(
+                    f"Payment action required for organization {org.name} "
+                    f"(customer: {customer_id}). Invoice URL: {hosted_invoice_url}"
+                )
+                # TODO: Send notification email to organization admins
+                # with link to complete payment
+            else:
+                logger.warning(
+                    f"Payment action required for unknown customer: {customer_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error handling payment action required: {e!s}")

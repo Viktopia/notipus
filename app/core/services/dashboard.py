@@ -203,17 +203,94 @@ class BillingService:
     """Service class for billing-related operations.
 
     Provides methods for retrieving plan information and
-    billing dashboard data.
+    billing dashboard data, with Stripe as the source of truth.
     """
 
-    def get_available_plans(self, current_plan: str) -> list[dict[str, Any]]:
+    def get_available_plans(
+        self, current_plan: str, use_stripe: bool = True
+    ) -> list[dict[str, Any]]:
         """Get available plans for upgrade, excluding current plan.
+
+        Fetches plans from Stripe if available, falls back to local database.
 
         Args:
             current_plan: Name of the current subscription plan.
+            use_stripe: Whether to fetch from Stripe (default True).
 
         Returns:
             List of available plan dictionaries.
+        """
+        if use_stripe:
+            plans = self._get_plans_from_stripe(current_plan)
+            if plans:
+                return plans
+
+        # Fall back to local database
+        return self._get_plans_from_database(current_plan)
+
+    def _get_plans_from_stripe(self, current_plan: str) -> list[dict[str, Any]]:
+        """Fetch available plans from Stripe.
+
+        Args:
+            current_plan: Name of the current subscription plan to exclude.
+
+        Returns:
+            List of plan dictionaries from Stripe, or empty list on failure.
+        """
+        try:
+            from core.services.stripe import StripeAPI
+
+            stripe_api = StripeAPI()
+            prices = stripe_api.list_prices(active_only=True)
+
+            # Filter to monthly recurring prices and exclude current plan
+            plans = []
+            for price in prices:
+                if not price.get("recurring"):
+                    continue
+                if price["recurring"].get("interval") != "month":
+                    continue
+
+                # Get plan name from metadata or product name
+                metadata = price.get("metadata", {})
+                plan_name = metadata.get("plan_name", "").lower()
+
+                # Skip current plan
+                if plan_name == current_plan:
+                    continue
+
+                # Skip trial plans
+                if plan_name == "trial" or price.get("unit_amount", 0) == 0:
+                    continue
+
+                plans.append(
+                    {
+                        "id": plan_name or price["product_id"],
+                        "name": price.get("product_name", "Unknown Plan"),
+                        "description": price.get("product_description", ""),
+                        "price": (price.get("unit_amount", 0) or 0) / 100,
+                        "currency": price.get("currency", "usd").upper(),
+                        "interval": "month",
+                        "features": price.get("features", []),
+                        "stripe_price_id": price["id"],
+                        "recommended": plan_name == "pro",
+                    }
+                )
+
+            return plans
+
+        except Exception as e:
+            logger.warning(f"Error fetching plans from Stripe: {e!s}")
+            return []
+
+    def _get_plans_from_database(self, current_plan: str) -> list[dict[str, Any]]:
+        """Fetch available plans from local database.
+
+        Args:
+            current_plan: Name of the current subscription plan to exclude.
+
+        Returns:
+            List of plan dictionaries from database.
         """
         try:
             plans = Plan.objects.filter(is_active=True).exclude(name=current_plan)
@@ -227,16 +304,57 @@ class BillingService:
                     "interval": "month",
                     "features": plan.features,
                     "stripe_price_id": plan.stripe_price_id_monthly,
-                    "recommended": plan.name == "pro",  # Mark pro as recommended
+                    "recommended": plan.name == "pro",
                 }
                 for plan in plans
             ]
         except Exception as e:
-            logger.error(f"Error getting available plans: {e!s}")
+            logger.error(f"Error getting plans from database: {e!s}")
             return []
+
+    def get_stripe_subscription_info(
+        self, organization: Organization
+    ) -> dict[str, Any] | None:
+        """Get current subscription info from Stripe.
+
+        Args:
+            organization: Organization model instance.
+
+        Returns:
+            Subscription info dictionary or None if not found.
+        """
+        if not organization.stripe_customer_id:
+            return None
+
+        try:
+            from core.services.stripe import StripeAPI
+
+            stripe_api = StripeAPI()
+            subscriptions = stripe_api.get_customer_subscriptions(
+                organization.stripe_customer_id, status="active"
+            )
+
+            if not subscriptions:
+                return None
+
+            # Return the first active subscription
+            sub = subscriptions[0]
+            return {
+                "id": sub["id"],
+                "status": sub["status"],
+                "current_period_end": sub.get("current_period_end"),
+                "cancel_at_period_end": sub.get("cancel_at_period_end", False),
+                "items": sub.get("items", []),
+            }
+
+        except Exception as e:
+            logger.warning(f"Error fetching subscription from Stripe: {e!s}")
+            return None
 
     def get_billing_dashboard_data(self, organization: Organization) -> dict[str, Any]:
         """Get billing dashboard data for an organization.
+
+        Includes real-time data from Stripe when available.
 
         Args:
             organization: Organization model instance.
@@ -248,12 +366,16 @@ class BillingService:
         usage_data = dashboard_service._get_usage_data(organization)
         trial_info = dashboard_service._get_trial_info(organization)
 
+        # Get Stripe subscription info if available
+        stripe_subscription = self.get_stripe_subscription_info(organization)
+
         return {
             "organization": organization,
             "usage_data": usage_data,
             "trial_info": trial_info,
             "available_plans": self.get_available_plans(organization.subscription_plan),
             "current_plan": organization.subscription_plan,
+            "stripe_subscription": stripe_subscription,
         }
 
 

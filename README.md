@@ -300,8 +300,22 @@ Redis is used for multiple purposes:
 
 **Notipus billing (subscription revenue):**
 
-- `NOTIPUS_STRIPE_SECRET_KEY`: Stripe secret key for processing subscriptions
+- `STRIPE_SECRET_KEY`: Stripe secret key for processing subscriptions
+- `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key for frontend integration
+- `STRIPE_API_VERSION`: Stripe API version (default: `2025-12-18.acacia`)
 - `NOTIPUS_STRIPE_WEBHOOK_SECRET`: Webhook secret for Stripe billing events
+
+**Stripe Checkout and Portal URLs:**
+
+- `STRIPE_SUCCESS_URL`: Redirect URL after successful checkout (default: `http://localhost:8000/billing/checkout/success/`)
+- `STRIPE_CANCEL_URL`: Redirect URL after cancelled checkout (default: `http://localhost:8000/billing/checkout/cancel/`)
+- `STRIPE_PORTAL_RETURN_URL`: Return URL from Customer Portal (default: `http://localhost:8000/billing/`)
+
+**Legacy plan ID mapping (optional, prefer Stripe as source of truth):**
+
+- `STRIPE_BASIC_PLAN`: Stripe price ID for basic plan
+- `STRIPE_PRO_PLAN`: Stripe price ID for pro plan
+- `STRIPE_ENTERPRISE_PLAN`: Stripe price ID for enterprise plan
 
 **Optional overrides:**
 
@@ -346,7 +360,11 @@ Customer webhook integrations (Shopify, Chargify, Stripe) are configured per-ten
 **Stripe**:
 
 - `customer.subscription.created/updated/deleted` - Subscription lifecycle
+- `customer.subscription.trial_will_end` - Trial ending notification (3 days before)
 - `invoice.payment_succeeded/failed` - Invoice payment outcomes
+- `invoice.paid` - Invoice paid confirmation
+- `invoice.payment_action_required` - Payment requires customer action (3DS)
+- `checkout.session.completed` - Checkout completion
 
 ### Security Features
 

@@ -12,6 +12,7 @@ from .auth import (
 from .billing import (
     billing_dashboard,
     billing_history,
+    billing_portal,
     checkout,
     checkout_cancel,
     checkout_success,
@@ -75,6 +76,7 @@ __all__ = [
     "select_plan",
     "plan_selected",
     "billing_dashboard",
+    "billing_portal",
     "upgrade_plan",
     "payment_methods",
     "billing_history",

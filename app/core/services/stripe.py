@@ -1,14 +1,17 @@
 """Stripe API service for customer and account operations.
 
 This module provides a client for Stripe operations using the
-official Stripe SDK.
+official Stripe SDK, including Checkout Sessions and Customer Portal.
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import stripe
 from django.conf import settings
+
+if TYPE_CHECKING:
+    from core.models import Organization
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,8 @@ logger = logging.getLogger(__name__)
 class StripeAPI:
     """API client for Stripe operations using the official Stripe SDK.
 
-    Provides methods for account verification and customer creation.
+    Provides methods for account verification, customer management,
+    Checkout Sessions, Customer Portal, and subscription management.
 
     Attributes:
         api_key: The Stripe API key to use for requests.
@@ -121,4 +125,438 @@ class StripeAPI:
             return None
         except Exception as e:
             logger.error(f"Unexpected error creating Stripe customer: {e!s}")
+            return None
+
+    def get_or_create_customer(
+        self, organization: "Organization"
+    ) -> dict[str, Any] | None:
+        """Get existing Stripe customer or create a new one for the organization.
+
+        If the organization already has a stripe_customer_id, retrieves
+        that customer. Otherwise, creates a new customer and updates
+        the organization with the new customer ID.
+
+        Args:
+            organization: The Organization instance.
+
+        Returns:
+            Customer data dictionary, or None on failure.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            # If organization already has a Stripe customer, retrieve it
+            if organization.stripe_customer_id:
+                try:
+                    customer = stripe.Customer.retrieve(organization.stripe_customer_id)
+                    # Check if customer was deleted
+                    if not getattr(customer, "deleted", False):
+                        return customer.to_dict()
+                    logger.warning(
+                        f"Stripe customer {organization.stripe_customer_id} was deleted"
+                    )
+                except stripe.error.InvalidRequestError:
+                    logger.warning(
+                        f"Stripe customer {organization.stripe_customer_id} not found"
+                    )
+
+            # Create new customer
+            customer_data = {
+                "name": organization.name,
+                "metadata": {
+                    "organization_id": str(organization.id),
+                    "organization_uuid": str(organization.uuid),
+                },
+            }
+
+            # Add email if organization has users
+            if hasattr(organization, "users") and organization.users.exists():
+                first_user = organization.users.first()
+                if first_user and first_user.email:
+                    customer_data["email"] = first_user.email
+
+            customer = stripe.Customer.create(**customer_data)
+
+            # Update organization with new customer ID
+            organization.stripe_customer_id = customer.id
+            organization.save(update_fields=["stripe_customer_id"])
+
+            logger.info(
+                f"Created Stripe customer {customer.id} "
+                f"for organization {organization.id}"
+            )
+            return customer.to_dict()
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error in get_or_create_customer: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error in get_or_create_customer: {e!s}")
+            return None
+
+    def create_checkout_session(
+        self,
+        customer_id: str,
+        price_id: str,
+        success_url: str | None = None,
+        cancel_url: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Create a Stripe Checkout Session for subscription.
+
+        Args:
+            customer_id: Stripe customer ID.
+            price_id: Stripe price ID for the subscription.
+            success_url: URL to redirect on successful checkout.
+            cancel_url: URL to redirect on cancelled checkout.
+            metadata: Additional metadata to attach to the session.
+
+        Returns:
+            Checkout session data with 'url' for redirect, or None on failure.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            session_params: dict[str, Any] = {
+                "customer": customer_id,
+                "payment_method_types": ["card"],
+                "line_items": [
+                    {
+                        "price": price_id,
+                        "quantity": 1,
+                    }
+                ],
+                "mode": "subscription",
+                "success_url": success_url or settings.STRIPE_SUCCESS_URL,
+                "cancel_url": cancel_url or settings.STRIPE_CANCEL_URL,
+                "allow_promotion_codes": True,
+                "billing_address_collection": "auto",
+            }
+
+            if metadata:
+                session_params["metadata"] = metadata
+                session_params["subscription_data"] = {"metadata": metadata}
+
+            session = stripe.checkout.Session.create(**session_params)
+
+            logger.info(
+                f"Created checkout session {session.id} for customer {customer_id}"
+            )
+            return {
+                "id": session.id,
+                "url": session.url,
+                "customer": session.customer,
+                "status": session.status,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error creating checkout session: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating checkout session: {e!s}")
+            return None
+
+    def create_portal_session(
+        self,
+        customer_id: str,
+        return_url: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Create a Stripe Customer Portal session.
+
+        Allows customers to manage their subscription, payment methods,
+        and view invoices through Stripe's hosted portal.
+
+        Args:
+            customer_id: Stripe customer ID.
+            return_url: URL to redirect when customer exits portal.
+
+        Returns:
+            Portal session data with 'url' for redirect, or None on failure.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            session = stripe.billing_portal.Session.create(
+                customer=customer_id,
+                return_url=return_url or settings.STRIPE_PORTAL_RETURN_URL,
+            )
+
+            logger.info(f"Created portal session for customer {customer_id}")
+            return {
+                "id": session.id,
+                "url": session.url,
+                "customer": session.customer,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error creating portal session: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating portal session: {e!s}")
+            return None
+
+    def _extract_features_from_metadata(
+        self, metadata: dict[str, Any] | None
+    ) -> list[str]:
+        """Extract features list from product metadata.
+
+        Args:
+            metadata: Product metadata dictionary.
+
+        Returns:
+            List of feature strings.
+        """
+        if not metadata or not metadata.get("features"):
+            return []
+
+        import json
+
+        features_raw = metadata.get("features", "")
+        try:
+            return json.loads(features_raw)
+        except (json.JSONDecodeError, TypeError):
+            # Features might be comma-separated string
+            return [f.strip() for f in str(features_raw).split(",") if f.strip()]
+
+    def _build_price_data(self, price: Any, product: Any) -> dict[str, Any]:
+        """Build price data dictionary from Stripe price and product.
+
+        Args:
+            price: Stripe Price object.
+            product: Stripe Product object.
+
+        Returns:
+            Formatted price data dictionary.
+        """
+        price_data: dict[str, Any] = {
+            "id": price.id,
+            "product_id": product.id,
+            "product_name": product.name,
+            "product_description": product.description,
+            "unit_amount": price.unit_amount,
+            "currency": price.currency,
+            "recurring": None,
+            "metadata": dict(product.metadata) if product.metadata else {},
+            "features": self._extract_features_from_metadata(product.metadata),
+        }
+
+        if price.recurring:
+            price_data["recurring"] = {
+                "interval": price.recurring.interval,
+                "interval_count": price.recurring.interval_count,
+            }
+
+        return price_data
+
+    def list_prices(
+        self,
+        active_only: bool = True,
+        product_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List prices from Stripe (source of truth for pricing).
+
+        Args:
+            active_only: Only return active prices.
+            product_ids: Filter by specific product IDs.
+            limit: Maximum number of prices to return.
+
+        Returns:
+            List of price dictionaries with product info.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            params: dict[str, Any] = {
+                "limit": limit,
+                "expand": ["data.product"],
+            }
+
+            if active_only:
+                params["active"] = True
+
+            prices = stripe.Price.list(**params)
+
+            result = []
+            for price in prices.data:
+                product = price.product
+                if isinstance(product, str):
+                    product = stripe.Product.retrieve(product)
+
+                # Apply filters
+                if product_ids and product.id not in product_ids:
+                    continue
+                if active_only and not product.active:
+                    continue
+
+                result.append(self._build_price_data(price, product))
+
+            logger.info(f"Retrieved {len(result)} prices from Stripe")
+            return result
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error listing prices: {e!s}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error listing prices: {e!s}")
+            return []
+
+    def get_customer_subscriptions(
+        self,
+        customer_id: str,
+        status: str = "all",
+    ) -> list[dict[str, Any]]:
+        """Get subscriptions for a customer.
+
+        Args:
+            customer_id: Stripe customer ID.
+            status: Filter by status ('all', 'active', 'canceled', etc.).
+
+        Returns:
+            List of subscription dictionaries.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            params: dict[str, Any] = {
+                "customer": customer_id,
+                "expand": ["data.items.data.price.product"],
+            }
+
+            if status != "all":
+                params["status"] = status
+
+            subscriptions = stripe.Subscription.list(**params)
+
+            result = []
+            for sub in subscriptions.data:
+                sub_data = {
+                    "id": sub.id,
+                    "status": sub.status,
+                    "current_period_start": sub.current_period_start,
+                    "current_period_end": sub.current_period_end,
+                    "cancel_at_period_end": sub.cancel_at_period_end,
+                    "canceled_at": sub.canceled_at,
+                    "items": [],
+                }
+
+                # Extract subscription items
+                for item in sub.items.data:
+                    price = item.price
+                    product = price.product
+                    if isinstance(product, str):
+                        product_name = product
+                    else:
+                        product_name = product.name
+
+                    sub_data["items"].append(
+                        {
+                            "price_id": price.id,
+                            "product_name": product_name,
+                            "unit_amount": price.unit_amount,
+                            "currency": price.currency,
+                            "quantity": item.quantity,
+                        }
+                    )
+
+                result.append(sub_data)
+
+            return result
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error getting subscriptions: {e!s}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error getting subscriptions: {e!s}")
+            return []
+
+    def get_invoices(
+        self,
+        customer_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Get invoices for a customer.
+
+        Args:
+            customer_id: Stripe customer ID.
+            limit: Maximum number of invoices to return.
+
+        Returns:
+            List of invoice dictionaries.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            invoices = stripe.Invoice.list(
+                customer=customer_id,
+                limit=limit,
+            )
+
+            result = []
+            for inv in invoices.data:
+                result.append(
+                    {
+                        "id": inv.id,
+                        "number": inv.number,
+                        "status": inv.status,
+                        "amount_due": inv.amount_due,
+                        "amount_paid": inv.amount_paid,
+                        "currency": inv.currency,
+                        "created": inv.created,
+                        "period_start": inv.period_start,
+                        "period_end": inv.period_end,
+                        "hosted_invoice_url": inv.hosted_invoice_url,
+                        "invoice_pdf": inv.invoice_pdf,
+                    }
+                )
+
+            return result
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error getting invoices: {e!s}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error getting invoices: {e!s}")
+            return []
+
+    def get_price_by_lookup_key(self, lookup_key: str) -> dict[str, Any] | None:
+        """Get a price by its lookup key.
+
+        Lookup keys are more stable than price IDs for referencing prices.
+
+        Args:
+            lookup_key: The lookup key assigned to the price.
+
+        Returns:
+            Price data dictionary, or None if not found.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            prices = stripe.Price.list(
+                lookup_keys=[lookup_key],
+                expand=["data.product"],
+            )
+
+            if not prices.data:
+                logger.warning(f"No price found for lookup key: {lookup_key}")
+                return None
+
+            price = prices.data[0]
+            product = price.product
+
+            return {
+                "id": price.id,
+                "product_id": product.id if hasattr(product, "id") else product,
+                "product_name": product.name if hasattr(product, "name") else None,
+                "unit_amount": price.unit_amount,
+                "currency": price.currency,
+                "lookup_key": price.lookup_key,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error getting price by lookup key: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting price by lookup key: {e!s}")
             return None
