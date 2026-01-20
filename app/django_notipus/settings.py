@@ -170,6 +170,10 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/"
 
+# Social account settings
+SOCIALACCOUNT_AUTO_SIGNUP = True  # Skip signup form if we have enough data
+SOCIALACCOUNT_ADAPTER = "core.adapters.CustomSocialAccountAdapter"
+
 # Social account providers
 SOCIALACCOUNT_PROVIDERS = {
     "slack": {
