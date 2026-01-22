@@ -11,7 +11,7 @@
             <div class="text-center">
                 <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">Choose the perfect plan for your team</h2>
                 <p class="mt-4 text-lg text-gray-600">
-                    Start with our free trial and upgrade anytime. All plans include 14-day free trial.
+                    Start free with 20 events/month, or try any paid plan free for 14 days.
                 </p>
             </div>
 
@@ -43,7 +43,9 @@
                                        value="{{ user.username }}'s Workspace">
                                 <button type="submit"
                                         class="{% if plan.name == 'pro' %}bg-primary-500 hover:bg-primary-600 text-white border-transparent{% else %}bg-white text-primary-500 border-primary-500 hover:bg-primary-50{% endif %} block w-full border rounded-md py-2 text-sm font-semibold text-center">
-                                    {% if plan.name == 'trial' %}
+                                    {% if plan.name == 'free' %}
+                                        Get Started Free
+                                    {% elif plan.name == 'trial' %}
                                         Start Free Trial
                                     {% else %}
                                         Choose {{ plan.display_name }}
@@ -86,9 +88,9 @@
                         </div>
 
                         <div class="bg-white rounded-lg shadow p-6">
-                            <h4 class="text-lg font-medium text-gray-900 mb-2">What happens after my trial ends?</h4>
+                            <h4 class="text-lg font-medium text-gray-900 mb-2">What's the difference between Free and Trial?</h4>
                             <p class="text-gray-600">
-                                Your trial automatically converts to a paid plan. You can cancel anytime during the trial with no charges. We'll send you reminders before your trial ends.
+                                The Free plan gives you 20 events/month forever with no credit card required. Trials let you test paid plan features for 14 days before committing.
                             </p>
                         </div>
 

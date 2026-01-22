@@ -263,12 +263,16 @@ class BillingService:
                 if plan_name == "trial" or price.get("unit_amount", 0) == 0:
                     continue
 
+                price_amount = (price.get("unit_amount", 0) or 0) / 100
+                # Format price as integer if it's a whole number (e.g., 29 not 29.0)
+                is_whole_number = price_amount == int(price_amount)
+                formatted_price = int(price_amount) if is_whole_number else price_amount
                 plans.append(
                     {
                         "id": plan_name or price["product_id"],
                         "name": price.get("product_name", "Unknown Plan"),
                         "description": price.get("product_description", ""),
-                        "price": (price.get("unit_amount", 0) or 0) / 100,
+                        "price": formatted_price,
                         "currency": price.get("currency", "usd").upper(),
                         "interval": "month",
                         "features": price.get("features", []),
@@ -293,21 +297,27 @@ class BillingService:
             List of plan dictionaries from database.
         """
         try:
-            plans = Plan.objects.filter(is_active=True).exclude(name=current_plan)
-            return [
-                {
-                    "id": plan.name,
-                    "name": plan.display_name,
-                    "description": plan.description,
-                    "price": float(plan.price_monthly),
-                    "currency": "USD",
-                    "interval": "month",
-                    "features": plan.features,
-                    "stripe_price_id": plan.stripe_price_id_monthly,
-                    "recommended": plan.name == "pro",
-                }
-                for plan in plans
-            ]
+            # Exclude current plan and free/trial plans (upgrade is for paid plans)
+            plans = Plan.objects.filter(is_active=True).exclude(
+                name__in=[current_plan, "free", "trial"]
+            )
+            result = []
+            for plan in plans:
+                price = float(plan.price_monthly)
+                result.append(
+                    {
+                        "id": plan.name,
+                        "name": plan.display_name,
+                        "description": plan.description,
+                        "price": int(price) if price == int(price) else price,
+                        "currency": "USD",
+                        "interval": "month",
+                        "features": plan.features,
+                        "stripe_price_id": plan.stripe_price_id_monthly,
+                        "recommended": plan.name == "pro",
+                    }
+                )
+            return result
         except Exception as e:
             logger.error(f"Error getting plans from database: {e!s}")
             return []
@@ -455,6 +465,6 @@ class IntegrationService:
         return {
             "organization": organization,
             "event_sources": event_sources,
-            "notification_destinations": notification_destinations,
+            "notification_channels": notification_destinations,
             "current_integrations": current_integrations,
         }

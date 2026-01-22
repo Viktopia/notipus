@@ -149,6 +149,7 @@ class RateLimiter:
     """
 
     PLAN_LIMITS: ClassVar[dict[str, int]] = {
+        "free": 20,
         "trial": 1000,
         "basic": 10000,
         "pro": 100000,
@@ -192,7 +193,7 @@ class RateLimiter:
             Monthly event limit for the organization's plan.
         """
         plan = organization.subscription_plan
-        return self.PLAN_LIMITS.get(plan, 1000)  # Default to trial limit
+        return self.PLAN_LIMITS.get(plan, 20)  # Default to free plan limit
 
     def _safe_cache_get(self, key: str, default: int = 0) -> int:
         """Get value from cache with fallback to in-memory storage.

@@ -41,6 +41,7 @@ class Organization(models.Model):
     """
 
     STRIPE_PLANS: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("free", "Free Plan"),
         ("trial", "14-Day Trial"),
         ("basic", "Basic Plan - $29/month"),
         ("pro", "Pro Plan - $99/month"),

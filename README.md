@@ -252,6 +252,59 @@ Notipus supports multiple authentication methods:
 2. **WebAuthn/Passkeys**: Passwordless authentication for enhanced security
 3. **Django Sessions**: Traditional session-based auth for API access
 
+### Slack App Configuration
+
+To set up the Slack integration, create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) with the following App Manifest:
+
+```json
+{
+    "display_information": {
+        "name": "Notipus",
+        "description": "Smart webhook notifications for payments and subscriptions",
+        "background_color": "#4A154B"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "Notipus",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://your-domain.com/accounts/slack/login/callback/",
+            "https://your-domain.com/api/connect/slack/callback/"
+        ],
+        "scopes": {
+            "bot": [
+                "incoming-webhook",
+                "chat:write",
+                "channels:read"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+```
+
+**Required environment variables for Slack:**
+
+- `SLACK_CLIENT_ID`: OAuth client ID from your Slack app
+- `SLACK_CLIENT_SECRET`: OAuth client secret from your Slack app
+- `SLACK_REDIRECT_URI`: Login callback URL (e.g., `https://your-domain.com/accounts/slack/login/callback/`)
+- `SLACK_CONNECT_REDIRECT_URI`: Workspace connect callback URL (e.g., `https://your-domain.com/api/connect/slack/callback/`)
+
+**Scope explanations:**
+
+| Scope | Purpose |
+|-------|---------|
+| `incoming-webhook` | Send notifications via webhook URL to a selected channel |
+| `chat:write` | Post messages to channels the bot is a member of |
+| `channels:read` | List public channels so users can select notification destinations |
+
 ### Domain Enrichment (Brandfetch)
 
 The Brandfetch integration enriches company domains with brand information:
@@ -302,7 +355,7 @@ Redis is used for multiple purposes:
 
 - `STRIPE_SECRET_KEY`: Stripe secret key for processing subscriptions
 - `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key for frontend integration
-- `STRIPE_API_VERSION`: Stripe API version (default: `2025-12-18.acacia`)
+- `STRIPE_API_VERSION`: Stripe API version (default: `2025-12-15.clover`)
 - `NOTIPUS_STRIPE_WEBHOOK_SECRET`: Webhook secret for Stripe billing events
 
 **Stripe Checkout and Portal URLs:**

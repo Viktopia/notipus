@@ -33,12 +33,14 @@ from .errors import (
 from .integrations import (
     connect_shopify,
     connect_stripe,
+    disconnect_slack,
     integrate_chargify,
     integrate_shopify,
     integrate_slack,
     integrations,
     slack_connect,
     slack_connect_callback,
+    test_slack,
 )
 from .settings import (
     get_notification_settings,
@@ -71,6 +73,8 @@ __all__ = [
     "integrate_chargify",
     "slack_connect",
     "slack_connect_callback",
+    "disconnect_slack",
+    "test_slack",
     "connect_shopify",
     "connect_stripe",
     # Settings

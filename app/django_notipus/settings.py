@@ -433,7 +433,8 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "sk_test_dev_key")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "pk_test_dev_key")
 # Pin Stripe API version for consistent behavior across deployments
 # See https://docs.stripe.com/api/versioning for available versions
-STRIPE_API_VERSION = os.environ.get("STRIPE_API_VERSION", "2025-12-18.acacia")
+# Major releases: acacia (2024), basil (2025 H1), clover (2025 H2)
+STRIPE_API_VERSION = os.environ.get("STRIPE_API_VERSION", "2025-12-15.clover")
 
 # Stripe Checkout and Portal URLs
 STRIPE_SUCCESS_URL = os.environ.get(

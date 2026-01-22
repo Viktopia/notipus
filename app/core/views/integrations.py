@@ -166,6 +166,175 @@ def slack_connect_callback(request: HttpRequest) -> HttpResponse | HttpResponseR
 
 
 @login_required
+def disconnect_slack(request: HttpRequest) -> HttpResponseRedirect:
+    """Disconnect Slack integration.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        Redirect to integrations page.
+    """
+    if request.method != "POST":
+        messages.error(request, "Invalid request method")
+        return redirect("core:integrations")
+
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+    except UserProfile.DoesNotExist:
+        return redirect("core:create_organization")
+
+    # Find and deactivate the Slack integration
+    integration = Integration.objects.filter(
+        organization=organization,
+        integration_type="slack_notifications",
+        is_active=True,
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.save()
+        messages.success(request, "Slack disconnected successfully!")
+    else:
+        messages.warning(request, "No active Slack integration found")
+
+    return redirect("core:integrations")
+
+
+@login_required
+def test_slack(request: HttpRequest) -> HttpResponseRedirect:
+    """Send a test message to the connected Slack workspace.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        Redirect to integrations page with status message.
+    """
+    if request.method != "POST":
+        messages.error(request, "Invalid request method")
+        return redirect("core:integrations")
+
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+        organization = user_profile.organization
+    except UserProfile.DoesNotExist:
+        return redirect("core:create_organization")
+
+    # Find the active Slack integration
+    integration = Integration.objects.filter(
+        organization=organization,
+        integration_type="slack_notifications",
+        is_active=True,
+    ).first()
+
+    if not integration:
+        messages.error(request, "No active Slack integration found")
+        return redirect("core:integrations")
+
+    # Get webhook URL from integration
+    webhook_url = integration.oauth_credentials.get("incoming_webhook", {}).get("url")
+
+    if not webhook_url:
+        # Try to use chat:write with the access token instead
+        access_token = integration.oauth_credentials.get("access_token")
+        channel = integration.integration_settings.get("channel", "#general")
+
+        if access_token:
+            try:
+                response = requests.post(
+                    "https://slack.com/api/chat.postMessage",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    json={
+                        "channel": channel,
+                        "text": "🐙 *Test message from Notipus!*",
+                        "blocks": [
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": (
+                                        "🐙 *Test message from Notipus!*\n\n"
+                                        "Your Slack integration is working perfectly. "
+                                        "You'll receive payment and subscription "
+                                        "notifications here."
+                                    ),
+                                },
+                            },
+                            {
+                                "type": "context",
+                                "elements": [
+                                    {
+                                        "type": "mrkdwn",
+                                        "text": f"Sent by {request.user.username} "
+                                        f"from {organization.name}",
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                    timeout=SLACK_API_TIMEOUT,
+                )
+                data = response.json()
+                if data.get("ok"):
+                    messages.success(
+                        request, f"Test message sent to {channel} successfully!"
+                    )
+                else:
+                    error = data.get("error", "Unknown error")
+                    messages.error(request, f"Failed to send test message: {error}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Slack test message failed: {e!s}")
+                messages.error(
+                    request, "Failed to send test message. Please try again."
+                )
+        else:
+            messages.error(request, "Slack integration is missing credentials")
+    else:
+        # Use incoming webhook
+        try:
+            response = requests.post(
+                webhook_url,
+                json={
+                    "text": "🐙 *Test message from Notipus!*",
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": (
+                                    "🐙 *Test message from Notipus!*\n\n"
+                                    "Your Slack integration is working perfectly. "
+                                    "You'll receive payment and subscription "
+                                    "notifications here."
+                                ),
+                            },
+                        },
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": f"Sent by {request.user.username} "
+                                    f"from {organization.name}",
+                                }
+                            ],
+                        },
+                    ],
+                },
+                timeout=SLACK_API_TIMEOUT,
+            )
+            response.raise_for_status()
+            messages.success(request, "Test message sent successfully!")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Slack webhook test failed: {e!s}")
+            messages.error(request, "Failed to send test message. Please try again.")
+
+    return redirect("core:integrations")
+
+
+@login_required
 def integrate_shopify(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Shopify integration setup page.
 

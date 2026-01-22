@@ -148,7 +148,7 @@
                         <!-- Billing Cycle -->
                         <div class="text-center p-4 bg-gray-50 rounded-lg">
                             <div class="text-2xl font-bold text-gray-900">
-                                {% if organization.subscription_status == "trial" %}
+                                {% if organization.subscription_plan == "free" or organization.subscription_status == "trial" %}
                                     Free
                                 {% elif current_plan == "basic" %}
                                     $29
@@ -161,7 +161,9 @@
                                 {% endif %}
                             </div>
                             <div class="text-sm text-gray-600">
-                                {% if organization.subscription_status == "trial" %}
+                                {% if organization.subscription_plan == "free" %}
+                                    forever
+                                {% elif organization.subscription_status == "trial" %}
                                     Until {{ organization.trial_end_date|date:"M j, Y" }}
                                 {% else %}
                                     per month
@@ -172,14 +174,18 @@
                         <!-- Next Billing -->
                         <div class="text-center p-4 bg-gray-50 rounded-lg">
                             <div class="text-2xl font-bold text-gray-900">
-                                {% if organization.subscription_status == "trial" %}
+                                {% if organization.subscription_plan == "free" %}
+                                    -
+                                {% elif organization.subscription_status == "trial" %}
                                     {{ trial_days_remaining }}
                                 {% else %}
                                     {{ rate_limit_info.reset_time|date:"j" }}
                                 {% endif %}
                             </div>
                             <div class="text-sm text-gray-600">
-                                {% if organization.subscription_status == "trial" %}
+                                {% if organization.subscription_plan == "free" %}
+                                    no billing
+                                {% elif organization.subscription_status == "trial" %}
                                     days remaining
                                 {% else %}
                                     days until renewal
