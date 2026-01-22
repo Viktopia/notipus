@@ -380,3 +380,61 @@
     transform: translateY(0);
   }
 }
+
+/* Modal animations */
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modal-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+}
+
+@keyframes modal-overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Modal animation classes */
+.modal-enter {
+  animation: modal-enter 0.2s ease-out forwards;
+}
+
+.modal-exit {
+  animation: modal-exit 0.15s ease-in forwards;
+}
+
+.modal-overlay-enter {
+  animation: modal-overlay-enter 0.2s ease-out forwards;
+}
+
+.modal-overlay-exit {
+  animation: modal-overlay-exit 0.15s ease-in forwards;
+}

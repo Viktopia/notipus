@@ -184,6 +184,13 @@
             </footer>
         </div>
 
+        <!-- Include Modal Component -->
+        {% include "core/partials/_modal.html.j2" %}
+
+        <!-- NotipusUI Library -->
+        {% load static %}
+        <script src="{% static 'js/ui.js' %}"></script>
+
         <!-- Mobile menu toggle script -->
         <script>
             function toggleMobileMenu() {

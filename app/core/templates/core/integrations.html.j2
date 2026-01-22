@@ -139,18 +139,39 @@
                                     <!-- Action Button -->
                                     <div class="ml-4 flex-shrink-0">
                                         {% if integration.connected %}
-                                            <button type="button"
-                                                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
-                                                <svg class="w-4 h-4 mr-2"
-                                                     fill="none"
-                                                     stroke="currentColor"
-                                                     viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
-                                                    </path>
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                </svg>
-                                                Manage
-                                            </button>
+                                            {% if integration.id == "stripe_customer" %}
+                                                <form method="post"
+                                                      action="{% url 'core:disconnect_stripe' %}"
+                                                      class="inline"
+                                                      id="disconnect-stripe-form">
+                                                    {% csrf_token %}
+                                                    <button type="button"
+                                                            onclick="confirmDisconnectStripe()"
+                                                            class="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-red-700 bg-white hover:bg-red-50 transition-colors">
+                                                        <svg class="w-4 h-4 mr-2"
+                                                             fill="none"
+                                                             stroke="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                                                            </path>
+                                                        </svg>
+                                                        Disconnect
+                                                    </button>
+                                                </form>
+                                            {% else %}
+                                                <button type="button"
+                                                        class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                                                    <svg class="w-4 h-4 mr-2"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                                                        </path>
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                    </svg>
+                                                    Manage
+                                                </button>
+                                            {% endif %}
                                         {% else %}
                                             {% if integration.id == "shopify" %}
                                                 <a href="{% url 'core:integrate_shopify' %}"
@@ -175,10 +196,16 @@
                                                     Connect
                                                 </a>
                                             {% elif integration.id == "stripe_customer" %}
-                                                <button type="button"
-                                                        class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-400 bg-gray-100 cursor-not-allowed">
-                                                    Coming Soon
-                                                </button>
+                                                <a href="{% url 'core:integrate_stripe' %}"
+                                                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm">
+                                                    <svg class="w-4 h-4 mr-2"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                                    </svg>
+                                                    Connect
+                                                </a>
                                             {% else %}
                                                 <button type="button"
                                                         class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-400 bg-gray-100 cursor-not-allowed">
@@ -259,30 +286,46 @@
                                     </div>
 
                                     <!-- Action Buttons -->
-                                    <div class="ml-4 flex-shrink-0 flex items-center space-x-2">
+                                    <div class="ml-4 flex-shrink-0 flex flex-col items-end space-y-2">
                                         {% if integration.connected %}
                                             {% if integration.id == "slack_notifications" %}
-                                                <!-- Send Test Button -->
-                                                <form method="post" action="{% url 'core:test_slack' %}" class="inline">
-                                                    {% csrf_token %}
-                                                    <button type="submit"
+                                                <!-- Top row: Configure and Send Test -->
+                                                <div class="flex items-center space-x-2">
+                                                    <button type="button"
+                                                            onclick="openSlackConfigModal()"
                                                             class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
                                                         <svg class="w-4 h-4 mr-2"
                                                              fill="none"
                                                              stroke="currentColor"
                                                              viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                                                            </path>
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                                         </svg>
-                                                        Send Test
+                                                        Configure
                                                     </button>
-                                                </form>
-                                                <!-- Disconnect Button -->
+                                                    <form method="post" action="{% url 'core:test_slack' %}" class="inline">
+                                                        {% csrf_token %}
+                                                        <button type="submit"
+                                                                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                                                            <svg class="w-4 h-4 mr-2"
+                                                                 fill="none"
+                                                                 stroke="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                                            </svg>
+                                                            Send Test
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                                <!-- Bottom row: Disconnect -->
                                                 <form method="post"
                                                       action="{% url 'core:disconnect_slack' %}"
                                                       class="inline"
-                                                      onsubmit="return confirm('Are you sure you want to disconnect Slack? You will stop receiving notifications.');">
+                                                      id="disconnect-slack-form">
                                                     {% csrf_token %}
-                                                    <button type="submit"
+                                                    <button type="button"
+                                                            onclick="confirmDisconnectSlack()"
                                                             class="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-red-700 bg-white hover:bg-red-50 transition-colors">
                                                         <svg class="w-4 h-4 mr-2"
                                                              fill="none"
@@ -352,9 +395,11 @@
                 </div>
             </div>
 
-            <!-- Webhook Information -->
+            <!-- Webhook Information (Collapsible) -->
             <div class="bg-white shadow-lg rounded-xl border border-gray-100 mb-8">
-                <div class="px-6 py-5 border-b border-gray-200">
+                <button type="button"
+                        onclick="toggleWebhookConfig()"
+                        class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors rounded-xl">
                     <div class="flex items-center">
                         <div class="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center">
                             <svg class="h-6 w-6 text-gray-600"
@@ -364,37 +409,46 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
                             </svg>
                         </div>
-                        <div class="ml-3">
+                        <div class="ml-3 text-left">
                             <h2 class="text-lg font-semibold text-gray-900">Webhook Configuration</h2>
                             <p class="text-sm text-gray-600">Technical details for setting up your webhook endpoints</p>
                         </div>
                     </div>
-                </div>
-                <div class="px-6 py-6">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Organization Webhook Token</label>
-                            <div class="flex rounded-lg shadow-sm">
-                                <div class="relative flex items-stretch flex-grow focus-within:z-10">
-                                    <input type="text"
-                                           readonly
-                                           value="{{ organization.uuid }}"
-                                           class="block w-full rounded-none rounded-l-lg border-gray-300 bg-gray-50 text-sm text-gray-600 font-mono">
+                    <svg id="webhook-config-chevron"
+                         class="w-5 h-5 text-gray-400 transform transition-transform duration-200"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="webhook-config-content" class="hidden border-t border-gray-200">
+                    <div class="px-6 py-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Organization Webhook Token</label>
+                                <div class="flex rounded-lg shadow-sm">
+                                    <div class="relative flex items-stretch flex-grow focus-within:z-10">
+                                        <input type="text"
+                                               readonly
+                                               value="{{ organization.uuid }}"
+                                               class="block w-full rounded-none rounded-l-lg border-gray-300 bg-gray-50 text-sm text-gray-600 font-mono">
+                                    </div>
+                                    <button type="button"
+                                            onclick="event.stopPropagation(); copyToClipboard('{{ organization.uuid }}')"
+                                            class="relative -ml-px inline-flex items-center space-x-2 rounded-r-lg border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 transition-colors">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                            </path>
+                                        </svg>
+                                        <span>Copy</span>
+                                    </button>
                                 </div>
-                                <button type="button"
-                                        onclick="copyToClipboard('{{ organization.uuid }}')"
-                                        class="relative -ml-px inline-flex items-center space-x-2 rounded-r-lg border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 transition-colors">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
-                                        </path>
-                                    </svg>
-                                    <span>Copy</span>
-                                </button>
+                                <p class="mt-2 text-sm text-gray-500">
+                                    Use this token in your webhook URLs:
+                                    <code class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">/webhook/customer/{{ organization.uuid }}/&lt;provider&gt;/</code>
+                                </p>
                             </div>
-                            <p class="mt-2 text-sm text-gray-500">
-                                Use this token in your webhook URLs:
-                                <code class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">/webhook/customer/{{ organization.uuid }}/&lt;provider&gt;/</code>
-                            </p>
                         </div>
                     </div>
                 </div>
@@ -437,12 +491,222 @@
         </div>
     </div>
 
+    <!-- Slack Configuration Modal -->
+    <div id="slack-config-modal"
+         class="fixed inset-0 z-50 hidden"
+         aria-hidden="true">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-200"
+             onclick="closeSlackConfigModal()"></div>
+
+        <!-- Modal Container -->
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <!-- Modal Panel -->
+                <div class="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all duration-200 sm:my-8 sm:w-full sm:max-w-lg"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="slack-config-title">
+
+                    <!-- Modal Content -->
+                    <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <!-- Icon Container -->
+                            <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-purple-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </div>
+
+                            <!-- Text Content -->
+                            <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left flex-1">
+                                <h3 class="text-lg font-semibold leading-6 text-gray-900" id="slack-config-title">
+                                    Configure Slack Notifications
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500">
+                                        Select the channel where you want to receive notifications.
+                                    </p>
+                                </div>
+
+                                <!-- Channel Selection -->
+                                <div class="mt-4">
+                                    <label for="slack-channel-select" class="block text-sm font-medium text-gray-700 mb-2">
+                                        Target Channel
+                                    </label>
+                                    <div id="slack-channel-loading" class="flex items-center text-sm text-gray-500">
+                                        <svg class="animate-spin h-4 w-4 mr-2 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Loading channels...
+                                    </div>
+                                    <select id="slack-channel-select"
+                                            class="hidden mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm">
+                                        <!-- Options will be populated by JavaScript -->
+                                    </select>
+                                    <div id="slack-channel-error" class="hidden mt-2 text-sm text-red-600"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Modal Actions -->
+                    <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-3">
+                        <button type="button"
+                                id="slack-config-save"
+                                onclick="saveSlackConfig()"
+                                disabled
+                                class="inline-flex w-full justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-200 sm:w-auto bg-purple-600 hover:bg-purple-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Save Changes
+                        </button>
+                        <button type="button"
+                                onclick="closeSlackConfigModal()"
+                                class="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition-colors duration-200 sm:mt-0 sm:w-auto">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(function() {
-                // Could add a toast notification here
-                alert('Copied to clipboard!');
-            });
+            NotipusUI.copyToClipboard(text);
         }
+
+        function toggleWebhookConfig() {
+            const content = document.getElementById('webhook-config-content');
+            const chevron = document.getElementById('webhook-config-chevron');
+            content.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        }
+
+        async function confirmDisconnectSlack() {
+            const confirmed = await NotipusUI.confirmDisconnect(
+                'Slack',
+                'You will stop receiving notifications. You can reconnect at any time.'
+            );
+            if (confirmed) {
+                document.getElementById('disconnect-slack-form').submit();
+            }
+        }
+
+        async function confirmDisconnectStripe() {
+            const confirmed = await NotipusUI.confirmDisconnect(
+                'Stripe',
+                'You will stop receiving payment notifications. The webhook endpoint will be removed from your Stripe account.'
+            );
+            if (confirmed) {
+                document.getElementById('disconnect-stripe-form').submit();
+            }
+        }
+
+        // Slack Configuration Modal Functions
+        async function openSlackConfigModal() {
+            const modal = document.getElementById('slack-config-modal');
+            const loading = document.getElementById('slack-channel-loading');
+            const select = document.getElementById('slack-channel-select');
+            const errorEl = document.getElementById('slack-channel-error');
+            const saveBtn = document.getElementById('slack-config-save');
+
+            // Reset state
+            loading.classList.remove('hidden');
+            select.classList.add('hidden');
+            errorEl.classList.add('hidden');
+            saveBtn.disabled = true;
+
+            // Show modal
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+
+            // Fetch channels
+            try {
+                const response = await fetch('{% url "core:get_slack_channels" %}');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to fetch channels');
+                }
+
+                // Populate select
+                select.innerHTML = '';
+                data.channels.forEach(channel => {
+                    const option = document.createElement('option');
+                    option.value = `#${channel.name}`;
+                    option.textContent = `#${channel.name}`;
+                    if (`#${channel.name}` === data.current_channel) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+
+                // Show select, hide loading
+                loading.classList.add('hidden');
+                select.classList.remove('hidden');
+                saveBtn.disabled = false;
+
+            } catch (error) {
+                loading.classList.add('hidden');
+                errorEl.textContent = error.message;
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        function closeSlackConfigModal() {
+            const modal = document.getElementById('slack-config-modal');
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        async function saveSlackConfig() {
+            const select = document.getElementById('slack-channel-select');
+            const saveBtn = document.getElementById('slack-config-save');
+            const errorEl = document.getElementById('slack-channel-error');
+            const channel = select.value;
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            errorEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('{% url "core:configure_slack" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}',
+                    },
+                    body: JSON.stringify({ channel: channel }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to save configuration');
+                }
+
+                // Success - close modal and show toast
+                closeSlackConfigModal();
+                NotipusUI.toast(`Notifications will now be sent to ${channel}`, 'success');
+
+            } catch (error) {
+                errorEl.textContent = error.message;
+                errorEl.classList.remove('hidden');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Changes';
+            }
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                const modal = document.getElementById('slack-config-modal');
+                if (!modal.classList.contains('hidden')) {
+                    closeSlackConfigModal();
+                }
+            }
+        });
     </script>
 {% endblock content %}

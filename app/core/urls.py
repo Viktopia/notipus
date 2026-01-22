@@ -32,6 +32,7 @@ urlpatterns = [
     path("integrate/slack/", views.integrate_slack, name="integrate_slack"),
     path("integrate/shopify/", views.integrate_shopify, name="integrate_shopify"),
     path("integrate/chargify/", views.integrate_chargify, name="integrate_chargify"),
+    path("integrate/stripe/", views.integrate_stripe, name="integrate_stripe"),
     # Legacy API endpoints (working views)
     path("api/auth/slack/", views.slack_auth, name="slack_auth"),
     path(
@@ -55,7 +56,27 @@ urlpatterns = [
         views.test_slack,
         name="test_slack",
     ),
-    path("api/connect/stripe/", views.connect_stripe, name="connect_stripe"),
+    path(
+        "api/slack/channels/",
+        views.get_slack_channels,
+        name="get_slack_channels",
+    ),
+    path(
+        "api/slack/configure/",
+        views.configure_slack,
+        name="configure_slack",
+    ),
+    path("api/connect/stripe/", views.stripe_connect, name="stripe_connect"),
+    path(
+        "api/connect/stripe/callback/",
+        views.stripe_connect_callback,
+        name="stripe_connect_callback",
+    ),
+    path(
+        "api/disconnect/stripe/",
+        views.disconnect_stripe,
+        name="disconnect_stripe",
+    ),
     # WebAuthn endpoints
     path(
         "webauthn/register/begin/",

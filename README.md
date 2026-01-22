@@ -9,7 +9,8 @@ A webhook-driven notification service that sends enriched payment and subscripti
 - 🎨 **Engaging Messages**: Uses whimsical language and emojis to make notifications fun and memorable
 - 📊 **Business Metrics**: Includes relevant business metrics like lifetime value and payment history
 - 🔄 **Event Analysis**: Analyzes events to provide actionable recommendations
-- ⚡ **Multiple Payment Providers**: Supports both Shopify and Chargify webhooks
+- ⚡ **Multiple Payment Providers**: Supports Shopify, Chargify, and Stripe webhooks
+- 🔗 **One-Click Integrations**: OAuth-based connections for Slack and Stripe (no manual token copying)
 
 ## Tech Stack
 
@@ -305,6 +306,35 @@ To set up the Slack integration, create a Slack app at [api.slack.com/apps](http
 | `chat:write` | Post messages to channels the bot is a member of |
 | `channels:read` | List public channels so users can select notification destinations |
 
+### Stripe Connect OAuth Configuration
+
+To enable customers to connect their Stripe accounts with one click (automatic webhook setup), configure Stripe Connect:
+
+1. **Enable Stripe Connect** in your [Stripe Dashboard](https://dashboard.stripe.com/settings/connect)
+2. **Enable OAuth** at [Connect OAuth settings](https://dashboard.stripe.com/settings/connect/onboarding-options/oauth)
+3. **Copy your `client_id`** from the OAuth settings (starts with `ca_`)
+4. **Add redirect URI**: `https://your-domain.com/api/connect/stripe/callback/`
+5. Choose **Standard accounts** connection type
+
+**Required environment variables for Stripe Connect:**
+
+- `STRIPE_CONNECT_CLIENT_ID`: Platform client ID from Connect settings (starts with `ca_`)
+- `STRIPE_CONNECT_REDIRECT_URI`: OAuth callback URL (e.g., `https://your-domain.com/api/connect/stripe/callback/`)
+- `BASE_URL`: Base URL of your application (e.g., `https://your-domain.com`)
+
+**How it works:**
+
+1. User clicks "Connect Stripe" on the integrations page
+2. User is redirected to Stripe and authorizes the connection
+3. Notipus automatically creates a webhook endpoint on the user's Stripe account
+4. User is redirected back with everything configured - no manual setup required
+
+**Permissions requested:**
+
+| Scope | Purpose |
+|-------|---------|
+| `read_write` | Create webhook endpoints on connected accounts |
+
 ### Domain Enrichment (Brandfetch)
 
 The Brandfetch integration enriches company domains with brand information:
@@ -370,6 +400,12 @@ Redis is used for multiple purposes:
 - `STRIPE_PRO_PLAN`: Stripe price ID for pro plan
 - `STRIPE_ENTERPRISE_PLAN`: Stripe price ID for enterprise plan
 
+**Stripe Connect OAuth (for customer integrations):**
+
+- `STRIPE_CONNECT_CLIENT_ID`: Platform client ID from Stripe Connect settings (starts with `ca_`)
+- `STRIPE_CONNECT_REDIRECT_URI`: OAuth callback URL (default: `http://localhost:8000/api/connect/stripe/callback/`)
+- `BASE_URL`: Base URL for webhook endpoints (default: `http://localhost:8000`)
+
 **Optional overrides:**
 
 - `DEBUG`: Set to "False" for production (defaults to "True")
@@ -379,11 +415,12 @@ Redis is used for multiple purposes:
 
 ### Per-Tenant Configuration
 
-Customer webhook integrations (Shopify, Chargify, Stripe) are configured per-tenant through the web interface. Each organization manages their own:
+Customer webhook integrations are configured per-tenant through the web interface. Each organization manages their own:
 
-- Webhook secrets
-- API credentials
-- Slack integration settings
+- **Stripe**: One-click OAuth connection (automatic webhook setup)
+- **Slack**: One-click OAuth connection for notifications
+- **Shopify**: Manual webhook URL configuration
+- **Chargify**: Webhook secret configuration
 
 ### Webhook Endpoints
 

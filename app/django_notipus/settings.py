@@ -462,6 +462,15 @@ NOTIPUS_STRIPE_WEBHOOK_SECRET = os.environ.get(
 
 DISABLE_BILLING = os.environ.get("DISABLE_BILLING", "False").lower() == "true"
 
+# Stripe Connect OAuth (for customer integrations - receiving webhooks)
+STRIPE_CONNECT_CLIENT_ID = os.environ.get("STRIPE_CONNECT_CLIENT_ID", "")
+STRIPE_CONNECT_REDIRECT_URI = os.environ.get(
+    "STRIPE_CONNECT_REDIRECT_URI", "http://localhost:8000/api/connect/stripe/callback/"
+)
+
+# Base URL for webhook endpoints (used in OAuth callbacks)
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
+
 # Brandfetch configuration
 BRANDFETCH_API_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
 BRANDFETCH_BASE_URL = os.environ.get(

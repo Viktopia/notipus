@@ -154,22 +154,31 @@
     <script>
         function addPaymentMethod() {
             // In a real implementation, this would open Stripe's payment method setup flow
-            alert('This would open the Stripe payment method setup form.\n\nIn a real implementation, you would:\n1. Create a Stripe Setup Intent\n2. Open Stripe Elements for card collection\n3. Save the payment method to the customer');
+            NotipusUI.toast('This would open the Stripe payment method setup form.', 'info', 5000);
         }
 
-        function setDefaultPaymentMethod(paymentMethodId) {
-            // In a real implementation, this would make an API call to set the default payment method
-            if (confirm('Set this payment method as your default?')) {
-                alert('This would make an API call to set the default payment method.\n\nPayment Method ID: ' + paymentMethodId);
-                // location.reload(); // Reload to show updated state
+        async function setDefaultPaymentMethod(paymentMethodId) {
+            const confirmed = await NotipusUI.confirmAction(
+                'Set as Default?',
+                'This payment method will be used for all future charges.',
+                'Set as Default'
+            );
+            if (confirmed) {
+                // In a real implementation, this would make an API call
+                NotipusUI.toast('Payment method set as default', 'success');
+                // location.reload();
             }
         }
 
-        function deletePaymentMethod(paymentMethodId) {
-            if (confirm('Are you sure you want to delete this payment method? This action cannot be undone.')) {
-                // In a real implementation, this would make an API call to delete the payment method
-                alert('This would make an API call to delete the payment method.\n\nPayment Method ID: ' + paymentMethodId);
-                // location.reload(); // Reload to show updated state
+        async function deletePaymentMethod(paymentMethodId) {
+            const confirmed = await NotipusUI.confirmDelete(
+                'This action cannot be undone. Any active subscriptions using this payment method will need a new payment method.',
+                'Payment Method'
+            );
+            if (confirmed) {
+                // In a real implementation, this would make an API call
+                NotipusUI.toast('Payment method deleted', 'success');
+                // location.reload();
             }
         }
     </script>

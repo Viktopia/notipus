@@ -1,7 +1,7 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
-from core.models import Organization, UserProfile
+from core.models import Integration, Organization, UserProfile
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -20,15 +20,13 @@ class NotificationSettingsViewsTest(TestCase):
         )
 
         self.organization = Organization.objects.create(
-            slack_team_id="T123456",
-            slack_domain="test.slack.com",
             name="Test Organization",
+            shop_domain="test.myshopify.com",
         )
 
         self.user_profile = UserProfile.objects.create(
             user=self.user,
             slack_user_id="U123456",
-            slack_team_id="T123456",
             organization=self.organization,
         )
 
@@ -382,3 +380,267 @@ class NotificationSettingsViewsTest(TestCase):
         self.assertTrue(self.notification_settings.notify_payment_failure)
         self.assertFalse(self.notification_settings.notify_trial_ending)
         self.assertTrue(self.notification_settings.notify_signups)
+
+
+class StripeConnectOAuthViewsTest(TestCase):
+    """Tests for Stripe Connect OAuth integration views."""
+
+    def setUp(self) -> None:
+        """Set up test data."""
+        self.client = Client()
+
+        # Create user and organization
+        self.user = User.objects.create_user(
+            username="testuser", password="testpass123"
+        )
+
+        self.organization = Organization.objects.create(
+            name="Test Organization",
+            shop_domain="test.myshopify.com",
+        )
+
+        self.user_profile = UserProfile.objects.create(
+            user=self.user,
+            slack_user_id="U123456",
+            organization=self.organization,
+        )
+
+    def test_integrate_stripe_redirects_to_stripe_connect(self) -> None:
+        """Test that integrate_stripe redirects to stripe_connect."""
+        self.client.login(username="testuser", password="testpass123")
+
+        response = self.client.get(reverse("core:integrate_stripe"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:stripe_connect"))
+
+    def test_integrate_stripe_requires_authentication(self) -> None:
+        """Test that integrate_stripe requires authentication."""
+        response = self.client.get(reverse("core:integrate_stripe"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response.url)
+
+    @patch("core.views.integrations.stripe.settings")
+    def test_stripe_connect_redirects_to_oauth(self, mock_settings: Mock) -> None:
+        """Test that stripe_connect redirects to Stripe OAuth URL."""
+        mock_settings.STRIPE_CONNECT_CLIENT_ID = "ca_test123"
+        mock_settings.STRIPE_CONNECT_REDIRECT_URI = "http://localhost/callback/"
+
+        response = self.client.get(reverse("core:stripe_connect"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("connect.stripe.com/oauth/authorize", response.url)
+        self.assertIn("ca_test123", response.url)
+        self.assertIn("scope=read_write", response.url)
+
+    @patch("core.views.integrations.stripe.settings")
+    def test_stripe_connect_without_client_id(self, mock_settings: Mock) -> None:
+        """Test stripe_connect when client_id is not configured."""
+        mock_settings.STRIPE_CONNECT_CLIENT_ID = ""
+
+        response = self.client.get(reverse("core:stripe_connect"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+    def test_stripe_connect_callback_without_code(self) -> None:
+        """Test callback without authorization code."""
+        self.client.login(username="testuser", password="testpass123")
+
+        response = self.client.get(reverse("core:stripe_connect_callback"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+    def test_stripe_connect_callback_with_error(self) -> None:
+        """Test callback with OAuth error."""
+        self.client.login(username="testuser", password="testpass123")
+
+        response = self.client.get(
+            reverse("core:stripe_connect_callback"),
+            {"error": "access_denied", "error_description": "User denied access"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+    @patch("core.views.integrations.stripe.stripe.WebhookEndpoint.create")
+    @patch("core.views.integrations.stripe.requests.post")
+    @patch("core.views.integrations.stripe.settings")
+    def test_stripe_connect_callback_success(
+        self,
+        mock_settings: Mock,
+        mock_post: Mock,
+        mock_webhook_create: Mock,
+    ) -> None:
+        """Test successful OAuth callback creates integration."""
+        self.client.login(username="testuser", password="testpass123")
+
+        # Configure settings
+        mock_settings.STRIPE_SECRET_KEY = "sk_test_123"
+        mock_settings.BASE_URL = "http://localhost:8000"
+
+        # Mock token exchange response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "access_token": "sk_test_connected_123",
+            "stripe_user_id": "acct_test123",
+            "refresh_token": "rt_test123",
+        }
+        mock_post.return_value = mock_response
+
+        # Mock webhook endpoint creation
+        mock_webhook = MagicMock()
+        mock_webhook.id = "we_test123"
+        mock_webhook.secret = "whsec_test123"
+        mock_webhook_create.return_value = mock_webhook
+
+        response = self.client.get(
+            reverse("core:stripe_connect_callback"),
+            {"code": "ac_test123"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+        # Verify integration was created
+        integration = Integration.objects.get(
+            organization=self.organization,
+            integration_type="stripe_customer",
+        )
+        self.assertTrue(integration.is_active)
+        self.assertEqual(integration.webhook_secret, "whsec_test123")
+        self.assertEqual(
+            integration.oauth_credentials["access_token"], "sk_test_connected_123"
+        )
+        self.assertEqual(
+            integration.integration_settings["webhook_endpoint_id"], "we_test123"
+        )
+
+    @patch("core.views.integrations.stripe.requests.post")
+    @patch("core.views.integrations.stripe.settings")
+    def test_stripe_connect_callback_token_exchange_error(
+        self,
+        mock_settings: Mock,
+        mock_post: Mock,
+    ) -> None:
+        """Test callback when token exchange fails."""
+        self.client.login(username="testuser", password="testpass123")
+
+        mock_settings.STRIPE_SECRET_KEY = "sk_test_123"
+
+        # Mock error response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "error": "invalid_grant",
+            "error_description": "Authorization code expired",
+        }
+        mock_post.return_value = mock_response
+
+        response = self.client.get(
+            reverse("core:stripe_connect_callback"),
+            {"code": "expired_code"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+        # Verify no integration was created
+        self.assertFalse(
+            Integration.objects.filter(
+                organization=self.organization,
+                integration_type="stripe_customer",
+            ).exists()
+        )
+
+    def test_disconnect_stripe_requires_post(self) -> None:
+        """Test that disconnect_stripe requires POST method."""
+        self.client.login(username="testuser", password="testpass123")
+
+        response = self.client.get(reverse("core:disconnect_stripe"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+    def test_disconnect_stripe_no_integration(self) -> None:
+        """Test disconnect when no integration exists."""
+        self.client.login(username="testuser", password="testpass123")
+
+        response = self.client.post(reverse("core:disconnect_stripe"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+    @patch("core.views.integrations.stripe.stripe.WebhookEndpoint.delete")
+    def test_disconnect_stripe_success(self, mock_webhook_delete: Mock) -> None:
+        """Test successful Stripe disconnection."""
+        self.client.login(username="testuser", password="testpass123")
+
+        # Create active integration
+        integration = Integration.objects.create(
+            organization=self.organization,
+            integration_type="stripe_customer",
+            oauth_credentials={
+                "access_token": "sk_test_123",
+                "stripe_user_id": "acct_test123",
+            },
+            webhook_secret="whsec_test123",
+            integration_settings={
+                "webhook_endpoint_id": "we_test123",
+            },
+            is_active=True,
+        )
+
+        response = self.client.post(reverse("core:disconnect_stripe"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+        # Verify integration was deactivated
+        integration.refresh_from_db()
+        self.assertFalse(integration.is_active)
+
+        # Verify webhook endpoint deletion was attempted
+        mock_webhook_delete.assert_called_once_with(
+            "we_test123",
+            api_key="sk_test_123",
+        )
+
+    @patch("core.views.integrations.stripe.stripe.WebhookEndpoint.delete")
+    def test_disconnect_stripe_webhook_delete_fails(
+        self, mock_webhook_delete: Mock
+    ) -> None:
+        """Test disconnection proceeds even if webhook deletion fails."""
+        import stripe
+
+        self.client.login(username="testuser", password="testpass123")
+
+        # Create active integration
+        integration = Integration.objects.create(
+            organization=self.organization,
+            integration_type="stripe_customer",
+            oauth_credentials={
+                "access_token": "sk_test_123",
+                "stripe_user_id": "acct_test123",
+            },
+            webhook_secret="whsec_test123",
+            integration_settings={
+                "webhook_endpoint_id": "we_test123",
+            },
+            is_active=True,
+        )
+
+        # Mock webhook deletion to fail
+        mock_webhook_delete.side_effect = stripe.error.InvalidRequestError(
+            "Webhook endpoint not found", param=None
+        )
+
+        response = self.client.post(reverse("core:disconnect_stripe"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("core:integrations"))
+
+        # Integration should still be deactivated
+        integration.refresh_from_db()
+        self.assertFalse(integration.is_active)
