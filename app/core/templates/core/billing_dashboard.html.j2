@@ -197,7 +197,7 @@
             </div>
 
             <!-- Quick Actions Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
                 <!-- Upgrade Plan -->
                 {% if available_plans %}
                     <a href="{% url 'core:upgrade_plan' %}"
@@ -219,8 +219,8 @@
                     </a>
                 {% endif %}
 
-                <!-- Payment Methods -->
-                <a href="{% url 'core:payment_methods' %}"
+                <!-- Manage Billing (Stripe Portal) -->
+                <a href="{% url 'core:billing_portal' %}"
                    class="group bg-white p-6 rounded-xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200 hover:border-primary-200">
                     <div class="flex items-center">
                         <div class="h-10 w-10 bg-gradient-to-r from-green-500 to-green-600 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
@@ -233,28 +233,8 @@
                             </svg>
                         </div>
                         <div class="ml-3">
-                            <h3 class="text-sm font-medium text-gray-900 group-hover:text-primary-600">Payment Methods</h3>
-                            <p class="text-xs text-gray-500">Manage cards</p>
-                        </div>
-                    </div>
-                </a>
-
-                <!-- Billing History -->
-                <a href="{% url 'core:billing_history' %}"
-                   class="group bg-white p-6 rounded-xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200 hover:border-primary-200">
-                    <div class="flex items-center">
-                        <div class="h-10 w-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
-                            <svg class="h-5 w-5 text-white"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                                </path>
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <h3 class="text-sm font-medium text-gray-900 group-hover:text-primary-600">Billing History</h3>
-                            <p class="text-xs text-gray-500">View invoices</p>
+                            <h3 class="text-sm font-medium text-gray-900 group-hover:text-primary-600">Manage Billing</h3>
+                            <p class="text-xs text-gray-500">Payment methods & invoices</p>
                         </div>
                     </div>
                 </a>
@@ -280,11 +260,11 @@
                 </a>
             </div>
 
-            <!-- Available Upgrades -->
+            <!-- Plan Options -->
             {% if available_plans %}
                 <div class="bg-white shadow-lg rounded-xl border border-gray-100">
                     <div class="px-6 py-6">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Available Upgrades</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Plan Options</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                             {% for plan in available_plans %}
                                 <div class="border border-gray-200 rounded-lg p-6 {% if plan.recommended %}ring-2 ring-primary-500 bg-primary-50{% endif %}">
@@ -298,8 +278,13 @@
 
                                     <h4 class="text-lg font-semibold text-gray-900">{{ plan.name }}</h4>
                                     <div class="mt-2 flex items-baseline">
-                                        <span class="text-3xl font-bold text-gray-900">${{ plan.price }}</span>
-                                        <span class="ml-1 text-sm text-gray-500">/{{ plan.interval }}</span>
+                                        {% if plan.price == 0 %}
+                                            <span class="text-3xl font-bold text-green-600">Free</span>
+                                            <span class="ml-1 text-sm text-gray-500">forever</span>
+                                        {% else %}
+                                            <span class="text-3xl font-bold text-gray-900">${{ plan.price }}</span>
+                                            <span class="ml-1 text-sm text-gray-500">/{{ plan.interval }}</span>
+                                        {% endif %}
                                     </div>
 
                                     <ul class="mt-4 space-y-2">
@@ -317,10 +302,17 @@
                                     </ul>
 
                                     <div class="mt-6">
-                                        <a href="{% url 'core:checkout' plan_name=plan.id %}"
-                                           class="{% if plan.recommended %}bg-primary-600 hover:bg-primary-700 text-white{% else %}bg-white text-primary-600 border border-primary-600 hover:bg-primary-50{% endif %} block w-full text-center px-4 py-3 rounded-lg font-medium transition-all duration-200">
-                                            Upgrade to {{ plan.name }}
-                                        </a>
+                                        {% if plan.id == "free" %}
+                                            <a href="{% url 'core:select_plan' %}?plan=free"
+                                               class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 block w-full text-center px-4 py-3 rounded-lg font-medium transition-all duration-200">
+                                                Switch to Free
+                                            </a>
+                                        {% else %}
+                                            <a href="{% url 'core:checkout' plan_name=plan.id %}"
+                                               class="{% if plan.recommended %}bg-primary-600 hover:bg-primary-700 text-white{% else %}bg-white text-primary-600 border border-primary-600 hover:bg-primary-50{% endif %} block w-full text-center px-4 py-3 rounded-lg font-medium transition-all duration-200">
+                                                Upgrade to {{ plan.name }}
+                                            </a>
+                                        {% endif %}
                                     </div>
                                 </div>
                             {% endfor %}

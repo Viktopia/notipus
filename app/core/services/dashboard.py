@@ -207,7 +207,7 @@ class BillingService:
     """
 
     def get_available_plans(
-        self, current_plan: str, use_stripe: bool = True
+        self, current_plan: str, use_stripe: bool = True, include_free: bool = False
     ) -> list[dict[str, Any]]:
         """Get available plans for upgrade, excluding current plan.
 
@@ -216,23 +216,27 @@ class BillingService:
         Args:
             current_plan: Name of the current subscription plan.
             use_stripe: Whether to fetch from Stripe (default True).
+            include_free: Whether to include free plan (default False).
 
         Returns:
             List of available plan dictionaries.
         """
         if use_stripe:
-            plans = self._get_plans_from_stripe(current_plan)
+            plans = self._get_plans_from_stripe(current_plan, include_free)
             if plans:
                 return plans
 
         # Fall back to local database
-        return self._get_plans_from_database(current_plan)
+        return self._get_plans_from_database(current_plan, include_free)
 
-    def _get_plans_from_stripe(self, current_plan: str) -> list[dict[str, Any]]:
+    def _get_plans_from_stripe(
+        self, current_plan: str, include_free: bool = False
+    ) -> list[dict[str, Any]]:
         """Fetch available plans from Stripe.
 
         Args:
             current_plan: Name of the current subscription plan to exclude.
+            include_free: Whether to include the free plan.
 
         Returns:
             List of plan dictionaries from Stripe, or empty list on failure.
@@ -259,7 +263,7 @@ class BillingService:
                 if plan_name == current_plan:
                     continue
 
-                # Skip trial plans
+                # Skip trial and free plans (free is added from database if needed)
                 if plan_name == "trial" or price.get("unit_amount", 0) == 0:
                     continue
 
@@ -273,7 +277,7 @@ class BillingService:
                         "name": price.get("product_name", "Unknown Plan"),
                         "description": price.get("product_description", ""),
                         "price": formatted_price,
-                        "currency": price.get("currency", "usd").upper(),
+                        "currency": "USD",
                         "interval": "month",
                         "features": price.get("features", []),
                         "stripe_price_id": price["id"],
@@ -281,26 +285,59 @@ class BillingService:
                     }
                 )
 
+            # Add free plan from database if requested and not current plan
+            if include_free and current_plan != "free":
+                free_plan = self._get_free_plan_from_database()
+                if free_plan:
+                    plans.insert(0, free_plan)  # Put free plan first
+
             return plans
 
         except Exception as e:
             logger.warning(f"Error fetching plans from Stripe: {e!s}")
             return []
 
-    def _get_plans_from_database(self, current_plan: str) -> list[dict[str, Any]]:
+    def _get_free_plan_from_database(self) -> dict[str, Any] | None:
+        """Get the free plan from the database.
+
+        Returns:
+            Free plan dictionary or None if not found.
+        """
+        try:
+            plan = Plan.objects.get(name="free", is_active=True)
+            return {
+                "id": plan.name,
+                "name": plan.display_name,
+                "description": plan.description,
+                "price": 0,
+                "currency": "USD",
+                "interval": "month",
+                "features": plan.features,
+                "stripe_price_id": "",
+                "recommended": False,
+            }
+        except Plan.DoesNotExist:
+            return None
+
+    def _get_plans_from_database(
+        self, current_plan: str, include_free: bool = False
+    ) -> list[dict[str, Any]]:
         """Fetch available plans from local database.
 
         Args:
             current_plan: Name of the current subscription plan to exclude.
+            include_free: Whether to include the free plan.
 
         Returns:
             List of plan dictionaries from database.
         """
         try:
-            # Exclude current plan and free/trial plans (upgrade is for paid plans)
-            plans = Plan.objects.filter(is_active=True).exclude(
-                name__in=[current_plan, "free", "trial"]
-            )
+            # Build exclusion list
+            exclude_plans = [current_plan, "trial"]
+            if not include_free:
+                exclude_plans.append("free")
+
+            plans = Plan.objects.filter(is_active=True).exclude(name__in=exclude_plans)
             result = []
             for plan in plans:
                 price = float(plan.price_monthly)
@@ -379,11 +416,16 @@ class BillingService:
         # Get Stripe subscription info if available
         stripe_subscription = self.get_stripe_subscription_info(organization)
 
+        # For billing dashboard, include Free plan as option (except if already on free)
+        available_plans = self.get_available_plans(
+            organization.subscription_plan, include_free=True
+        )
+
         return {
             "organization": organization,
             "usage_data": usage_data,
             "trial_info": trial_info,
-            "available_plans": self.get_available_plans(organization.subscription_plan),
+            "available_plans": available_plans,
             "current_plan": organization.subscription_plan,
             "stripe_subscription": stripe_subscription,
         }
