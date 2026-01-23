@@ -12,6 +12,19 @@
 @import "@fortawesome/fontawesome-free/css/regular.css";
 @import "@fortawesome/fontawesome-free/css/brands.css";
 
+/* Import Tabler Icons */
+@import "@tabler/icons-webfont/dist/tabler-icons.css";
+
+/* Override Tabler Icons font paths for Django static files */
+@font-face {
+  font-family: "tabler-icons";
+  font-style: normal;
+  font-weight: 400;
+  src: url("/static/tabler-fonts/tabler-icons.woff2") format("woff2"),
+       url("/static/tabler-fonts/tabler-icons.woff") format("woff"),
+       url("/static/tabler-fonts/tabler-icons.ttf") format("truetype");
+}
+
 /* Custom theme configuration for Tailwind v4 */
 @theme {
   /* Primary colors (Notipus orange) */

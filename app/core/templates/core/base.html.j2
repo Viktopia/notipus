@@ -89,37 +89,37 @@
                                 <p class="text-sm font-medium text-gray-900 truncate">{{ user.username }}</p>
                             </div>
                             <a href="{% url 'core:dashboard' %}" class="mobile-menu-item">
-                                <i class="fas fa-home w-5 mr-3 text-gray-400"></i>
+                                <i class="ti ti-home w-5 mr-3 text-gray-400"></i>
                                 Dashboard
                             </a>
                             <a href="{% url 'core:integrations' %}" class="mobile-menu-item">
-                                <i class="fas fa-plug w-5 mr-3 text-gray-400"></i>
+                                <i class="ti ti-plug w-5 mr-3 text-gray-400"></i>
                                 Integrations
                             </a>
                             <a href="{% url 'core:billing_dashboard' %}" class="mobile-menu-item">
-                                <i class="fas fa-credit-card w-5 mr-3 text-gray-400"></i>
+                                <i class="ti ti-credit-card w-5 mr-3 text-gray-400"></i>
                                 Billing
                             </a>
                             <a href="{% url 'core:organization_settings' %}"
                                class="mobile-menu-item">
-                                <i class="fas fa-cog w-5 mr-3 text-gray-400"></i>
+                                <i class="ti ti-settings w-5 mr-3 text-gray-400"></i>
                                 Settings
                             </a>
                             <div class="border-t border-gray-100 mt-2 pt-2">
                                 <a href="{% url 'account_logout' %}"
                                    class="mobile-menu-item text-red-600 hover:text-red-700 hover:bg-red-50">
-                                    <i class="fas fa-sign-out-alt w-5 mr-3"></i>
+                                    <i class="ti ti-logout w-5 mr-3"></i>
                                     Logout
                                 </a>
                             </div>
                         {% else %}
                             <a href="{% url 'account_login' %}" class="mobile-menu-item">
-                                <i class="fas fa-sign-in-alt w-5 mr-3 text-gray-400"></i>
+                                <i class="ti ti-login w-5 mr-3 text-gray-400"></i>
                                 Login
                             </a>
                             <a href="{% url 'account_signup' %}"
                                class="mobile-menu-item text-primary-600 hover:text-primary-700 font-medium">
-                                <i class="fas fa-user-plus w-5 mr-3"></i>
+                                <i class="ti ti-user-plus w-5 mr-3"></i>
                                 Sign Up
                             </a>
                         {% endif %}
@@ -136,11 +136,11 @@
                             <div class="flex">
                                 <div class="flex-shrink-0">
                                     {% if message.tags == 'error' %}
-                                        <i class="fas fa-exclamation-circle text-red-400"></i>
+                                        <i class="ti ti-alert-circle text-red-400 text-lg"></i>
                                     {% elif message.tags == 'success' %}
-                                        <i class="fas fa-check-circle text-green-400"></i>
+                                        <i class="ti ti-circle-check text-green-400 text-lg"></i>
                                     {% else %}
-                                        <i class="fas fa-info-circle text-blue-400"></i>
+                                        <i class="ti ti-info-circle text-blue-400 text-lg"></i>
                                     {% endif %}
                                 </div>
                                 <div class="ml-3">

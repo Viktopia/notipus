@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "build:css": "bunx tailwindcss -i ./src/css/main.css -o ./app/static/dist/main.css --minify",
-    "build:fonts": "cp -r node_modules/@fortawesome/fontawesome-free/webfonts app/static/",
+    "build:fonts": "cp -r node_modules/@fortawesome/fontawesome-free/webfonts app/static/ && mkdir -p app/static/tabler-fonts && cp -r node_modules/@tabler/icons-webfont/dist/fonts/* app/static/tabler-fonts/",
     "build": "bun run build:fonts && bun run build:css",
     "dev": "bunx tailwindcss -i ./src/css/main.css -o ./app/static/dist/main.css --watch"
   },
   "devDependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",
+    "@tabler/icons-webfont": "^3.36.1",
     "@tailwindcss/cli": "^4.1.18",
     "autoprefixer": "^10.4.23",
     "postcss": "^8.5.6",
