@@ -4,7 +4,7 @@ These tests ensure that templates render correctly without errors,
 especially custom error templates (404, 500) and key application pages.
 """
 
-from core.models import Organization, Plan, UserProfile
+from core.models import Plan, UserProfile, Workspace
 from core.views import custom_404, custom_500
 from django.contrib.auth.models import User
 from django.template.loader import get_template, render_to_string
@@ -96,16 +96,16 @@ class TemplateContextTests(TestCase):
             password="testpass123",
         )
 
-        # Create organization and profile
-        self.organization = Organization.objects.create(
-            name="Test Organization",
+        # Create workspace and profile
+        self.workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
 
         self.user_profile = UserProfile.objects.create(
             user=self.user,
             slack_user_id="U123456",
-            organization=self.organization,
+            workspace=self.workspace,
         )
 
     def test_landing_page_unauthenticated_redirects_to_login(self) -> None:
@@ -116,7 +116,7 @@ class TemplateContextTests(TestCase):
 
     def test_landing_page_authenticated_redirects_to_dashboard(self) -> None:
         """Test landing page redirects authenticated users to dashboard."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
         response = self.client.get(reverse("core:landing"))
         # Authenticated users are redirected to dashboard
         assert response.status_code == 302
@@ -129,14 +129,14 @@ class TemplateContextTests(TestCase):
 
     def test_dashboard_renders_authenticated(self) -> None:
         """Test dashboard renders for authenticated users."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
         response = self.client.get(reverse("core:dashboard"))
         assert response.status_code == 200
         assert b"Dashboard" in response.content
 
     def test_integrations_page_renders(self) -> None:
         """Test integrations page renders for authenticated users."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
         response = self.client.get(reverse("core:integrations"))
         assert response.status_code == 200
 
@@ -176,8 +176,8 @@ class BillingTemplateTests(TestCase):
             password="testpass123",
         )
 
-        # Create organization and profile
-        self.organization = Organization.objects.create(
+        # Create workspace and profile
+        self.workspace = Workspace.objects.create(
             name="Billing Test Org",
             shop_domain="billing.myshopify.com",
             subscription_plan="basic",
@@ -187,7 +187,7 @@ class BillingTemplateTests(TestCase):
         self.user_profile = UserProfile.objects.create(
             user=self.user,
             slack_user_id="U789012",
-            organization=self.organization,
+            workspace=self.workspace,
         )
 
         # Get or create a plan (plan may already exist from migrations)
@@ -207,65 +207,65 @@ class BillingTemplateTests(TestCase):
 
     def test_billing_dashboard_renders(self) -> None:
         """Test billing dashboard renders for authenticated users."""
-        self.client.login(username="billinguser", password="testpass123")
+        self.client.force_login(self.user)
         response = self.client.get(reverse("core:billing_dashboard"))
         assert response.status_code == 200
 
     def test_select_plan_renders(self) -> None:
         """Test select plan page renders."""
-        self.client.login(username="billinguser", password="testpass123")
+        self.client.force_login(self.user)
         response = self.client.get(reverse("core:select_plan"))
         assert response.status_code == 200
 
     def test_billing_history_renders(self) -> None:
         """Test billing history page renders."""
-        self.client.login(username="billinguser", password="testpass123")
+        self.client.force_login(self.user)
         response = self.client.get(reverse("core:billing_history"))
         assert response.status_code == 200
 
 
-class OrganizationTemplateTests(TestCase):
-    """Test organization-related templates render correctly."""
+class WorkspaceTemplateTests(TestCase):
+    """Test workspace-related templates render correctly."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
         self.client = Client()
 
-        # Create test user without organization
-        self.user_no_org = User.objects.create_user(
-            username="noorguser",
-            email="noorg@example.com",
+        # Create test user without workspace
+        self.user_no_workspace = User.objects.create_user(
+            username="noworkspaceuser",
+            email="noworkspace@example.com",
             password="testpass123",
         )
 
-        # Create user with organization
-        self.user_with_org = User.objects.create_user(
-            username="orguser",
-            email="org@example.com",
+        # Create user with workspace
+        self.user_with_workspace = User.objects.create_user(
+            username="workspaceuser",
+            email="workspace@example.com",
             password="testpass123",
         )
 
-        self.organization = Organization.objects.create(
+        self.workspace = Workspace.objects.create(
             name="Test Org",
             shop_domain="org.myshopify.com",
         )
 
         self.user_profile = UserProfile.objects.create(
-            user=self.user_with_org,
+            user=self.user_with_workspace,
             slack_user_id="U111222",
-            organization=self.organization,
+            workspace=self.workspace,
         )
 
-    def test_create_organization_renders(self) -> None:
-        """Test create organization page renders."""
-        self.client.login(username="noorguser", password="testpass123")
-        response = self.client.get(reverse("core:create_organization"))
+    def test_create_workspace_renders(self) -> None:
+        """Test create workspace page renders."""
+        self.client.force_login(self.user_no_workspace)
+        response = self.client.get(reverse("core:create_workspace"))
         assert response.status_code == 200
 
-    def test_organization_settings_renders(self) -> None:
-        """Test organization settings page renders."""
-        self.client.login(username="orguser", password="testpass123")
-        response = self.client.get(reverse("core:organization_settings"))
+    def test_workspace_settings_renders(self) -> None:
+        """Test workspace settings page renders."""
+        self.client.force_login(self.user_with_workspace)
+        response = self.client.get(reverse("core:workspace_settings"))
         assert response.status_code == 200
 
 

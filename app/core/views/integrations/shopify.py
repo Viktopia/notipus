@@ -18,11 +18,12 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 
-from ...models import Integration
+from ...models import Integration, Workspace
 from .base import (
     DEFAULT_API_TIMEOUT,
-    require_organization,
+    require_admin_role,
     require_post_method,
+    require_workspace,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,21 +53,21 @@ def integrate_shopify(request: HttpRequest) -> HttpResponse | HttpResponseRedire
         request: The HTTP request object.
 
     Returns:
-        Shopify integration page or redirect to organization creation.
+        Shopify integration page or redirect to workspace creation.
     """
-    organization, redirect_response = require_organization(request)
+    workspace, redirect_response = require_workspace(request)
     if redirect_response:
         return redirect_response
 
     # Check for existing integration
     existing_integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()
 
     context = {
-        "organization": organization,
+        "workspace": workspace,
         "integration": existing_integration,
         "shopify_configured": bool(settings.SHOPIFY_CLIENT_ID),
     }
@@ -90,7 +91,8 @@ def shopify_connect(request: HttpRequest) -> HttpResponseRedirect:
     if error_redirect:
         return error_redirect
 
-    organization, redirect_response = require_organization(request)
+    # Require admin role for integration modifications
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
@@ -195,8 +197,8 @@ def shopify_connect_callback(
     request.session.pop("shopify_oauth_state", None)
     request.session.pop("shopify_shop_domain", None)
 
-    # Get user's organization
-    organization, redirect_response = require_organization(request)
+    # Get user's workspace (require admin role for modifications)
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
@@ -222,7 +224,7 @@ def shopify_connect_callback(
 
     # Create webhook subscriptions
     webhook_result = _create_webhook_subscriptions(
-        request, organization, shop, access_token
+        request, workspace, shop, access_token
     )
     if webhook_result is None:
         # Still save the integration but warn about webhook issues
@@ -235,7 +237,7 @@ def shopify_connect_callback(
 
     # Store or update Shopify integration
     integration, created = Integration.objects.update_or_create(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         defaults={
             "oauth_credentials": {
@@ -251,7 +253,7 @@ def shopify_connect_callback(
     )
 
     action = "connected" if created else "reconnected"
-    logger.info(f"Shopify {action} for organization {organization.name} (shop: {shop})")
+    logger.info(f"Shopify {action} for workspace {workspace.name} (shop: {shop})")
     messages.success(
         request,
         f"Shopify {action} successfully! You will now receive order notifications.",
@@ -273,13 +275,14 @@ def disconnect_shopify(request: HttpRequest) -> HttpResponseRedirect:
     if error_redirect:
         return error_redirect
 
-    organization, redirect_response = require_organization(request)
+    # Require admin role for disconnection
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
     # Find the active Shopify integration
     integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()
@@ -432,7 +435,7 @@ def _exchange_code_for_token(request: HttpRequest, shop: str, code: str) -> dict
 
 def _create_webhook_subscriptions(
     request: HttpRequest,
-    organization: object,
+    workspace: Workspace,
     shop: str,
     access_token: str,
 ) -> list[int] | None:
@@ -440,14 +443,14 @@ def _create_webhook_subscriptions(
 
     Args:
         request: The HTTP request object.
-        organization: The user's organization.
+        workspace: The user's workspace.
         shop: The shop domain.
         access_token: The Shopify access token.
 
     Returns:
         List of created webhook IDs or None if failed.
     """
-    webhook_url = f"{settings.BASE_URL}/webhook/customer/{organization.uuid}/shopify/"
+    webhook_url = f"{settings.BASE_URL}/webhook/customer/{workspace.uuid}/shopify/"
     api_version = settings.SHOPIFY_API_VERSION
     webhook_ids = []
 

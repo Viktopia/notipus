@@ -1,7 +1,7 @@
 import json
 from unittest.mock import Mock, patch
 
-from core.models import Integration, Organization
+from core.models import Integration, Workspace
 from django.test import TestCase
 
 from .providers.stripe import StripeProvider
@@ -9,20 +9,20 @@ from .providers.stripe import StripeProvider
 
 class ChargifyWebhookTest(TestCase):
     def setUp(self):
-        # Create test organization and integration
-        self.organization = Organization.objects.create(
-            name="Test Organization", shop_domain="test.myshopify.com"
+        # Create test workspace and integration
+        self.workspace = Workspace.objects.create(
+            name="Test Workspace", shop_domain="test.myshopify.com"
         )
 
         self.integration = Integration.objects.create(
-            organization=self.organization,
+            workspace=self.workspace,
             integration_type="chargify",
             webhook_secret="test-webhook-secret",
             is_active=True,
         )
 
-        # Use organization-specific webhook URL
-        self.url = f"/webhook/customer/{self.organization.uuid}/chargify/"
+        # Use workspace-specific webhook URL
+        self.url = f"/webhook/customer/{self.workspace.uuid}/chargify/"
 
         self.headers = {
             "HTTP_X_Chargify_Webhook_Id": "12345",

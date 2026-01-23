@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from core.models import Company, Integration, Organization, UserProfile
+from core.models import Company, Integration, UserProfile, Workspace
 from core.services.enrichment import DomainEnrichmentService
 from core.services.stripe import StripeAPI
 from django.test import TestCase
@@ -253,8 +253,8 @@ class BillingServiceTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.organization = Organization.objects.create(
-            name="Test Organization",
+        self.workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
             stripe_customer_id="cus_test123",
         )
@@ -270,10 +270,10 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_subscription_created(subscription_data)
 
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.subscription_plan, "plan_basic")
-        self.assertEqual(self.organization.subscription_status, "active")
-        self.assertEqual(self.organization.billing_cycle_anchor, 1234567890)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.subscription_plan, "plan_basic")
+        self.assertEqual(self.workspace.subscription_status, "active")
+        self.assertEqual(self.workspace.billing_cycle_anchor, 1234567890)
 
         mock_logger.info.assert_called_once_with(
             "Updated subscription for customer cus_test123 to plan plan_basic"
@@ -286,9 +286,9 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_subscription_created(subscription_data)
 
-        self.organization.refresh_from_db()
-        # Should not update organization
-        self.assertEqual(self.organization.subscription_plan, "trial")
+        self.workspace.refresh_from_db()
+        # Should not update workspace
+        self.assertEqual(self.workspace.subscription_plan, "trial")
 
         mock_logger.error.assert_called_once_with(
             "Missing customer ID in subscription data"
@@ -304,9 +304,9 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_subscription_created(subscription_data)
 
-        self.organization.refresh_from_db()
-        # Should not update organization
-        self.assertEqual(self.organization.subscription_plan, "trial")
+        self.workspace.refresh_from_db()
+        # Should not update workspace
+        self.assertEqual(self.workspace.subscription_plan, "trial")
 
         mock_logger.error.assert_called_once_with(
             "Missing plan ID in subscription data for customer cus_test123"
@@ -334,9 +334,9 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_payment_success(invoice_data)
 
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.subscription_status, "active")
-        self.assertEqual(self.organization.billing_cycle_anchor, 1234567890)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.subscription_status, "active")
+        self.assertEqual(self.workspace.billing_cycle_anchor, 1234567890)
 
         mock_logger.info.assert_called_once_with(
             "Updated payment status to active for customer cus_test123"
@@ -374,7 +374,7 @@ class BillingServiceTest(TestCase):
 
         mock_logger.error.assert_called_once_with("Missing customer ID in invoice data")
 
-    @patch("webhooks.services.billing.Organization.objects")
+    @patch("webhooks.services.billing.Workspace.objects")
     @patch("webhooks.services.billing.logger")
     def test_handle_subscription_created_exception(self, mock_logger, mock_objects):
         """Test exception handling in subscription creation"""
@@ -391,7 +391,7 @@ class BillingServiceTest(TestCase):
             "Error handling subscription created: Database error"
         )
 
-    @patch("webhooks.services.billing.Organization.objects")
+    @patch("webhooks.services.billing.Workspace.objects")
     @patch("webhooks.services.billing.logger")
     def test_handle_payment_success_exception(self, mock_logger, mock_objects):
         """Test exception handling in payment success"""
@@ -405,7 +405,7 @@ class BillingServiceTest(TestCase):
             "Error handling payment success: Database error"
         )
 
-    @patch("webhooks.services.billing.Organization.objects")
+    @patch("webhooks.services.billing.Workspace.objects")
     @patch("webhooks.services.billing.logger")
     def test_handle_payment_failed_exception(self, mock_logger, mock_objects):
         """Test exception handling in payment failure"""
@@ -431,10 +431,10 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_subscription_updated(subscription_data)
 
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.subscription_plan, "plan_pro")
-        self.assertEqual(self.organization.subscription_status, "active")
-        self.assertEqual(self.organization.billing_cycle_anchor, 1234567890)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.subscription_plan, "plan_pro")
+        self.assertEqual(self.workspace.subscription_status, "active")
+        self.assertEqual(self.workspace.billing_cycle_anchor, 1234567890)
 
         mock_logger.info.assert_called_once()
         self.assertIn("active", mock_logger.info.call_args[0][0])
@@ -451,9 +451,9 @@ class BillingServiceTest(TestCase):
 
         for stripe_status, expected_internal_status in status_test_cases:
             with self.subTest(stripe_status=stripe_status):
-                # Reset organization
-                self.organization.subscription_status = "active"
-                self.organization.save()
+                # Reset workspace
+                self.workspace.subscription_status = "active"
+                self.workspace.save()
 
                 subscription_data = {
                     "customer": "cus_test123",
@@ -462,9 +462,9 @@ class BillingServiceTest(TestCase):
 
                 BillingService.handle_subscription_updated(subscription_data)
 
-                self.organization.refresh_from_db()
+                self.workspace.refresh_from_db()
                 self.assertEqual(
-                    self.organization.subscription_status, expected_internal_status
+                    self.workspace.subscription_status, expected_internal_status
                 )
 
     @patch("webhooks.services.billing.logger")
@@ -485,8 +485,8 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_subscription_deleted(subscription_data)
 
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.subscription_status, "cancelled")
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.subscription_status, "cancelled")
 
         mock_logger.info.assert_called_once_with(
             "Marked subscription as cancelled for customer cus_test123"
@@ -604,8 +604,8 @@ class DashboardServiceTest(TestCase):
         """Set up test data"""
         from django.contrib.auth.models import User
 
-        self.organization = Organization.objects.create(
-            name="Test Organization",
+        self.workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
             stripe_customer_id="cus_test123",
         )
@@ -616,7 +616,7 @@ class DashboardServiceTest(TestCase):
         )
         self.user_profile = UserProfile.objects.create(
             user=self.user,
-            organization=self.organization,
+            workspace=self.workspace,
         )
 
     @patch("core.services.dashboard.rate_limiter")
@@ -641,7 +641,7 @@ class DashboardServiceTest(TestCase):
         result = service.get_dashboard_data(self.user)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["organization"], self.organization)
+        self.assertEqual(result["workspace"], self.workspace)
         self.assertEqual(result["user_profile"], self.user_profile)
         self.assertIn("integrations", result)
         self.assertIn("recent_activity", result)
@@ -672,18 +672,18 @@ class DashboardServiceTest(TestCase):
 
         # Create some integrations
         Integration.objects.create(
-            organization=self.organization,
+            workspace=self.workspace,
             integration_type="slack_notifications",
             is_active=True,
         )
         Integration.objects.create(
-            organization=self.organization,
+            workspace=self.workspace,
             integration_type="shopify",
             is_active=True,
         )
 
         service = DashboardService()
-        result = service._get_integration_data(self.organization)
+        result = service._get_integration_data(self.workspace)
 
         self.assertTrue(result["has_slack"])
         self.assertTrue(result["has_shopify"])
@@ -695,13 +695,13 @@ class DashboardServiceTest(TestCase):
         from core.services.dashboard import DashboardService
         from django.utils import timezone
 
-        # Set organization as trial
-        self.organization.subscription_status = "trial"
-        self.organization.trial_end_date = timezone.now() + timezone.timedelta(days=10)
-        self.organization.save()
+        # Set workspace as trial
+        self.workspace.subscription_status = "trial"
+        self.workspace.trial_end_date = timezone.now() + timezone.timedelta(days=10)
+        self.workspace.save()
 
         service = DashboardService()
-        result = service._get_trial_info(self.organization)
+        result = service._get_trial_info(self.workspace)
 
         self.assertTrue(result["is_trial"])
         # Days remaining can be 9 or 10 depending on exact timing
@@ -711,11 +711,11 @@ class DashboardServiceTest(TestCase):
         """Test trial info for non-trial subscription"""
         from core.services.dashboard import DashboardService
 
-        self.organization.subscription_status = "active"
-        self.organization.save()
+        self.workspace.subscription_status = "active"
+        self.workspace.save()
 
         service = DashboardService()
-        result = service._get_trial_info(self.organization)
+        result = service._get_trial_info(self.workspace)
 
         self.assertFalse(result["is_trial"])
         self.assertEqual(result["trial_days_remaining"], 0)
@@ -732,7 +732,7 @@ class DashboardServiceTest(TestCase):
         mock_rate_limiter.get_usage_stats.return_value = {"monthly": []}
 
         service = DashboardService()
-        result = service._get_usage_data(self.organization)
+        result = service._get_usage_data(self.workspace)
 
         self.assertTrue(result["is_allowed"])
         self.assertEqual(result["usage_percentage"], 50.0)
@@ -745,7 +745,7 @@ class DashboardServiceTest(TestCase):
         mock_rate_limiter.check_rate_limit.side_effect = Exception("Redis error")
 
         service = DashboardService()
-        result = service._get_usage_data(self.organization)
+        result = service._get_usage_data(self.workspace)
 
         # Should return default values on error
         self.assertTrue(result["is_allowed"])

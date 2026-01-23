@@ -10,14 +10,14 @@ from typing import Any
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, JsonResponse
 
-from ..models import NotificationSettings, UserProfile
+from ..models import NotificationSettings, UserProfile, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 
 
 @login_required
 def get_notification_settings(request: HttpRequest) -> JsonResponse:
-    """Get notification settings for the user's organization.
+    """Get notification settings for the user's workspace.
 
     Args:
         request: The HTTP request object.
@@ -26,10 +26,19 @@ def get_notification_settings(request: HttpRequest) -> JsonResponse:
         JSON response with notification settings or error.
     """
     try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+        # Try WorkspaceMember first
+        member = WorkspaceMember.objects.filter(
+            user=request.user, is_active=True
+        ).first()
+        if member:
+            workspace = member.workspace
+        else:
+            # Fall back to UserProfile
+            user_profile = UserProfile.objects.get(user=request.user)
+            workspace = user_profile.workspace
+
         settings_obj, created = NotificationSettings.objects.get_or_create(
-            organization=organization
+            workspace=workspace
         )
 
         settings_data: dict[str, bool] = {
@@ -58,7 +67,7 @@ def get_notification_settings(request: HttpRequest) -> JsonResponse:
 
 @login_required
 def update_notification_settings(request: HttpRequest) -> JsonResponse:
-    """Update notification settings for the user's organization.
+    """Update notification settings for the user's workspace.
 
     Args:
         request: The HTTP request object.
@@ -70,10 +79,19 @@ def update_notification_settings(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"error": "Invalid request method"}, status=405)
 
     try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+        # Try WorkspaceMember first
+        member = WorkspaceMember.objects.filter(
+            user=request.user, is_active=True
+        ).first()
+        if member:
+            workspace = member.workspace
+        else:
+            # Fall back to UserProfile
+            user_profile = UserProfile.objects.get(user=request.user)
+            workspace = user_profile.workspace
+
         settings_obj, created = NotificationSettings.objects.get_or_create(
-            organization=organization
+            workspace=workspace
         )
 
         data: dict[str, Any] = json.loads(request.body)

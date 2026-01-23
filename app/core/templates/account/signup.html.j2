@@ -19,7 +19,7 @@
                 <div class="card-body py-8 px-4 sm:px-10">
                     <!-- Passkey Signup Option -->
                     <div class="mb-6">
-                        <button id="passkey-signup" class="btn-secondary w-full touch-target">
+                        <button id="passkey-signup" class="btn-primary w-full touch-target">
                             <svg class="w-5 h-5 mr-2"
                                  fill="none"
                                  stroke="currentColor"
@@ -36,80 +36,16 @@
                     <!-- Divider -->
                     <div class="divider-with-text mb-6">
                         <div class="divider-text">
-                            <span>Or create account with email</span>
+                            <span>Or continue with</span>
                         </div>
                     </div>
 
-                    <form class="space-y-6" method="post">
-                        {% csrf_token %}
-
-                        <!-- Username Field -->
-                        <div>
-                            <label for="id_username" class="input-label">Username</label>
-                            <input id="id_username"
-                                   name="username"
-                                   type="text"
-                                   autocomplete="username"
-                                   required
-                                   class="input-field {% if form.username.errors %}input-field-error{% endif %}"
-                                   value="{{ form.username.value|default_if_none:'' }}">
-                            {% if form.username.errors %}<p class="input-error">{{ form.username.errors.0 }}</p>{% endif %}
-                        </div>
-
-                        <!-- Email Field -->
-                        <div>
-                            <label for="id_email" class="input-label">Email address</label>
-                            <input id="id_email"
-                                   name="email"
-                                   type="email"
-                                   autocomplete="email"
-                                   required
-                                   class="input-field {% if form.email.errors %}input-field-error{% endif %}"
-                                   value="{{ form.email.value|default_if_none:'' }}">
-                            {% if form.email.errors %}<p class="input-error">{{ form.email.errors.0 }}</p>{% endif %}
-                        </div>
-
-                        <!-- Password Field -->
-                        <div>
-                            <label for="id_password1" class="input-label">Password</label>
-                            <input id="id_password1"
-                                   name="password1"
-                                   type="password"
-                                   autocomplete="new-password"
-                                   required
-                                   class="input-field {% if form.password1.errors %}input-field-error{% endif %}">
-                            {% if form.password1.errors %}<p class="input-error">{{ form.password1.errors.0 }}</p>{% endif %}
-                        </div>
-
-                        <!-- Password Confirmation Field -->
-                        <div>
-                            <label for="id_password2" class="input-label">Confirm password</label>
-                            <input id="id_password2"
-                                   name="password2"
-                                   type="password"
-                                   autocomplete="new-password"
-                                   required
-                                   class="input-field {% if form.password2.errors %}input-field-error{% endif %}">
-                            {% if form.password2.errors %}<p class="input-error">{{ form.password2.errors.0 }}</p>{% endif %}
-                        </div>
-
-                        <!-- Submit Button -->
-                        <button type="submit" class="btn-primary w-full touch-target">Create Account</button>
-
-                        <!-- Divider -->
-                        <div class="divider-with-text">
-                            <div class="divider-text">
-                                <span>Or continue with</span>
-                            </div>
-                        </div>
-
-                        <!-- OAuth Buttons -->
-                        <a href="{% provider_login_url 'slack' %}"
-                           class="btn-secondary w-full touch-target">
-                            <i class="fab fa-slack mr-2" aria-hidden="true"></i>
-                            Continue with Slack
-                        </a>
-                    </form>
+                    <!-- OAuth Buttons -->
+                    <a href="{% provider_login_url 'slack' %}"
+                       class="btn-secondary w-full touch-target">
+                        <i class="fab fa-slack mr-2" aria-hidden="true"></i>
+                        Continue with Slack
+                    </a>
 
                     <!-- Login Link -->
                     <div class="mt-6 text-center">
@@ -297,7 +233,7 @@
                 } else if (error.message.includes('Email already exists')) {
                     errorMessage = 'Email already exists. Please use a different email or sign in.';
                 } else {
-                    errorMessage += 'Please try again or use email signup.';
+                    errorMessage += 'Please try again or use Slack sign-in.';
                 }
 
                 alert(errorMessage);

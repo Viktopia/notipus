@@ -14,9 +14,14 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from webhooks.services.rate_limiter import rate_limiter
 
-from ..models import Plan, UserProfile
+from ..models import Plan
+from ..permissions import get_workspace_for_user
 
 logger = logging.getLogger(__name__)
+
+
+# Use centralized permission function instead of duplicating logic
+_get_user_workspace = get_workspace_for_user
 
 
 def select_plan(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
@@ -82,31 +87,27 @@ def billing_dashboard(request: HttpRequest) -> HttpResponse | HttpResponseRedire
         request: The HTTP request object.
 
     Returns:
-        Billing dashboard page or redirect to organization creation.
+        Billing dashboard page or redirect to workspace creation.
     """
     from core.services.dashboard import BillingService
 
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    workspace = _get_user_workspace(request.user)
+    if not workspace:
+        return redirect("core:create_workspace")
 
-        billing_service = BillingService()
-        billing_data = billing_service.get_billing_dashboard_data(organization)
+    billing_service = BillingService()
+    billing_data = billing_service.get_billing_dashboard_data(workspace)
 
-        # Flatten data for template compatibility
-        context: dict[str, Any] = {
-            "organization": billing_data["organization"],
-            "user_profile": user_profile,
-            **billing_data["usage_data"],  # rate_limit_info, usage_stats, etc.
-            **billing_data["trial_info"],  # trial_days_remaining, is_trial, etc.
-            "available_plans": billing_data["available_plans"],
-            "current_plan": billing_data["current_plan"],
-        }
+    # Flatten data for template compatibility
+    context: dict[str, Any] = {
+        "workspace": billing_data["workspace"],
+        **billing_data["usage_data"],  # rate_limit_info, usage_stats, etc.
+        **billing_data["trial_info"],  # trial_days_remaining, is_trial, etc.
+        "available_plans": billing_data["available_plans"],
+        "current_plan": billing_data["current_plan"],
+    }
 
-        return render(request, "core/billing_dashboard.html.j2", context)
-
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
+    return render(request, "core/billing_dashboard.html.j2", context)
 
 
 @login_required
@@ -117,28 +118,23 @@ def upgrade_plan(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
         request: The HTTP request object.
 
     Returns:
-        Upgrade plan page or redirect to organization creation.
+        Upgrade plan page or redirect to workspace creation.
     """
     from core.services.dashboard import BillingService
 
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    workspace = _get_user_workspace(request.user)
+    if not workspace:
+        return redirect("core:create_workspace")
 
-        billing_service = BillingService()
-        available_plans = billing_service.get_available_plans(
-            organization.subscription_plan
-        )
+    billing_service = BillingService()
+    available_plans = billing_service.get_available_plans(workspace.subscription_plan)
 
-        context: dict[str, Any] = {
-            "organization": organization,
-            "plans": available_plans,
-            "current_plan": organization.subscription_plan,
-        }
-        return render(request, "core/upgrade_plan.html.j2", context)
-
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
+    context: dict[str, Any] = {
+        "workspace": workspace,
+        "plans": available_plans,
+        "current_plan": workspace.subscription_plan,
+    }
+    return render(request, "core/upgrade_plan.html.j2", context)
 
 
 @login_required
@@ -149,107 +145,95 @@ def payment_methods(request: HttpRequest) -> HttpResponse | HttpResponseRedirect
         request: The HTTP request object.
 
     Returns:
-        Payment methods page or redirect to organization creation.
+        Payment methods page or redirect to workspace creation.
     """
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    workspace = _get_user_workspace(request.user)
+    if not workspace:
+        return redirect("core:create_workspace")
 
-        # In a real implementation, you would fetch payment methods from Stripe
-        # using organization.stripe_customer_id
-        payment_methods_list: list[dict[str, Any]] = []
+    # In a real implementation, you would fetch payment methods from Stripe
+    # using workspace.stripe_customer_id
+    payment_methods_list: list[dict[str, Any]] = []
 
-        context: dict[str, Any] = {
-            "organization": organization,
-            "payment_methods": payment_methods_list,
-            "has_payment_method": organization.payment_method_added,
-        }
-        return render(request, "core/payment_methods.html.j2", context)
-
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
+    context: dict[str, Any] = {
+        "workspace": workspace,
+        "payment_methods": payment_methods_list,
+        "has_payment_method": workspace.payment_method_added,
+    }
+    return render(request, "core/payment_methods.html.j2", context)
 
 
 @login_required
 def billing_history(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Billing history and invoices page.
 
-    Fetches real invoice data from Stripe for the organization.
+    Fetches real invoice data from Stripe for the workspace.
 
     Args:
         request: The HTTP request object.
 
     Returns:
-        Billing history page or redirect to organization creation.
+        Billing history page or redirect to workspace creation.
     """
     from datetime import datetime
 
     from core.services.stripe import StripeAPI
 
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    workspace = _get_user_workspace(request.user)
+    if not workspace:
+        return redirect("core:create_workspace")
 
-        # Fetch real invoices from Stripe
-        invoices: list[dict[str, Any]] = []
-        if organization.stripe_customer_id:
-            stripe_api = StripeAPI()
-            raw_invoices = stripe_api.get_invoices(
-                organization.stripe_customer_id, limit=20
-            )
-            # Format invoices for template
-            for inv in raw_invoices:
-                invoices.append(
-                    {
-                        "id": inv["id"],
-                        "number": inv.get("number", "N/A"),
-                        "status": inv["status"],
-                        "amount": inv["amount_paid"] / 100,  # Convert from cents
-                        "currency": inv["currency"].upper(),
-                        "date": datetime.fromtimestamp(inv["created"]),
-                        "period_start": datetime.fromtimestamp(inv["period_start"])
-                        if inv.get("period_start")
-                        else None,
-                        "period_end": datetime.fromtimestamp(inv["period_end"])
-                        if inv.get("period_end")
-                        else None,
-                        "invoice_url": inv.get("hosted_invoice_url"),
-                        "pdf_url": inv.get("invoice_pdf"),
-                    }
-                )
-
-        # Get current month billing amount from Plan model
-        current_month_amount = 0.00
-        if organization.subscription_status != "trial":
-            try:
-                plan = Plan.objects.get(
-                    name=organization.subscription_plan, is_active=True
-                )
-                current_month_amount = float(plan.price_monthly)
-            except Plan.DoesNotExist:
-                current_month_amount = 0.00
-
-        # Get rate limit info for next payment date
-        is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
-
-        # Calculate trial days remaining
-        trial_days_remaining = 0
-        if organization.subscription_status == "trial" and organization.trial_end_date:
-            trial_days_remaining = max(
-                0, (organization.trial_end_date - timezone.now()).days
+    # Fetch real invoices from Stripe
+    invoices: list[dict[str, Any]] = []
+    if workspace.stripe_customer_id:
+        stripe_api = StripeAPI()
+        raw_invoices = stripe_api.get_invoices(workspace.stripe_customer_id, limit=20)
+        # Format invoices for template
+        for inv in raw_invoices:
+            invoices.append(
+                {
+                    "id": inv["id"],
+                    "number": inv.get("number", "N/A"),
+                    "status": inv["status"],
+                    "amount": inv["amount_paid"] / 100,  # Convert from cents
+                    "currency": inv["currency"].upper(),
+                    "date": datetime.fromtimestamp(inv["created"]),
+                    "period_start": datetime.fromtimestamp(inv["period_start"])
+                    if inv.get("period_start")
+                    else None,
+                    "period_end": datetime.fromtimestamp(inv["period_end"])
+                    if inv.get("period_end")
+                    else None,
+                    "invoice_url": inv.get("hosted_invoice_url"),
+                    "pdf_url": inv.get("invoice_pdf"),
+                }
             )
 
-        context: dict[str, Any] = {
-            "organization": organization,
-            "invoices": invoices,
-            "current_month_amount": current_month_amount,
-            "rate_limit_info": rate_limit_info,
-            "trial_days_remaining": trial_days_remaining,
-        }
-        return render(request, "core/billing_history.html.j2", context)
+    # Get current month billing amount from Plan model
+    current_month_amount = 0.00
+    if workspace.subscription_status != "trial":
+        try:
+            plan = Plan.objects.get(name=workspace.subscription_plan, is_active=True)
+            current_month_amount = float(plan.price_monthly)
+        except Plan.DoesNotExist:
+            current_month_amount = 0.00
 
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
+    # Get rate limit info for next payment date
+    is_allowed, rate_limit_info = rate_limiter.check_rate_limit(workspace)
+
+    # Calculate trial days remaining
+    trial_days_remaining = 0
+    if workspace.subscription_status == "trial" and workspace.trial_end_date:
+        trial_days_remaining = max(0, (workspace.trial_end_date - timezone.now()).days)
+
+    context: dict[str, Any] = {
+        "workspace": workspace,
+        "invoices": invoices,
+        "current_month_amount": current_month_amount,
+        "rate_limit_info": rate_limit_info,
+        "trial_days_remaining": trial_days_remaining,
+    }
+    return render(request, "core/billing_history.html.j2", context)
 
 
 @login_required
@@ -268,10 +252,11 @@ def checkout(
     from core.services.stripe import StripeAPI
     from django.conf import settings as django_settings
 
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    workspace = _get_user_workspace(request.user)
+    if not workspace:
+        return redirect("core:create_workspace")
 
+    try:
         # Validate plan name
         valid_plans = ["basic", "pro", "enterprise"]
         if plan_name not in valid_plans:
@@ -281,8 +266,8 @@ def checkout(
         # Initialize Stripe API
         stripe_api = StripeAPI()
 
-        # Get or create Stripe customer for the organization
-        customer = stripe_api.get_or_create_customer(organization)
+        # Get or create Stripe customer for the workspace
+        customer = stripe_api.get_or_create_customer(workspace)
         if not customer:
             messages.error(
                 request, "Unable to create billing account. Please try again."
@@ -313,7 +298,7 @@ def checkout(
             customer_id=customer["id"],
             price_id=price_id,
             metadata={
-                "organization_id": str(organization.id),
+                "workspace_id": str(workspace.id),
                 "plan_name": plan_name,
             },
         )
@@ -327,8 +312,6 @@ def checkout(
         # Redirect to Stripe Checkout
         return redirect(checkout_session["url"])
 
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
     except Exception as e:
         logger.exception(f"Checkout error: {e!s}")
         messages.error(request, "An error occurred. Please try again.")
@@ -350,12 +333,13 @@ def billing_portal(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """
     from core.services.stripe import StripeAPI
 
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    workspace = _get_user_workspace(request.user)
+    if not workspace:
+        return redirect("core:create_workspace")
 
-        # Check if organization has a Stripe customer
-        if not organization.stripe_customer_id:
+    try:
+        # Check if workspace has a Stripe customer
+        if not workspace.stripe_customer_id:
             messages.warning(
                 request,
                 "No billing account found. Please subscribe to a plan first.",
@@ -365,7 +349,7 @@ def billing_portal(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
         # Initialize Stripe API and create portal session
         stripe_api = StripeAPI()
         portal_session = stripe_api.create_portal_session(
-            customer_id=organization.stripe_customer_id,
+            customer_id=workspace.stripe_customer_id,
         )
 
         if not portal_session or not portal_session.get("url"):
@@ -377,8 +361,6 @@ def billing_portal(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
         # Redirect to Stripe Customer Portal
         return redirect(portal_session["url"])
 
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
     except Exception as e:
         logger.exception(f"Billing portal error: {e!s}")
         messages.error(request, "An error occurred. Please try again.")

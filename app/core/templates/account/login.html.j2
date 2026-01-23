@@ -19,7 +19,7 @@
                 <div class="card-body py-8 px-4 sm:px-10">
                     <!-- Passkey Login Option -->
                     <div class="mb-6">
-                        <button id="passkey-login" class="btn-secondary w-full touch-target">
+                        <button id="passkey-login" class="btn-primary w-full touch-target">
                             <svg class="w-5 h-5 mr-2"
                                  fill="none"
                                  stroke="currentColor"
@@ -35,65 +35,16 @@
                     <!-- Divider -->
                     <div class="divider-with-text mb-6">
                         <div class="divider-text">
-                            <span>Or sign in with password</span>
+                            <span>Or continue with</span>
                         </div>
                     </div>
 
-                    <form class="space-y-6" method="post">
-                        {% csrf_token %}
-
-                        <!-- Username/Email Field -->
-                        <div>
-                            <label for="id_login" class="input-label">Username or Email</label>
-                            <input id="id_login"
-                                   name="login"
-                                   type="text"
-                                   autocomplete="username"
-                                   required
-                                   class="input-field {% if form.login.errors %}input-field-error{% endif %}"
-                                   value="{{ form.login.value|default_if_none:'' }}">
-                            {% if form.login.errors %}<p class="input-error">{{ form.login.errors.0 }}</p>{% endif %}
-                        </div>
-
-                        <!-- Password Field -->
-                        <div>
-                            <label for="id_password" class="input-label">Password</label>
-                            <input id="id_password"
-                                   name="password"
-                                   type="password"
-                                   autocomplete="current-password"
-                                   required
-                                   class="input-field {% if form.password.errors %}input-field-error{% endif %}">
-                            {% if form.password.errors %}<p class="input-error">{{ form.password.errors.0 }}</p>{% endif %}
-                        </div>
-
-                        <!-- Remember Me -->
-                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div class="flex items-center">
-                                <input id="id_remember" name="remember" type="checkbox" class="checkbox">
-                                <label for="id_remember" class="ml-2 block text-sm text-gray-900">Remember me</label>
-                            </div>
-
-                            <a href="{% url 'account_reset_password' %}" class="link text-sm">Forgot your password?</a>
-                        </div>
-
-                        <!-- Submit Button -->
-                        <button type="submit" class="btn-primary w-full touch-target">Sign In</button>
-
-                        <!-- Divider -->
-                        <div class="divider-with-text">
-                            <div class="divider-text">
-                                <span>Or continue with</span>
-                            </div>
-                        </div>
-
-                        <!-- OAuth Buttons -->
-                        <a href="{% provider_login_url 'slack' %}"
-                           class="btn-secondary w-full touch-target">
-                            <i class="fab fa-slack mr-2" aria-hidden="true"></i>
-                            Continue with Slack
-                        </a>
-                    </form>
+                    <!-- OAuth Buttons -->
+                    <a href="{% provider_login_url 'slack' %}"
+                       class="btn-secondary w-full touch-target">
+                        <i class="fab fa-slack mr-2" aria-hidden="true"></i>
+                        Continue with Slack
+                    </a>
 
                     <!-- Signup Link -->
                     <div class="mt-6 text-center">
@@ -211,7 +162,7 @@
                 } else if (error.name === 'SecurityError') {
                     errorMessage += 'Security error occurred.';
                 } else {
-                    errorMessage += 'Please try again or use password login.';
+                    errorMessage += 'Please try again or use Slack sign-in.';
                 }
 
                 alert(errorMessage);

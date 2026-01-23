@@ -11,7 +11,7 @@ import stripe
 from django.conf import settings
 
 if TYPE_CHECKING:
-    from core.models import Organization
+    from core.models import Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -127,17 +127,15 @@ class StripeAPI:
             logger.error(f"Unexpected error creating Stripe customer: {e!s}")
             return None
 
-    def get_or_create_customer(
-        self, organization: "Organization"
-    ) -> dict[str, Any] | None:
-        """Get existing Stripe customer or create a new one for the organization.
+    def get_or_create_customer(self, workspace: "Workspace") -> dict[str, Any] | None:
+        """Get existing Stripe customer or create a new one for the workspace.
 
-        If the organization already has a stripe_customer_id, retrieves
+        If the workspace already has a stripe_customer_id, retrieves
         that customer. Otherwise, creates a new customer and updates
-        the organization with the new customer ID.
+        the workspace with the new customer ID.
 
         Args:
-            organization: The Organization instance.
+            workspace: The Workspace instance.
 
         Returns:
             Customer data dictionary, or None on failure.
@@ -145,45 +143,45 @@ class StripeAPI:
         try:
             stripe.api_key = self.api_key
 
-            # If organization already has a Stripe customer, retrieve it
-            if organization.stripe_customer_id:
+            # If workspace already has a Stripe customer, retrieve it
+            if workspace.stripe_customer_id:
                 try:
-                    customer = stripe.Customer.retrieve(organization.stripe_customer_id)
+                    customer = stripe.Customer.retrieve(workspace.stripe_customer_id)
                     # Check if customer was deleted
                     if not getattr(customer, "deleted", False):
                         return customer.to_dict()
                     logger.warning(
-                        f"Stripe customer {organization.stripe_customer_id} was deleted"
+                        f"Stripe customer {workspace.stripe_customer_id} was deleted"
                     )
                 except stripe.error.InvalidRequestError:
                     logger.warning(
-                        f"Stripe customer {organization.stripe_customer_id} not found"
+                        f"Stripe customer {workspace.stripe_customer_id} not found"
                     )
 
             # Create new customer
             customer_data = {
-                "name": organization.name,
+                "name": workspace.name,
                 "metadata": {
-                    "organization_id": str(organization.id),
-                    "organization_uuid": str(organization.uuid),
+                    "workspace_id": str(workspace.id),
+                    "workspace_uuid": str(workspace.uuid),
                 },
             }
 
-            # Add email if organization has users
-            if hasattr(organization, "users") and organization.users.exists():
-                first_user = organization.users.first()
-                if first_user and first_user.email:
-                    customer_data["email"] = first_user.email
+            # Add email if workspace has members
+            if hasattr(workspace, "members") and workspace.members.exists():
+                first_member = workspace.members.first()
+                if first_member and first_member.user.email:
+                    customer_data["email"] = first_member.user.email
 
             customer = stripe.Customer.create(**customer_data)
 
-            # Update organization with new customer ID
-            organization.stripe_customer_id = customer.id
-            organization.save(update_fields=["stripe_customer_id"])
+            # Update workspace with new customer ID
+            workspace.stripe_customer_id = customer.id
+            workspace.save(update_fields=["stripe_customer_id"])
 
             logger.info(
                 f"Created Stripe customer {customer.id} "
-                f"for organization {organization.id}"
+                f"for workspace {workspace.id}"
             )
             return customer.to_dict()
 

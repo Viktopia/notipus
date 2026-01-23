@@ -1,7 +1,7 @@
 import json
 from unittest.mock import MagicMock, Mock, patch
 
-from core.models import Integration, Organization, UserProfile
+from core.models import Integration, UserProfile, Workspace
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -14,28 +14,28 @@ class NotificationSettingsViewsTest(TestCase):
         """Set up test data"""
         self.client = Client()
 
-        # Create user and organization
+        # Create user and workspace
         self.user = User.objects.create_user(
             username="testuser", password="testpass123"
         )
 
-        self.organization = Organization.objects.create(
-            name="Test Organization",
+        self.workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
 
         self.user_profile = UserProfile.objects.create(
             user=self.user,
             slack_user_id="U123456",
-            organization=self.organization,
+            workspace=self.workspace,
         )
 
         # Notification settings are created automatically via signal
-        self.notification_settings = self.organization.notification_settings
+        self.notification_settings = self.workspace.notification_settings
 
     def test_get_notification_settings_success(self):
         """Test successful retrieval of notification settings"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(reverse("get_notification_settings"))
 
@@ -72,9 +72,11 @@ class NotificationSettingsViewsTest(TestCase):
     def test_get_notification_settings_no_user_profile(self):
         """Test getting settings for user without profile"""
         # Create user without profile
-        User.objects.create_user(username="noprofile", password="testpass123")
+        noprofile_user = User.objects.create_user(
+            username="noprofile", password="testpass123"
+        )
 
-        self.client.login(username="noprofile", password="testpass123")
+        self.client.force_login(noprofile_user)
 
         response = self.client.get(reverse("get_notification_settings"))
 
@@ -87,7 +89,7 @@ class NotificationSettingsViewsTest(TestCase):
         # Delete notification settings
         self.notification_settings.delete()
 
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(reverse("get_notification_settings"))
 
@@ -97,7 +99,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_success(self):
         """Test successful update of notification settings"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "notify_payment_success": False,
@@ -126,7 +128,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_partial_update(self):
         """Test partial update of notification settings"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "notify_payment_success": False,
@@ -149,7 +151,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_empty_data(self):
         """Test update with empty data"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.post(
             reverse("update_notification_settings"),
@@ -163,7 +165,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_invalid_field(self):
         """Test update with invalid field name"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "invalid_field": False,
@@ -181,7 +183,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_invalid_value_type(self):
         """Test update with invalid value type"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "notify_payment_success": "not_boolean",
@@ -199,7 +201,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_invalid_json(self):
         """Test update with invalid JSON"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.post(
             reverse("update_notification_settings"),
@@ -213,7 +215,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_wrong_method(self):
         """Test update with wrong HTTP method"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(reverse("update_notification_settings"))
 
@@ -239,9 +241,11 @@ class NotificationSettingsViewsTest(TestCase):
     def test_update_notification_settings_no_user_profile(self):
         """Test update for user without profile"""
         # Create user without profile
-        User.objects.create_user(username="noprofile", password="testpass123")
+        noprofile_user = User.objects.create_user(
+            username="noprofile", password="testpass123"
+        )
 
-        self.client.login(username="noprofile", password="testpass123")
+        self.client.force_login(noprofile_user)
 
         update_data = {
             "notify_payment_success": False,
@@ -262,7 +266,7 @@ class NotificationSettingsViewsTest(TestCase):
         # Delete notification settings
         self.notification_settings.delete()
 
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "notify_payment_success": False,
@@ -281,7 +285,7 @@ class NotificationSettingsViewsTest(TestCase):
     @patch("core.views.logger")
     def test_get_notification_settings_internal_error(self, mock_logger):
         """Test handling of internal errors in get view"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         # Mock to raise an exception
         with patch.object(
@@ -298,7 +302,7 @@ class NotificationSettingsViewsTest(TestCase):
     @patch("core.views.logger")
     def test_update_notification_settings_internal_error(self, mock_logger):
         """Test handling of internal errors in update view"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "notify_payment_success": False,
@@ -322,7 +326,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_all_fields(self):
         """Test updating all notification settings fields"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         # Update all fields to False
         update_data = {
@@ -357,7 +361,7 @@ class NotificationSettingsViewsTest(TestCase):
 
     def test_update_notification_settings_mixed_values(self):
         """Test updating with mixed boolean values"""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         update_data = {
             "notify_payment_success": False,
@@ -389,25 +393,25 @@ class StripeConnectOAuthViewsTest(TestCase):
         """Set up test data."""
         self.client = Client()
 
-        # Create user and organization
+        # Create user and workspace
         self.user = User.objects.create_user(
             username="testuser", password="testpass123"
         )
 
-        self.organization = Organization.objects.create(
-            name="Test Organization",
+        self.workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
 
         self.user_profile = UserProfile.objects.create(
             user=self.user,
             slack_user_id="U123456",
-            organization=self.organization,
+            workspace=self.workspace,
         )
 
     def test_integrate_stripe_redirects_to_stripe_connect(self) -> None:
         """Test that integrate_stripe redirects to stripe_connect."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(reverse("core:integrate_stripe"))
 
@@ -446,7 +450,7 @@ class StripeConnectOAuthViewsTest(TestCase):
 
     def test_stripe_connect_callback_without_code(self) -> None:
         """Test callback without authorization code."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(reverse("core:stripe_connect_callback"))
 
@@ -455,7 +459,7 @@ class StripeConnectOAuthViewsTest(TestCase):
 
     def test_stripe_connect_callback_with_error(self) -> None:
         """Test callback with OAuth error."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(
             reverse("core:stripe_connect_callback"),
@@ -475,7 +479,7 @@ class StripeConnectOAuthViewsTest(TestCase):
         mock_webhook_create: Mock,
     ) -> None:
         """Test successful OAuth callback creates integration."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         # Configure settings
         mock_settings.STRIPE_SECRET_KEY = "sk_test_123"
@@ -506,7 +510,7 @@ class StripeConnectOAuthViewsTest(TestCase):
 
         # Verify integration was created
         integration = Integration.objects.get(
-            organization=self.organization,
+            workspace=self.workspace,
             integration_type="stripe_customer",
         )
         self.assertTrue(integration.is_active)
@@ -526,7 +530,7 @@ class StripeConnectOAuthViewsTest(TestCase):
         mock_post: Mock,
     ) -> None:
         """Test callback when token exchange fails."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         mock_settings.STRIPE_SECRET_KEY = "sk_test_123"
 
@@ -549,14 +553,14 @@ class StripeConnectOAuthViewsTest(TestCase):
         # Verify no integration was created
         self.assertFalse(
             Integration.objects.filter(
-                organization=self.organization,
+                workspace=self.workspace,
                 integration_type="stripe_customer",
             ).exists()
         )
 
     def test_disconnect_stripe_requires_post(self) -> None:
         """Test that disconnect_stripe requires POST method."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.get(reverse("core:disconnect_stripe"))
 
@@ -565,7 +569,7 @@ class StripeConnectOAuthViewsTest(TestCase):
 
     def test_disconnect_stripe_no_integration(self) -> None:
         """Test disconnect when no integration exists."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         response = self.client.post(reverse("core:disconnect_stripe"))
 
@@ -575,11 +579,11 @@ class StripeConnectOAuthViewsTest(TestCase):
     @patch("core.views.integrations.stripe.stripe.WebhookEndpoint.delete")
     def test_disconnect_stripe_success(self, mock_webhook_delete: Mock) -> None:
         """Test successful Stripe disconnection."""
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         # Create active integration
         integration = Integration.objects.create(
-            organization=self.organization,
+            workspace=self.workspace,
             integration_type="stripe_customer",
             oauth_credentials={
                 "access_token": "sk_test_123",
@@ -614,11 +618,11 @@ class StripeConnectOAuthViewsTest(TestCase):
         """Test disconnection proceeds even if webhook deletion fails."""
         import stripe
 
-        self.client.login(username="testuser", password="testpass123")
+        self.client.force_login(self.user)
 
         # Create active integration
         integration = Integration.objects.create(
-            organization=self.organization,
+            workspace=self.workspace,
             integration_type="stripe_customer",
             oauth_credentials={
                 "access_token": "sk_test_123",

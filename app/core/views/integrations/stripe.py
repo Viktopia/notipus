@@ -13,10 +13,10 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
 
-from ...models import Integration
+from ...models import Integration, Workspace
 from .base import (
     DEFAULT_API_TIMEOUT,
-    require_organization,
+    require_admin_role,
     require_post_method,
 )
 
@@ -109,8 +109,8 @@ def stripe_connect_callback(
         messages.error(request, "Authorization failed: No code provided")
         return redirect("core:integrations")
 
-    # Get user's organization
-    organization, redirect_response = require_organization(request)
+    # Get user's workspace (require admin role for modifications)
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
@@ -130,7 +130,7 @@ def stripe_connect_callback(
         return redirect("core:integrations")
 
     # Create webhook endpoint on the connected account
-    webhook_result = _create_webhook_endpoint(request, organization, access_token)
+    webhook_result = _create_webhook_endpoint(request, workspace, access_token)
     if webhook_result is None:
         return redirect("core:integrations")
 
@@ -138,7 +138,7 @@ def stripe_connect_callback(
 
     # Store or update Stripe integration
     integration, created = Integration.objects.update_or_create(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         defaults={
             "oauth_credentials": {
@@ -157,7 +157,7 @@ def stripe_connect_callback(
 
     action = "connected" if created else "reconnected"
     logger.info(
-        f"Stripe {action} for organization {organization.name} "
+        f"Stripe {action} for workspace {workspace.name} "
         f"(account: {stripe_user_id})"
     )
     messages.success(
@@ -207,19 +207,19 @@ def _exchange_code_for_token(request: HttpRequest, code: str) -> dict | None:
 
 
 def _create_webhook_endpoint(
-    request: HttpRequest, organization: object, access_token: str
+    request: HttpRequest, workspace: Workspace, access_token: str
 ) -> tuple[str, str, str] | None:
     """Create webhook endpoint on the connected Stripe account.
 
     Args:
         request: The HTTP request object.
-        organization: The user's organization.
+        workspace: The user's workspace.
         access_token: The Stripe access token.
 
     Returns:
         Tuple of (webhook_url, webhook_secret, webhook_endpoint_id) or None if failed.
     """
-    webhook_url = f"{settings.BASE_URL}/webhook/customer/{organization.uuid}/stripe/"
+    webhook_url = f"{settings.BASE_URL}/webhook/customer/{workspace.uuid}/stripe/"
 
     try:
         # Use the connected account's access token
@@ -249,13 +249,14 @@ def disconnect_stripe(request: HttpRequest) -> HttpResponseRedirect:
     if error_redirect:
         return error_redirect
 
-    organization, redirect_response = require_organization(request)
+    # Require admin role for disconnection
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
     # Find the active Stripe integration
     integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()

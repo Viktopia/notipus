@@ -22,9 +22,9 @@ from .billing import (
     upgrade_plan,
 )
 from .dashboard import (
-    create_organization,
+    create_workspace,
     dashboard,
-    organization_settings,
+    workspace_settings,
 )
 from .errors import (
     custom_404,
@@ -49,6 +49,15 @@ from .integrations import (
     stripe_connect_callback,
     test_slack,
 )
+from .members import (
+    accept_invitation,
+    cancel_invitation,
+    change_role,
+    confirm_accept_invitation,
+    invite_member,
+    members_list,
+    remove_member,
+)
 from .settings import (
     get_notification_settings,
     update_notification_settings,
@@ -71,8 +80,8 @@ __all__ = [
     "slack_auth_callback",
     # Dashboard
     "dashboard",
-    "create_organization",
-    "organization_settings",
+    "create_workspace",
+    "workspace_settings",
     # Integrations
     "integrations",
     "integrate_slack",
@@ -113,6 +122,14 @@ __all__ = [
     "webauthn_credentials",
     "webauthn_signup_begin",
     "webauthn_signup_complete",
+    # Members
+    "members_list",
+    "invite_member",
+    "remove_member",
+    "change_role",
+    "cancel_invitation",
+    "accept_invitation",
+    "confirm_accept_invitation",
     # Error handlers
     "custom_404",
     "custom_500",

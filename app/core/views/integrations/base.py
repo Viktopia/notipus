@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.http import HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
 
-from ...models import Organization, UserProfile
+from ...models import UserProfile, Workspace, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 
@@ -63,44 +63,87 @@ class IntegrationProtocol(Protocol):
         ...
 
 
-def get_user_organization(request: HttpRequest) -> Organization | None:
-    """Get the organization for the authenticated user.
+def get_user_workspace(request: HttpRequest) -> Workspace | None:
+    """Get the workspace for the authenticated user.
 
     Args:
         request: The HTTP request object.
 
     Returns:
-        The user's organization or None if not found.
+        The user's workspace or None if not found.
     """
     if not request.user.is_authenticated:
         return None
 
+    # Try WorkspaceMember first
+    member = WorkspaceMember.objects.filter(user=request.user, is_active=True).first()
+    if member:
+        return member.workspace
+
+    # Fall back to UserProfile for backward compatibility
     try:
         user_profile = UserProfile.objects.get(user=request.user)
-        return user_profile.organization
+        return user_profile.workspace
     except UserProfile.DoesNotExist:
         return None
 
 
-def require_organization(
+def require_workspace(
     request: HttpRequest,
-) -> tuple[Organization | None, HttpResponseRedirect | None]:
-    """Require the user to have an organization.
+) -> tuple[Workspace | None, HttpResponseRedirect | None]:
+    """Require the user to have a workspace.
 
     Args:
         request: The HTTP request object.
 
     Returns:
-        Tuple of (organization, redirect_response).
-        If organization exists, redirect is None.
-        If organization doesn't exist, organization is None and redirect is set.
+        Tuple of (workspace, redirect_response).
+        If workspace exists, redirect is None.
+        If workspace doesn't exist, workspace is None and redirect is set.
     """
-    organization = get_user_organization(request)
-    if organization is None:
+    workspace = get_user_workspace(request)
+    if workspace is None:
         if not request.user.is_authenticated:
             return None, redirect("account_login")
-        return None, redirect("core:create_organization")
-    return organization, None
+        return None, redirect("core:create_workspace")
+    return workspace, None
+
+
+def require_admin_role(
+    request: HttpRequest,
+) -> tuple[Workspace | None, HttpResponseRedirect | None]:
+    """Require the user to be an admin or owner of a workspace.
+
+    Use this for views that modify integrations, settings, or billing.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        Tuple of (workspace, redirect_response).
+        If user is admin/owner, redirect is None.
+        If not, workspace is None and redirect is set with error message.
+    """
+    if not request.user.is_authenticated:
+        return None, redirect("account_login")
+
+    # Get workspace membership
+    member = WorkspaceMember.objects.filter(user=request.user, is_active=True).first()
+    if member is None:
+        # Fall back to UserProfile for backward compatibility
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            # UserProfile users are treated as owners for backward compatibility
+            return user_profile.workspace, None
+        except UserProfile.DoesNotExist:
+            return None, redirect("core:create_workspace")
+
+    # Check role
+    if member.role not in ("owner", "admin"):
+        messages.error(request, "You don't have permission to perform this action.")
+        return None, redirect("core:dashboard")
+
+    return member.workspace, None
 
 
 def handle_disconnect_error(

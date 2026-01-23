@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import requests
-from core.models import Integration, Organization, UserProfile
+from core.models import Integration, UserProfile, Workspace
 from core.views.integrations.shopify import (
     _is_valid_shop_domain,
     _normalize_shop_domain,
@@ -97,22 +97,22 @@ class TestIntegrateShopifyView:
     """Test the integrate_shopify view."""
 
     @pytest.fixture
-    def setup_user(self, client: Client) -> tuple[User, Organization, UserProfile]:
-        """Set up test user, organization, and profile."""
+    def setup_user(self, client: Client) -> tuple[User, Workspace, UserProfile]:
+        """Set up test user, workspace, and profile."""
         user = User.objects.create_user(
             username="testuser",
             password="testpass123",
             email="test@example.com",
         )
-        organization = Organization.objects.create(
-            name="Test Organization",
+        workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
         user_profile = UserProfile.objects.create(
             user=user,
-            organization=organization,
+            workspace=workspace,
         )
-        return user, organization, user_profile
+        return user, workspace, user_profile
 
     def test_integrate_shopify_requires_login(self, client: Client) -> None:
         """Test that integrate_shopify requires authentication."""
@@ -125,8 +125,8 @@ class TestIntegrateShopifyView:
         self, client: Client, setup_user: tuple
     ) -> None:
         """Test integrate_shopify shows connect form when not connected."""
-        user, organization, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _ = setup_user
+        client.force_login(user)
 
         response = client.get(reverse("core:integrate_shopify"))
 
@@ -139,12 +139,12 @@ class TestIntegrateShopifyView:
         self, client: Client, setup_user: tuple
     ) -> None:
         """Test integrate_shopify shows connected state when already connected."""
-        user, organization, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _ = setup_user
+        client.force_login(user)
 
         # Create existing integration
         Integration.objects.create(
-            organization=organization,
+            workspace=workspace,
             integration_type="shopify",
             oauth_credentials={"access_token": "test_token"},
             integration_settings={"shop_domain": "teststore.myshopify.com"},
@@ -163,29 +163,29 @@ class TestShopifyConnectView:
     """Test the shopify_connect view."""
 
     @pytest.fixture
-    def setup_user(self, client: Client) -> tuple[User, Organization, UserProfile]:
-        """Set up test user, organization, and profile."""
+    def setup_user(self, client: Client) -> tuple[User, Workspace, UserProfile]:
+        """Set up test user, workspace, and profile."""
         user = User.objects.create_user(
             username="testuser",
             password="testpass123",
             email="test@example.com",
         )
-        organization = Organization.objects.create(
-            name="Test Organization",
+        workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
         user_profile = UserProfile.objects.create(
             user=user,
-            organization=organization,
+            workspace=workspace,
         )
-        return user, organization, user_profile
+        return user, workspace, user_profile
 
     def test_shopify_connect_requires_post(
         self, client: Client, setup_user: tuple
     ) -> None:
         """Test that shopify_connect requires POST method."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.get(reverse("core:shopify_connect"))
 
@@ -204,7 +204,7 @@ class TestShopifyConnectView:
     ) -> None:
         """Test shopify_connect when Shopify is not configured."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.post(
             reverse("core:shopify_connect"), {"shop_url": "teststore"}
@@ -225,7 +225,7 @@ class TestShopifyConnectView:
     ) -> None:
         """Test shopify_connect with missing shop URL."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.post(reverse("core:shopify_connect"), {"shop_url": ""})
 
@@ -244,7 +244,7 @@ class TestShopifyConnectView:
     ) -> None:
         """Test shopify_connect with invalid shop URL."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.post(
             reverse("core:shopify_connect"), {"shop_url": "invalid@shop!"}
@@ -265,7 +265,7 @@ class TestShopifyConnectView:
     ) -> None:
         """Test shopify_connect redirects to Shopify OAuth."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.post(
             reverse("core:shopify_connect"), {"shop_url": "teststore"}
@@ -287,27 +287,27 @@ class TestShopifyConnectCallbackView:
     """Test the shopify_connect_callback view."""
 
     @pytest.fixture
-    def setup_user(self, client: Client) -> tuple[User, Organization, UserProfile]:
-        """Set up test user, organization, and profile."""
+    def setup_user(self, client: Client) -> tuple[User, Workspace, UserProfile]:
+        """Set up test user, workspace, and profile."""
         user = User.objects.create_user(
             username="testuser",
             password="testpass123",
             email="test@example.com",
         )
-        organization = Organization.objects.create(
-            name="Test Organization",
+        workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
         user_profile = UserProfile.objects.create(
             user=user,
-            organization=organization,
+            workspace=workspace,
         )
-        return user, organization, user_profile
+        return user, workspace, user_profile
 
     def test_callback_with_error(self, client: Client, setup_user: tuple) -> None:
         """Test callback handles OAuth errors."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.get(
             reverse("core:shopify_connect_callback"),
@@ -322,7 +322,7 @@ class TestShopifyConnectCallbackView:
     def test_callback_missing_params(self, client: Client, setup_user: tuple) -> None:
         """Test callback handles missing parameters."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.get(reverse("core:shopify_connect_callback"))
 
@@ -334,7 +334,7 @@ class TestShopifyConnectCallbackView:
     def test_callback_state_mismatch(self, client: Client, setup_user: tuple) -> None:
         """Test callback handles state mismatch."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         # Set up session with different state
         session = client.session
@@ -359,7 +359,7 @@ class TestShopifyConnectCallbackView:
     def test_callback_shop_mismatch(self, client: Client, setup_user: tuple) -> None:
         """Test callback handles shop mismatch."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         # Set up session
         session = client.session
@@ -392,8 +392,8 @@ class TestShopifyConnectCallbackView:
         self, mock_post: Mock, client: Client, setup_user: tuple
     ) -> None:
         """Test successful token exchange in callback."""
-        user, organization, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _ = setup_user
+        client.force_login(user)
 
         # Set up session
         session = client.session
@@ -431,7 +431,7 @@ class TestShopifyConnectCallbackView:
 
         # Verify integration was created
         integration = Integration.objects.filter(
-            organization=organization,
+            workspace=workspace,
             integration_type="shopify",
             is_active=True,
         ).first()
@@ -451,7 +451,7 @@ class TestShopifyConnectCallbackView:
     ) -> None:
         """Test token exchange failure in callback."""
         user, _, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         # Set up session
         session = client.session
@@ -484,23 +484,23 @@ class TestDisconnectShopifyView:
     @pytest.fixture
     def setup_user_with_integration(
         self, client: Client
-    ) -> tuple[User, Organization, UserProfile, Integration]:
+    ) -> tuple[User, Workspace, UserProfile, Integration]:
         """Set up test user with Shopify integration."""
         user = User.objects.create_user(
             username="testuser",
             password="testpass123",
             email="test@example.com",
         )
-        organization = Organization.objects.create(
-            name="Test Organization",
+        workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
         user_profile = UserProfile.objects.create(
             user=user,
-            organization=organization,
+            workspace=workspace,
         )
         integration = Integration.objects.create(
-            organization=organization,
+            workspace=workspace,
             integration_type="shopify",
             oauth_credentials={"access_token": "test_token"},
             integration_settings={
@@ -509,14 +509,14 @@ class TestDisconnectShopifyView:
             },
             is_active=True,
         )
-        return user, organization, user_profile, integration
+        return user, workspace, user_profile, integration
 
     def test_disconnect_requires_post(
         self, client: Client, setup_user_with_integration: tuple
     ) -> None:
         """Test that disconnect requires POST method."""
         user, _, _, _ = setup_user_with_integration
-        client.login(username="testuser", password="testpass123")
+        client.force_login(user)
 
         response = client.get(reverse("core:disconnect_shopify"))
 
@@ -535,9 +535,9 @@ class TestDisconnectShopifyView:
             username="testuser",
             password="testpass123",
         )
-        organization = Organization.objects.create(name="Test Org")
-        UserProfile.objects.create(user=user, organization=organization)
-        client.login(username="testuser", password="testpass123")
+        workspace = Workspace.objects.create(name="Test Org")
+        UserProfile.objects.create(user=user, workspace=workspace)
+        client.force_login(user)
 
         response = client.post(reverse("core:disconnect_shopify"))
 
@@ -551,8 +551,8 @@ class TestDisconnectShopifyView:
         self, mock_delete: Mock, client: Client, setup_user_with_integration: tuple
     ) -> None:
         """Test successful disconnection."""
-        user, organization, _, integration = setup_user_with_integration
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _, integration = setup_user_with_integration
+        client.force_login(user)
 
         # Mock webhook deletion
         mock_delete.return_value = Mock(status_code=200)
@@ -578,8 +578,8 @@ class TestDisconnectShopifyView:
         self, mock_delete: Mock, client: Client, setup_user_with_integration: tuple
     ) -> None:
         """Test disconnection succeeds even if webhook deletion fails."""
-        user, organization, _, integration = setup_user_with_integration
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _, integration = setup_user_with_integration
+        client.force_login(user)
 
         # Mock webhook deletion failure
         mock_delete.side_effect = requests.exceptions.RequestException("API error")
@@ -599,22 +599,22 @@ class TestWebhookCreation:
     """Test webhook creation functionality."""
 
     @pytest.fixture
-    def setup_user(self, client: Client) -> tuple[User, Organization, UserProfile]:
-        """Set up test user, organization, and profile."""
+    def setup_user(self, client: Client) -> tuple[User, Workspace, UserProfile]:
+        """Set up test user, workspace, and profile."""
         user = User.objects.create_user(
             username="testuser",
             password="testpass123",
             email="test@example.com",
         )
-        organization = Organization.objects.create(
-            name="Test Organization",
+        workspace = Workspace.objects.create(
+            name="Test Workspace",
             shop_domain="test.myshopify.com",
         )
         user_profile = UserProfile.objects.create(
             user=user,
-            organization=organization,
+            workspace=workspace,
         )
-        return user, organization, user_profile
+        return user, workspace, user_profile
 
     @override_settings(
         SHOPIFY_CLIENT_ID="test_client_id",
@@ -627,8 +627,8 @@ class TestWebhookCreation:
         self, mock_post: Mock, client: Client, setup_user: tuple
     ) -> None:
         """Test that all webhook topics are created."""
-        user, organization, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _ = setup_user
+        client.force_login(user)
 
         # Set up session
         session = client.session
@@ -673,7 +673,7 @@ class TestWebhookCreation:
             call_kwargs = call[1] if len(call) > 1 else {}
             call_json = call_kwargs.get("json", {})
             webhook_data = call_json.get("webhook", {})
-            assert str(organization.uuid) in webhook_data.get("address", "")
+            assert str(workspace.uuid) in webhook_data.get("address", "")
 
     @override_settings(
         SHOPIFY_CLIENT_ID="test_client_id",
@@ -686,8 +686,8 @@ class TestWebhookCreation:
         self, mock_post: Mock, client: Client, setup_user: tuple
     ) -> None:
         """Test that existing webhooks (422) are handled gracefully."""
-        user, organization, _ = setup_user
-        client.login(username="testuser", password="testpass123")
+        user, workspace, _ = setup_user
+        client.force_login(user)
 
         # Set up session
         session = client.session
@@ -736,7 +736,7 @@ class TestWebhookCreation:
 
         # Integration should still be created
         integration = Integration.objects.get(
-            organization=organization,
+            workspace=workspace,
             integration_type="shopify",
         )
         assert integration.is_active is True

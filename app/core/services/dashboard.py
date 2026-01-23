@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from core.models import Integration, Organization, Plan, UserProfile
+from core.models import Integration, Plan, UserProfile, Workspace, WorkspaceMember
 from django.contrib.auth.models import User
 from django.db.models import QuerySet
 from django.utils import timezone
@@ -35,34 +35,54 @@ class DashboardService:
             user: Django User instance.
 
         Returns:
-            Dict with dashboard data or None if user has no profile.
+            Dict with dashboard data or None if user has no workspace.
         """
-        try:
-            user_profile = UserProfile.objects.get(user=user)
-            organization = user_profile.organization
-        except UserProfile.DoesNotExist:
+        # Try to get workspace from WorkspaceMember first
+        member = WorkspaceMember.objects.filter(user=user, is_active=True).first()
+        workspace = None
+        user_profile = None
+
+        if member:
+            workspace = member.workspace
+        else:
+            # Fall back to UserProfile for backward compatibility
+            try:
+                user_profile = UserProfile.objects.get(user=user)
+                workspace = user_profile.workspace
+            except UserProfile.DoesNotExist:
+                return None
+
+        if not workspace:
             return None
 
+        # Try to get user_profile if we don't have it yet
+        if not user_profile:
+            try:
+                user_profile = UserProfile.objects.get(user=user)
+            except UserProfile.DoesNotExist:
+                user_profile = None
+
         return {
-            "organization": organization,
+            "workspace": workspace,
             "user_profile": user_profile,
-            "integrations": self._get_integration_data(organization),
-            "recent_activity": self._get_recent_activity(organization),
-            "usage_data": self._get_usage_data(organization),
-            "trial_info": self._get_trial_info(organization),
+            "member": member,
+            "integrations": self._get_integration_data(workspace),
+            "recent_activity": self._get_recent_activity(workspace),
+            "usage_data": self._get_usage_data(workspace),
+            "trial_info": self._get_trial_info(workspace),
         }
 
-    def _get_integration_data(self, organization: Organization) -> dict[str, Any]:
-        """Get integration status and data for the organization.
+    def _get_integration_data(self, workspace: Workspace) -> dict[str, Any]:
+        """Get integration status and data for the workspace.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             Dictionary with integration status flags.
         """
         integrations: QuerySet[Integration] = Integration.objects.filter(
-            organization=organization, is_active=True
+            workspace=workspace, is_active=True
         )
 
         return {
@@ -77,11 +97,11 @@ class DashboardService:
             ).exists(),
         }
 
-    def _get_recent_activity(self, organization: Organization) -> list[dict[str, Any]]:
-        """Get and process recent webhook activity for the organization.
+    def _get_recent_activity(self, workspace: Workspace) -> list[dict[str, Any]]:
+        """Get and process recent webhook activity for the workspace.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             List of recent activity records.
@@ -141,19 +161,19 @@ class DashboardService:
 
         return recent_activity
 
-    def _get_usage_data(self, organization: Organization) -> dict[str, Any]:
-        """Get rate limiting and usage statistics for the organization.
+    def _get_usage_data(self, workspace: Workspace) -> dict[str, Any]:
+        """Get rate limiting and usage statistics for the workspace.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             Dictionary with usage data and rate limit info.
         """
         try:
             # Get rate limit info and usage stats
-            is_allowed, rate_limit_info = rate_limiter.check_rate_limit(organization)
-            usage_stats = rate_limiter.get_usage_stats(organization, months=3)
+            is_allowed, rate_limit_info = rate_limiter.check_rate_limit(workspace)
+            usage_stats = rate_limiter.get_usage_stats(workspace, months=3)
 
             # Calculate usage percentage
             current_usage = rate_limit_info.get("current_usage", 0)
@@ -175,27 +195,27 @@ class DashboardService:
                 "usage_percentage": 0,
             }
 
-    def _get_trial_info(self, organization: Organization) -> dict[str, Any]:
-        """Get trial information for the organization.
+    def _get_trial_info(self, workspace: Workspace) -> dict[str, Any]:
+        """Get trial information for the workspace.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             Dictionary with trial status and remaining days.
         """
         trial_days_remaining = 0
-        is_trial = organization.subscription_status == "trial"
+        is_trial = workspace.subscription_status == "trial"
 
-        if is_trial and organization.trial_end_date:
+        if is_trial and workspace.trial_end_date:
             trial_days_remaining = max(
-                0, (organization.trial_end_date - timezone.now()).days
+                0, (workspace.trial_end_date - timezone.now()).days
             )
 
         return {
             "is_trial": is_trial,
             "trial_days_remaining": trial_days_remaining,
-            "trial_end_date": organization.trial_end_date,
+            "trial_end_date": workspace.trial_end_date,
         }
 
 
@@ -360,17 +380,17 @@ class BillingService:
             return []
 
     def get_stripe_subscription_info(
-        self, organization: Organization
+        self, workspace: Workspace
     ) -> dict[str, Any] | None:
         """Get current subscription info from Stripe.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             Subscription info dictionary or None if not found.
         """
-        if not organization.stripe_customer_id:
+        if not workspace.stripe_customer_id:
             return None
 
         try:
@@ -378,7 +398,7 @@ class BillingService:
 
             stripe_api = StripeAPI()
             subscriptions = stripe_api.get_customer_subscriptions(
-                organization.stripe_customer_id, status="active"
+                workspace.stripe_customer_id, status="active"
             )
 
             if not subscriptions:
@@ -398,35 +418,35 @@ class BillingService:
             logger.warning(f"Error fetching subscription from Stripe: {e!s}")
             return None
 
-    def get_billing_dashboard_data(self, organization: Organization) -> dict[str, Any]:
-        """Get billing dashboard data for an organization.
+    def get_billing_dashboard_data(self, workspace: Workspace) -> dict[str, Any]:
+        """Get billing dashboard data for a workspace.
 
         Includes real-time data from Stripe when available.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             Dictionary with billing dashboard information.
         """
         dashboard_service = DashboardService()
-        usage_data = dashboard_service._get_usage_data(organization)
-        trial_info = dashboard_service._get_trial_info(organization)
+        usage_data = dashboard_service._get_usage_data(workspace)
+        trial_info = dashboard_service._get_trial_info(workspace)
 
         # Get Stripe subscription info if available
-        stripe_subscription = self.get_stripe_subscription_info(organization)
+        stripe_subscription = self.get_stripe_subscription_info(workspace)
 
         # For billing dashboard, include Free plan as option (except if already on free)
         available_plans = self.get_available_plans(
-            organization.subscription_plan, include_free=True
+            workspace.subscription_plan, include_free=True
         )
 
         return {
-            "organization": organization,
+            "workspace": workspace,
             "usage_data": usage_data,
             "trial_info": trial_info,
             "available_plans": available_plans,
-            "current_plan": organization.subscription_plan,
+            "current_plan": workspace.subscription_plan,
             "stripe_subscription": stripe_subscription,
         }
 
@@ -438,17 +458,17 @@ class IntegrationService:
     overview data.
     """
 
-    def get_integration_overview(self, organization: Organization) -> dict[str, Any]:
+    def get_integration_overview(self, workspace: Workspace) -> dict[str, Any]:
         """Get integration overview data for the integrations page.
 
         Args:
-            organization: Organization model instance.
+            workspace: Workspace model instance.
 
         Returns:
             Dictionary with integration sources and destinations.
         """
         current_integrations: QuerySet[Integration] = Integration.objects.filter(
-            organization=organization, is_active=True
+            workspace=workspace, is_active=True
         )
 
         # Event Sources - Services that send webhooks TO Notipus
@@ -505,7 +525,7 @@ class IntegrationService:
         ]
 
         return {
-            "organization": organization,
+            "workspace": workspace,
             "event_sources": event_sources,
             "notification_channels": notification_destinations,
             "current_integrations": current_integrations,

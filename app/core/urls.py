@@ -20,12 +20,36 @@ urlpatterns = [
     path("billing/checkout/<str:plan_name>/", views.checkout, name="checkout"),
     path("billing/checkout/success/", views.checkout_success, name="checkout_success"),
     path("billing/checkout/cancel/", views.checkout_cancel, name="checkout_cancel"),
-    # Organization management
-    path("organization/create/", views.create_organization, name="create_organization"),
+    # Workspace management
+    path("workspace/create/", views.create_workspace, name="create_workspace"),
+    path("workspace/settings/", views.workspace_settings, name="workspace_settings"),
+    # Member management
+    path("workspace/members/", views.members_list, name="members_list"),
+    path("workspace/members/invite/", views.invite_member, name="invite_member"),
     path(
-        "organization/settings/",
-        views.organization_settings,
-        name="organization_settings",
+        "workspace/members/<int:member_id>/remove/",
+        views.remove_member,
+        name="remove_member",
+    ),
+    path(
+        "workspace/members/<int:member_id>/role/",
+        views.change_role,
+        name="change_role",
+    ),
+    path(
+        "workspace/invitations/<int:invitation_id>/cancel/",
+        views.cancel_invitation,
+        name="cancel_invitation",
+    ),
+    path(
+        "workspace/invitation/<uuid:token>/accept/",
+        views.accept_invitation,
+        name="accept_invitation",
+    ),
+    path(
+        "workspace/invitation/<uuid:token>/confirm/",
+        views.confirm_accept_invitation,
+        name="confirm_accept_invitation",
     ),
     # OAuth integrations (to be implemented)
     path("integrations/", views.integrations, name="integrations"),

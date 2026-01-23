@@ -24,7 +24,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 
-from ...models import UserProfile
+from ...models import UserProfile, WorkspaceMember
 
 # Import all integration views for re-export
 from .chargify import integrate_chargify
@@ -90,18 +90,22 @@ def integrations(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
         request: The HTTP request object.
 
     Returns:
-        Integrations page or redirect to organization creation.
+        Integrations page or redirect to workspace creation.
     """
     from core.services.dashboard import IntegrationService
 
-    try:
-        user_profile = UserProfile.objects.get(user=request.user)
-        organization = user_profile.organization
+    # Try WorkspaceMember first
+    member = WorkspaceMember.objects.filter(user=request.user, is_active=True).first()
+    if member:
+        workspace = member.workspace
+    else:
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            workspace = user_profile.workspace
+        except UserProfile.DoesNotExist:
+            return redirect("core:create_workspace")
 
-        integration_service = IntegrationService()
-        context = integration_service.get_integration_overview(organization)
+    integration_service = IntegrationService()
+    context = integration_service.get_integration_overview(workspace)
 
-        return render(request, "core/integrations.html.j2", context)
-
-    except UserProfile.DoesNotExist:
-        return redirect("core:create_organization")
+    return render(request, "core/integrations.html.j2", context)

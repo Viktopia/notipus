@@ -13,11 +13,11 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect
 
-from ...models import Integration
+from ...models import Integration, Workspace
 from .base import (
     DEFAULT_API_TIMEOUT,
-    get_user_organization,
-    require_organization,
+    get_user_workspace,
+    require_admin_role,
     require_post_method,
 )
 
@@ -99,14 +99,14 @@ def slack_connect_callback(
     if not data.get("ok"):
         return HttpResponse(f"Slack connection failed: {data.get('error')}", status=400)
 
-    # Get user's organization
-    organization, redirect_response = require_organization(request)
+    # Get user's workspace (require admin role for modifications)
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
     # Store or update Slack integration
     integration, created = Integration.objects.get_or_create(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         defaults={
             "oauth_credentials": {
@@ -154,13 +154,14 @@ def disconnect_slack(request: HttpRequest) -> HttpResponseRedirect:
     if error_redirect:
         return error_redirect
 
-    organization, redirect_response = require_organization(request)
+    # Require admin role for disconnection
+    workspace, redirect_response = require_admin_role(request)
     if redirect_response:
         return redirect_response
 
     # Find and deactivate the Slack integration
     integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()
@@ -189,13 +190,13 @@ def test_slack(request: HttpRequest) -> HttpResponseRedirect:
     if error_redirect:
         return error_redirect
 
-    organization = get_user_organization(request)
-    if not organization:
-        return redirect("core:create_organization")
+    workspace = get_user_workspace(request)
+    if not workspace:
+        return redirect("core:create_workspace")
 
     # Find the active Slack integration
     integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()
@@ -209,23 +210,23 @@ def test_slack(request: HttpRequest) -> HttpResponseRedirect:
 
     if not webhook_url:
         # Try to use chat:write with the access token instead
-        _send_test_via_api(request, integration, organization)
+        _send_test_via_api(request, integration, workspace)
     else:
         # Use incoming webhook
-        _send_test_via_webhook(request, webhook_url, organization)
+        _send_test_via_webhook(request, webhook_url, workspace)
 
     return redirect("core:integrations")
 
 
 def _send_test_via_api(
-    request: HttpRequest, integration: Integration, organization: object
+    request: HttpRequest, integration: Integration, workspace: Workspace
 ) -> None:
     """Send test message via Slack API (chat:write).
 
     Args:
         request: The HTTP request object.
         integration: The Slack integration.
-        organization: The user's organization.
+        workspace: The user's workspace.
     """
     access_token = integration.oauth_credentials.get("access_token")
     channel = integration.integration_settings.get("channel", "#general")
@@ -238,7 +239,7 @@ def _send_test_via_api(
         response = requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={"Authorization": f"Bearer {access_token}"},
-            json=_build_test_message(request, organization, channel),
+            json=_build_test_message(request, workspace, channel),
             timeout=DEFAULT_API_TIMEOUT,
         )
         data = response.json()
@@ -253,19 +254,19 @@ def _send_test_via_api(
 
 
 def _send_test_via_webhook(
-    request: HttpRequest, webhook_url: str, organization: object
+    request: HttpRequest, webhook_url: str, workspace: Workspace
 ) -> None:
     """Send test message via incoming webhook.
 
     Args:
         request: The HTTP request object.
         webhook_url: The webhook URL.
-        organization: The user's organization.
+        workspace: The user's workspace.
     """
     try:
         response = requests.post(
             webhook_url,
-            json=_build_test_message(request, organization),
+            json=_build_test_message(request, workspace),
             timeout=DEFAULT_API_TIMEOUT,
         )
         response.raise_for_status()
@@ -276,13 +277,13 @@ def _send_test_via_webhook(
 
 
 def _build_test_message(
-    request: HttpRequest, organization: object, channel: str | None = None
+    request: HttpRequest, workspace: Workspace, channel: str | None = None
 ) -> dict:
     """Build the test message payload.
 
     Args:
         request: The HTTP request object.
-        organization: The user's organization.
+        workspace: The user's workspace.
         channel: Optional channel to post to.
 
     Returns:
@@ -309,7 +310,7 @@ def _build_test_message(
                     {
                         "type": "mrkdwn",
                         "text": f"Sent by {request.user.username} "
-                        f"from {organization.name}",
+                        f"from {workspace.name}",
                     }
                 ],
             },
@@ -330,13 +331,13 @@ def get_slack_channels(request: HttpRequest) -> JsonResponse:
     Returns:
         JSON response with list of channels or error.
     """
-    organization = get_user_organization(request)
-    if not organization:
+    workspace = get_user_workspace(request)
+    if not workspace:
         return JsonResponse({"error": "User profile not found"}, status=400)
 
     # Find the active Slack integration
     integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()
@@ -407,13 +408,13 @@ def configure_slack(request: HttpRequest) -> JsonResponse:
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request method"}, status=405)
 
-    organization = get_user_organization(request)
-    if not organization:
+    workspace = get_user_workspace(request)
+    if not workspace:
         return JsonResponse({"error": "User profile not found"}, status=400)
 
     # Find the active Slack integration
     integration = Integration.objects.filter(
-        organization=organization,
+        workspace=workspace,
         integration_type=INTEGRATION_TYPE,
         is_active=True,
     ).first()
@@ -433,7 +434,7 @@ def configure_slack(request: HttpRequest) -> JsonResponse:
         integration.save()
 
         logger.info(
-            f"Slack channel updated to {channel} for organization {organization.name}"
+            f"Slack channel updated to {channel} for workspace {workspace.name}"
         )
 
         return JsonResponse(

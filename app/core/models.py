@@ -1,12 +1,12 @@
 """Core Django models for the Notipus application.
 
-This module contains all the core domain models including organizations,
+This module contains all the core domain models including workspaces,
 users, integrations, billing, and authentication-related models.
 """
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, ClassVar
 
 from django.contrib.auth.models import User
@@ -25,15 +25,24 @@ def get_trial_end_date() -> datetime:
     return timezone.now() + timezone.timedelta(days=14)
 
 
-class Organization(models.Model):
-    """An organization represents a tenant in our multi-tenant SaaS.
+def get_invitation_expiry() -> datetime:
+    """Return invitation expiry date 7 days from now.
 
-    Each organization has its own integrations, users, and settings.
-    Organizations are the primary billing and access control entity.
+    Returns:
+        datetime: Invitation expiry date.
+    """
+    return timezone.now() + timedelta(days=7)
+
+
+class Workspace(models.Model):
+    """A workspace represents a tenant in our multi-tenant SaaS.
+
+    Each workspace has its own integrations, users, and settings.
+    Workspaces are the primary billing and access control entity.
 
     Attributes:
         uuid: Unique identifier for webhook URLs.
-        name: Display name of the organization.
+        name: Display name of the workspace.
         slug: URL-friendly identifier.
         shop_domain: Associated Shopify domain.
         subscription_plan: Current billing plan.
@@ -61,7 +70,7 @@ class Organization(models.Model):
     )
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
-    shop_domain = models.CharField(max_length=255, unique=True)
+    shop_domain = models.CharField(max_length=255, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -79,17 +88,18 @@ class Organization(models.Model):
 
     class Meta:
         app_label = "core"
+        db_table = "core_organization"  # Keep existing table name
 
     def __str__(self) -> str:
-        """Return string representation of the organization.
+        """Return string representation of the workspace.
 
         Returns:
-            Organization name and shop domain.
+            Workspace name and shop domain.
         """
         return f"{self.name} ({self.shop_domain})"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        """Save the organization, generating a unique slug if needed.
+        """Save the workspace, generating a unique slug if needed.
 
         Args:
             *args: Positional arguments for parent save method.
@@ -116,7 +126,7 @@ class Organization(models.Model):
                     # Try to save with current slug by using select_for_update
                     # to lock potential conflicting records
                     existing = (
-                        Organization.objects.select_for_update()
+                        Workspace.objects.select_for_update()
                         .filter(slug=slug)
                         .exclude(pk=self.pk)
                         .first()
@@ -152,7 +162,7 @@ class Organization(models.Model):
 
     @property
     def is_trial(self) -> bool:
-        """Check if organization is on trial.
+        """Check if workspace is on trial.
 
         Returns:
             True if on trial, False otherwise.
@@ -161,7 +171,7 @@ class Organization(models.Model):
 
     @property
     def is_active(self) -> bool:
-        """Check if organization is active.
+        """Check if workspace is active.
 
         Returns:
             True if active or on trial, False otherwise.
@@ -169,53 +179,119 @@ class Organization(models.Model):
         return self.subscription_status in ["active", "trial"]
 
 
-class OrganizationUser(models.Model):
-    """Junction table for organization membership with roles.
+class WorkspaceMember(models.Model):
+    """Junction table for workspace membership with roles.
 
-    A user can belong to multiple organizations with different roles.
-    This enables multi-organization membership for enterprise users.
+    A user can belong to multiple workspaces with different roles.
+    This enables multi-workspace membership for enterprise users.
 
     Attributes:
         user: The Django user.
-        organization: The organization they belong to.
-        role: Their role within the organization.
+        workspace: The workspace they belong to.
+        role: Their role within the workspace (owner, admin, user).
         is_active: Whether membership is currently active.
     """
 
     ROLE_CHOICES: ClassVar[tuple[tuple[str, str], ...]] = (
         ("owner", "Owner"),
-        ("admin", "Administrator"),
-        ("member", "Member"),
-        ("viewer", "Viewer"),
+        ("admin", "Admin"),
+        ("user", "User"),
     )
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="members"
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="user")
     joined_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
         app_label = "core"
-        unique_together = ("user", "organization")
+        db_table = "core_organizationuser"  # Keep existing table name
+        unique_together = ("user", "workspace")
 
     def __str__(self) -> str:
         """Return string representation of the membership.
 
         Returns:
-            Username, organization name, and role.
+            Username, workspace name, and role.
         """
-        return f"{self.user.username} - {self.organization.name} ({self.role})"
+        return f"{self.user.username} - {self.workspace.name} ({self.role})"
+
+    @property
+    def is_owner(self) -> bool:
+        """Check if member is an owner."""
+        return self.role == "owner"
+
+    @property
+    def is_admin(self) -> bool:
+        """Check if member is an admin or owner."""
+        return self.role in ("owner", "admin")
+
+
+class WorkspaceInvitation(models.Model):
+    """Invitation to join a workspace.
+
+    Allows workspace admins/owners to invite users by email.
+    Invitations expire after 7 days.
+
+    Attributes:
+        workspace: The workspace being invited to.
+        email: Email address of the invitee.
+        role: Role the invitee will have upon accepting.
+        token: Unique token for the invitation URL.
+        invited_by: User who sent the invitation.
+        expires_at: When the invitation expires.
+        accepted_at: When the invitation was accepted (null if pending).
+    """
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="invitations"
+    )
+    email = models.EmailField(db_index=True)  # Indexed for faster invitation lookups
+    role = models.CharField(
+        max_length=20, choices=WorkspaceMember.ROLE_CHOICES, default="user"
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
+    invited_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="sent_invitations"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(default=get_invitation_expiry)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "core"
+        db_table = "core_workspaceinvitation"
+
+    def __str__(self) -> str:
+        """Return string representation of the invitation.
+
+        Returns:
+            Email and workspace name.
+        """
+        return f"Invitation for {self.email} to {self.workspace.name}"
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if invitation has expired."""
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_pending(self) -> bool:
+        """Check if invitation is still pending (not accepted and not expired)."""
+        return self.accepted_at is None and not self.is_expired
 
 
 class Integration(models.Model):
-    """Integrations for organizations.
+    """Integrations for workspaces.
 
     Supports both customer payment providers and workspace-specific
-    notification integrations. Each organization can have one of each type.
+    notification integrations. Each workspace can have one of each type.
 
     Attributes:
-        organization: The owning organization.
+        workspace: The owning workspace.
         integration_type: Type of integration (stripe, shopify, etc.).
         oauth_credentials: OAuth tokens and credentials.
         webhook_secret: Secret for webhook validation.
@@ -223,16 +299,16 @@ class Integration(models.Model):
     """
 
     INTEGRATION_TYPES: ClassVar[tuple[tuple[str, str], ...]] = (
-        # Customer payment providers (organization-specific)
+        # Customer payment providers (workspace-specific)
         ("stripe_customer", "Stripe Customer Payments"),
         ("shopify", "Shopify Ecommerce"),
         ("chargify", "Chargify / Maxio Advanced Billing"),
-        # Notification integrations (organization-specific)
+        # Notification integrations (workspace-specific)
         ("slack_notifications", "Slack Notifications"),
     )
 
-    organization = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="integrations"
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="integrations"
     )
     integration_type = models.CharField(max_length=50, choices=INTEGRATION_TYPES)
 
@@ -253,15 +329,17 @@ class Integration(models.Model):
 
     class Meta:
         app_label = "core"
-        unique_together = ["organization", "integration_type"]
+        unique_together = ["workspace", "integration_type"]
+        # Keep existing table - the column rename will be handled by migration
+        db_table = "core_integration"
 
     def __str__(self) -> str:
         """Return string representation of the integration.
 
         Returns:
-            Organization name and integration type display.
+            Workspace name and integration type display.
         """
-        return f"{self.organization.name} - {self.get_integration_type_display()}"
+        return f"{self.workspace.name} - {self.get_integration_type_display()}"
 
     @property
     def slack_team_id(self) -> str | None:
@@ -434,7 +512,7 @@ class UsageLimit(models.Model):
         max_monthly_notifications: Maximum notifications per month.
     """
 
-    plan = models.CharField(max_length=20, choices=Organization.STRIPE_PLANS)
+    plan = models.CharField(max_length=20, choices=Workspace.STRIPE_PLANS)
     max_monthly_registrations = models.IntegerField()
     max_monthly_notifications = models.IntegerField()
 
@@ -451,43 +529,50 @@ class UsageLimit(models.Model):
 
 
 class UserProfile(models.Model):
-    """Extended user profile with organization membership.
+    """Extended user profile with workspace membership.
 
-    Links Django users to their primary organization and
+    Links Django users to their primary workspace and
     stores Slack integration data.
+
+    Note: This model is being deprecated in favor of WorkspaceMember.
+    It is kept for backward compatibility with slack_user_id storage.
 
     Attributes:
         user: The associated Django user.
         slack_user_id: Slack user identifier.
-        organization: Primary organization membership.
+        workspace: Primary workspace membership (legacy).
     """
 
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     slack_user_id = models.CharField(max_length=255, unique=True)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+
+    class Meta:
+        app_label = "core"
+        db_table = "core_userprofile"
 
     def __str__(self) -> str:
         """Return string representation of the user profile.
 
         Returns:
-            Username and organization name.
+            Username and workspace name.
         """
-        return f"{self.user.username} ({self.organization.name})"
+        return f"{self.user.username} ({self.workspace.name})"
 
 
 class NotificationSettings(models.Model):
-    """Notification preferences for an organization.
+    """Notification preferences for a workspace.
 
-    Allows organizations to customize which event types
+    Allows workspaces to customize which event types
     generate Slack notifications.
 
     Attributes:
-        organization: The organization these settings belong to.
+        workspace: The workspace these settings belong to.
         notify_*: Boolean flags for each notification type.
     """
 
-    organization = models.OneToOneField(
-        Organization, on_delete=models.CASCADE, related_name="notification_settings"
+    workspace = models.OneToOneField(
+        Workspace, on_delete=models.CASCADE, related_name="notification_settings"
     )
 
     # Payment events
@@ -515,13 +600,17 @@ class NotificationSettings(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        app_label = "core"
+        db_table = "core_notificationsettings"
+
     def __str__(self) -> str:
         """Return string representation of notification settings.
 
         Returns:
-            Organization name with settings label.
+            Workspace name with settings label.
         """
-        return f"Notification Settings for {self.organization.name}"
+        return f"Notification Settings for {self.workspace.name}"
 
 
 class Plan(models.Model):

@@ -113,21 +113,21 @@ class CompanyTest(TestCase):
         self.assertEqual(company.domain, "cleaning-test.com")
 
 
-class OrganizationTest(TestCase):
-    """Test Organization model"""
+class WorkspaceTest(TestCase):
+    """Test Workspace model"""
 
     def setUp(self):
         """Set up test data"""
-        from core.models import Organization  # noqa: E402
+        from core.models import Workspace  # noqa: E402
 
-        self.organization = Organization.objects.create(
+        self.workspace = Workspace.objects.create(
             name="Test Org", shop_domain="test.myshopify.com"
         )
 
-    def test_organization_str_representation(self):
-        """Test organization string representation"""
+    def test_workspace_str_representation(self):
+        """Test workspace string representation"""
         expected = "Test Org (test.myshopify.com)"
-        self.assertEqual(str(self.organization), expected)
+        self.assertEqual(str(self.workspace), expected)
 
 
 class NotificationSettingsTest(TestCase):
@@ -135,9 +135,9 @@ class NotificationSettingsTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        from core.models import Organization  # noqa: E402
+        from core.models import Workspace  # noqa: E402
 
-        self.organization = Organization.objects.create(
+        self.workspace = Workspace.objects.create(
             name="Test Org", shop_domain="test.myshopify.com"
         )
 
@@ -145,34 +145,34 @@ class NotificationSettingsTest(TestCase):
         """Test creating notification settings"""
         from core.models import NotificationSettings  # noqa: E402
 
-        settings = NotificationSettings.objects.create(organization=self.organization)
-        self.assertEqual(settings.organization, self.organization)
+        settings = NotificationSettings.objects.create(workspace=self.workspace)
+        self.assertEqual(settings.workspace, self.workspace)
         self.assertTrue(settings.notify_payment_success)  # Default value
 
     def test_notification_settings_str_representation(self):
         """Test string representation"""
         from core.models import NotificationSettings  # noqa: E402
 
-        settings = NotificationSettings.objects.create(organization=self.organization)
-        expected = f"Notification Settings for {self.organization.name}"
+        settings = NotificationSettings.objects.create(workspace=self.workspace)
+        expected = f"Notification Settings for {self.workspace.name}"
         self.assertEqual(str(settings), expected)
 
     def test_notification_settings_defaults(self):
         """Test default values"""
         from core.models import NotificationSettings  # noqa: E402
 
-        settings = NotificationSettings.objects.create(organization=self.organization)
+        settings = NotificationSettings.objects.create(workspace=self.workspace)
         # Test some key defaults
         self.assertTrue(settings.notify_payment_success)
         self.assertTrue(settings.notify_payment_failure)
         self.assertTrue(settings.notify_subscription_created)
 
-    def test_notification_settings_one_per_organization(self):
-        """Test one settings instance per organization"""
+    def test_notification_settings_one_per_workspace(self):
+        """Test one settings instance per workspace"""
         from core.models import NotificationSettings  # noqa: E402
 
-        NotificationSettings.objects.create(organization=self.organization)
+        NotificationSettings.objects.create(workspace=self.workspace)
 
         # Test unique constraint
         with self.assertRaises(IntegrityError):  # Fixed: specific exception
-            NotificationSettings.objects.create(organization=self.organization)
+            NotificationSettings.objects.create(workspace=self.workspace)

@@ -1,13 +1,13 @@
 """Billing service for handling Stripe webhook events.
 
 This module processes billing-related webhook events from Stripe
-and updates organization subscription status accordingly.
+and updates workspace subscription status accordingly.
 """
 
 import logging
 from typing import Any
 
-from core.models import Organization
+from core.models import Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class BillingService:
     """Service for handling billing-related webhook events from Stripe.
 
     Provides static methods for processing various subscription and
-    payment events and updating organization records.
+    payment events and updating workspace records.
     """
 
     @staticmethod
@@ -84,7 +84,7 @@ class BillingService:
                 )
                 return
 
-            updated_count = Organization.objects.filter(
+            updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(
                 subscription_plan=plan_id,
@@ -97,7 +97,7 @@ class BillingService:
                     f"Updated subscription for customer {customer_id} to plan {plan_id}"
                 )
             else:
-                logger.warning(f"No organization found for customer {customer_id}")
+                logger.warning(f"No workspace found for customer {customer_id}")
 
         except Exception as e:
             logger.error(f"Error handling subscription created: {e!s}")
@@ -142,7 +142,7 @@ class BillingService:
                     "current_period_end"
                 )
 
-            updated_count = Organization.objects.filter(
+            updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(**update_data)
 
@@ -152,7 +152,7 @@ class BillingService:
                     f"for customer {customer_id}"
                 )
             else:
-                logger.warning(f"No organization found for customer {customer_id}")
+                logger.warning(f"No workspace found for customer {customer_id}")
 
         except Exception as e:
             logger.error(f"Error handling subscription updated: {e!s}")
@@ -169,7 +169,7 @@ class BillingService:
             if not customer_id:
                 return
 
-            updated_count = Organization.objects.filter(
+            updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(subscription_status="cancelled")
 
@@ -178,7 +178,7 @@ class BillingService:
                     f"Marked subscription as cancelled for customer {customer_id}"
                 )
             else:
-                logger.warning(f"No organization found for customer {customer_id}")
+                logger.warning(f"No workspace found for customer {customer_id}")
 
         except Exception as e:
             logger.error(f"Error handling subscription deleted: {e!s}")
@@ -203,7 +203,7 @@ class BillingService:
             if period_end:
                 update_data["billing_cycle_anchor"] = period_end
 
-            updated_count = Organization.objects.filter(
+            updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(**update_data)
 
@@ -212,7 +212,7 @@ class BillingService:
                     f"Updated payment status to active for customer {customer_id}"
                 )
             else:
-                logger.warning(f"No organization found for customer {customer_id}")
+                logger.warning(f"No workspace found for customer {customer_id}")
 
         except Exception as e:
             logger.error(f"Error handling payment success: {e!s}")
@@ -230,7 +230,7 @@ class BillingService:
                 logger.error("Missing customer ID in invoice data")
                 return
 
-            updated_count = Organization.objects.filter(
+            updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(subscription_status="past_due")
 
@@ -239,7 +239,7 @@ class BillingService:
                     f"Updated payment status to past_due for customer {customer_id}"
                 )
             else:
-                logger.warning(f"No organization found for customer {customer_id}")
+                logger.warning(f"No workspace found for customer {customer_id}")
 
         except Exception as e:
             logger.error(f"Error handling payment failure: {e!s}")
@@ -260,14 +260,16 @@ class BillingService:
                 logger.error("Missing customer ID in checkout session")
                 return
 
-            # Extract metadata with organization and plan info
+            # Extract metadata with workspace and plan info
             metadata = session.get("metadata", {})
-            organization_id = metadata.get("organization_id")
+            workspace_id = metadata.get("workspace_id") or metadata.get(
+                "organization_id"
+            )
             plan_name = metadata.get("plan_name")
 
             subscription_id = session.get("subscription")
 
-            # Update organization with new subscription status
+            # Update workspace with new subscription status
             update_data: dict[str, Any] = {
                 "subscription_status": "active",
                 "payment_method_added": True,
@@ -276,13 +278,13 @@ class BillingService:
             if plan_name:
                 update_data["subscription_plan"] = plan_name
 
-            # Find organization by customer ID or organization ID from metadata
-            if organization_id:
-                updated_count = Organization.objects.filter(id=organization_id).update(
+            # Find workspace by customer ID or workspace ID from metadata
+            if workspace_id:
+                updated_count = Workspace.objects.filter(id=workspace_id).update(
                     **update_data
                 )
             else:
-                updated_count = Organization.objects.filter(
+                updated_count = Workspace.objects.filter(
                     stripe_customer_id=customer_id
                 ).update(**update_data)
 
@@ -293,8 +295,8 @@ class BillingService:
                 )
             else:
                 logger.warning(
-                    f"No organization found for checkout session. "
-                    f"Customer: {customer_id}, Org ID: {organization_id}"
+                    f"No workspace found for checkout session. "
+                    f"Customer: {customer_id}, Workspace ID: {workspace_id}"
                 )
 
         except Exception as e:
@@ -317,15 +319,15 @@ class BillingService:
 
             trial_end = subscription.get("trial_end")
 
-            # Find organization and log the event
-            org = Organization.objects.filter(stripe_customer_id=customer_id).first()
+            # Find workspace and log the event
+            ws = Workspace.objects.filter(stripe_customer_id=customer_id).first()
 
-            if org:
+            if ws:
                 logger.info(
-                    f"Trial ending soon for organization {org.name} "
+                    f"Trial ending soon for workspace {ws.name} "
                     f"(customer: {customer_id}), trial_end: {trial_end}"
                 )
-                # TODO: Send notification email to organization admins
+                # TODO: Send notification email to workspace admins
                 # TODO: Trigger Slack notification if configured
             else:
                 logger.warning(f"Trial ending for unknown customer {customer_id}")
@@ -360,14 +362,14 @@ class BillingService:
             if period_end:
                 update_data["billing_cycle_anchor"] = period_end
 
-            updated_count = Organization.objects.filter(
+            updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(**update_data)
 
             if updated_count > 0:
                 logger.info(f"Invoice paid for customer {customer_id}")
             else:
-                logger.warning(f"No organization found for paid invoice: {customer_id}")
+                logger.warning(f"No workspace found for paid invoice: {customer_id}")
 
         except Exception as e:
             logger.error(f"Error handling invoice paid: {e!s}")
@@ -390,15 +392,15 @@ class BillingService:
 
             hosted_invoice_url = invoice.get("hosted_invoice_url")
 
-            # Find organization and log the event
-            org = Organization.objects.filter(stripe_customer_id=customer_id).first()
+            # Find workspace and log the event
+            ws = Workspace.objects.filter(stripe_customer_id=customer_id).first()
 
-            if org:
+            if ws:
                 logger.warning(
-                    f"Payment action required for organization {org.name} "
+                    f"Payment action required for workspace {ws.name} "
                     f"(customer: {customer_id}). Invoice URL: {hosted_invoice_url}"
                 )
-                # TODO: Send notification email to organization admins
+                # TODO: Send notification email to workspace admins
                 # with link to complete payment
             else:
                 logger.warning(

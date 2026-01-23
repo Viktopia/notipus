@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from core.models import Integration, Organization
+from core.models import Integration, Workspace
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -29,23 +29,23 @@ def create_error_response(error: Exception, status_code: int = 500) -> dict:
     }
 
 
-def _handle_rate_limiting(organization: Organization) -> Optional[JsonResponse]:
+def _handle_rate_limiting(workspace: Workspace) -> Optional[JsonResponse]:
     """
-    Handle rate limiting for organization.
+    Handle rate limiting for workspace.
     Returns response if rate limited, None otherwise.
     """
-    if not organization:
+    if not workspace:
         return None
 
     try:
-        rate_limit_info = rate_limiter.enforce_rate_limit(organization)
+        rate_limit_info = rate_limiter.enforce_rate_limit(workspace)
         logger.info(
-            f"Rate limit check passed for org {organization.uuid}: "
+            f"Rate limit check passed for workspace {workspace.uuid}: "
             f"{rate_limit_info['current_usage']}/{rate_limit_info['limit']}"
         )
         return None  # No rate limiting
     except RateLimitException as e:
-        logger.warning(f"Rate limit exceeded for org {organization.uuid}: {str(e)}")
+        logger.warning(f"Rate limit exceeded for workspace {workspace.uuid}: {str(e)}")
         error_response = create_error_response(e, 429)
         response = JsonResponse(error_response, status=429)
 
@@ -56,7 +56,7 @@ def _handle_rate_limiting(organization: Organization) -> Optional[JsonResponse]:
                 "current_usage": e.current_usage,
                 "remaining": 0,
                 "reset_time": e.reset_time,
-                "plan": organization.subscription_plan,
+                "plan": workspace.subscription_plan,
             }
         )
         for header_name, header_value in rate_limit_headers.items():
@@ -86,14 +86,14 @@ def _add_rate_limit_headers(
             response[header_name] = header_value
 
 
-def _get_slack_webhook_url(organization: Optional[Organization]) -> Optional[str]:
-    """Get Slack webhook URL for an organization."""
-    if not organization:
+def _get_slack_webhook_url(workspace: Optional[Workspace]) -> Optional[str]:
+    """Get Slack webhook URL for a workspace."""
+    if not workspace:
         return None
 
     try:
         slack_integration = Integration.objects.get(
-            organization=organization,
+            workspace=workspace,
             integration_type="slack_notifications",
             is_active=True,
         )
@@ -104,7 +104,7 @@ def _get_slack_webhook_url(organization: Optional[Organization]) -> Optional[str
         return incoming_webhook.get("url")
     except Integration.DoesNotExist:
         logger.warning(
-            f"No active Slack integration found for organization {organization.uuid}"
+            f"No active Slack integration found for workspace {workspace.uuid}"
         )
         return None
 
@@ -113,7 +113,7 @@ def _process_webhook_data(
     event_data: Dict[str, Any],
     provider: Any,
     provider_name: str,
-    organization: Optional[Organization] = None,
+    workspace: Optional[Workspace] = None,
 ) -> JsonResponse:
     """Process webhook data and return success response."""
     from .services.slack_client import SlackClient
@@ -126,8 +126,8 @@ def _process_webhook_data(
         event_data, customer_data
     )
 
-    # Send to Slack using organization-specific integration
-    slack_webhook_url = _get_slack_webhook_url(organization)
+    # Send to Slack using workspace-specific integration
+    slack_webhook_url = _get_slack_webhook_url(workspace)
 
     if slack_webhook_url:
         slack_client = SlackClient(webhook_url=slack_webhook_url)
@@ -135,14 +135,14 @@ def _process_webhook_data(
             slack_client.send_notification(notification)
         except Exception as e:
             logger.error(
-                f"Failed to send Slack notification for org "
-                f"{organization.uuid if organization else 'unknown'}: {str(e)}"
+                f"Failed to send Slack notification for workspace "
+                f"{workspace.uuid if workspace else 'unknown'}: {str(e)}"
             )
             # Continue processing even if Slack notification fails
     else:
         logger.warning(
-            f"No Slack webhook URL configured for organization "
-            f"{organization.uuid if organization else 'unknown'}, "
+            f"No Slack webhook URL configured for workspace "
+            f"{workspace.uuid if workspace else 'unknown'}, "
             f"skipping notification"
         )
 
@@ -172,24 +172,24 @@ def _process_webhook(
     request: HttpRequest,
     provider: Any,
     provider_name: str,
-    organization: Organization = None,
+    workspace: Workspace = None,
 ) -> JsonResponse:
     """
     Common webhook processing logic with standardized error handling
     and rate limiting.
 
-    Uses organization-specific Slack integration for notifications.
+    Uses workspace-specific Slack integration for notifications.
     """
     try:
         # Handle rate limiting
-        rate_limit_response = _handle_rate_limiting(organization)
+        rate_limit_response = _handle_rate_limiting(workspace)
         if rate_limit_response:
             return rate_limit_response
 
         # Get rate limit info for headers
         rate_limit_info = None
-        if organization:
-            rate_limit_info = rate_limiter.enforce_rate_limit(organization)
+        if workspace:
+            rate_limit_info = rate_limiter.enforce_rate_limit(workspace)
 
         # Validate and parse webhook
         event_data = _validate_and_parse_webhook(request, provider)
@@ -202,10 +202,8 @@ def _process_webhook(
             _add_rate_limit_headers(response, rate_limit_info)
             return response
 
-        # Process webhook data with organization for Slack notifications
-        response = _process_webhook_data(
-            event_data, provider, provider_name, organization
-        )
+        # Process webhook data with workspace for Slack notifications
+        response = _process_webhook_data(event_data, provider, provider_name, workspace)
         _add_rate_limit_headers(response, rate_limit_info)
         return response
 
@@ -238,21 +236,21 @@ def customer_shopify_webhook(
 ) -> JsonResponse:
     """Handle customer-specific Shopify webhook requests with rate limiting"""
     logger.info(
-        f"Processing customer Shopify webhook for organization {organization_uuid}",
+        f"Processing customer Shopify webhook for workspace {organization_uuid}",
         extra={
             "content_type": request.content_type,
-            "organization_uuid": organization_uuid,
+            "workspace_uuid": organization_uuid,
         },
     )
 
     try:
-        # Get organization for rate limiting
-        organization = get_object_or_404(Organization, uuid=organization_uuid)
+        # Get workspace for rate limiting
+        workspace = get_object_or_404(Workspace, uuid=organization_uuid)
 
-        # Get organization's Shopify integration
+        # Get workspace's Shopify integration
         integration = get_object_or_404(
             Integration,
-            organization=organization,
+            workspace=workspace,
             integration_type="shopify",
             is_active=True,
         )
@@ -261,7 +259,7 @@ def customer_shopify_webhook(
 
         provider = ShopifyProvider(webhook_secret=integration.webhook_secret)
 
-        return _process_webhook(request, provider, "customer_shopify", organization)
+        return _process_webhook(request, provider, "customer_shopify", workspace)
 
     except Exception as e:
         logger.error(f"Error in customer Shopify webhook: {str(e)}", exc_info=True)
@@ -277,27 +275,27 @@ def customer_chargify_webhook(
     """Handle customer-specific Chargify/Maxio webhook requests with rate limiting"""
     logger.info(
         f"Processing customer Chargify/Maxio webhook "
-        f"for organization {organization_uuid}",
+        f"for workspace {organization_uuid}",
         extra={
-            "organization_uuid": organization_uuid,
+            "workspace_uuid": organization_uuid,
             "content_type": request.content_type,
         },
     )
 
     try:
-        # Get organization
-        organization = Organization.objects.get(uuid=organization_uuid)
+        # Get workspace
+        workspace = Workspace.objects.get(uuid=organization_uuid)
 
-        # Get organization's Chargify/Maxio integration
+        # Get workspace's Chargify/Maxio integration
         integration = Integration.objects.get(
-            organization=organization, integration_type="chargify", is_active=True
+            workspace=workspace, integration_type="chargify", is_active=True
         )
 
         from .providers.chargify import ChargifyProvider
 
         provider = ChargifyProvider(webhook_secret=integration.webhook_secret)
 
-        return _process_webhook(request, provider, "customer_chargify", organization)
+        return _process_webhook(request, provider, "customer_chargify", workspace)
 
     except Exception as e:
         logger.error(
@@ -314,21 +312,21 @@ def customer_stripe_webhook(
 ) -> JsonResponse:
     """Handle customer-specific Stripe webhook requests with rate limiting"""
     logger.info(
-        f"Processing customer Stripe webhook for organization {organization_uuid}",
+        f"Processing customer Stripe webhook for workspace {organization_uuid}",
         extra={
             "content_type": request.content_type,
-            "organization_uuid": organization_uuid,
+            "workspace_uuid": organization_uuid,
         },
     )
 
     try:
-        # Get organization for rate limiting
-        organization = get_object_or_404(Organization, uuid=organization_uuid)
+        # Get workspace for rate limiting
+        workspace = get_object_or_404(Workspace, uuid=organization_uuid)
 
-        # Get organization's Stripe integration
+        # Get workspace's Stripe integration
         integration = get_object_or_404(
             Integration,
-            organization=organization,
+            workspace=workspace,
             integration_type="stripe_customer",
             is_active=True,
         )
@@ -337,7 +335,7 @@ def customer_stripe_webhook(
 
         provider = StripeProvider(webhook_secret=integration.webhook_secret)
 
-        return _process_webhook(request, provider, "customer_stripe", organization)
+        return _process_webhook(request, provider, "customer_stripe", workspace)
 
     except Exception as e:
         logger.error(f"Error in customer Stripe webhook: {str(e)}", exc_info=True)

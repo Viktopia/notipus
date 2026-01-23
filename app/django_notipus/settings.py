@@ -150,12 +150,12 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@notipus.com")
 # Email and verification
 ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
 
-# Login methods (replaces ACCOUNT_AUTHENTICATION_METHOD = "username_email")
-ACCOUNT_LOGIN_METHODS = {"username", "email"}
+# Login methods - keep email configured for allauth compatibility
+# Password form is removed from UI, so only SSO and passkey are available
+ACCOUNT_LOGIN_METHODS = {"email"}
 
-# Signup fields (replaces ACCOUNT_EMAIL_REQUIRED = True
-# and ACCOUNT_USERNAME_REQUIRED = True)
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+# Signup fields - no password fields (SSO and passkey only)
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*"]
 
 # Rate limiting (replaces ACCOUNT_LOGIN_ATTEMPTS_LIMIT = 5
 # and ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT = 300)
