@@ -30,11 +30,6 @@ class TemplateLoadingTests(TestCase):
         template = get_template("500.html.j2")
         assert template is not None
 
-    def test_landing_template_loads(self) -> None:
-        """Test that the landing page template can be loaded."""
-        template = get_template("core/landing.html.j2")
-        assert template is not None
-
     def test_dashboard_template_loads(self) -> None:
         """Test that the dashboard template can be loaded."""
         template = get_template("core/dashboard.html.j2")
@@ -63,14 +58,14 @@ class ErrorTemplateRenderingTests(TestCase):
         html = render_to_string("404.html.j2", {})
         assert "404" in html
         assert "Page Not Found" in html
-        assert "Go Home" in html
+        assert "Go to Dashboard" in html
 
     def test_500_template_renders(self) -> None:
         """Test that the 500 template renders without errors."""
         html = render_to_string("500.html.j2", {})
         assert "500" in html
         assert "Server Error" in html
-        assert "Go Home" in html
+        assert "Go to Dashboard" in html
 
     def test_404_view_returns_correct_status(self) -> None:
         """Test that the custom 404 view returns 404 status code."""
@@ -113,13 +108,13 @@ class TemplateContextTests(TestCase):
             organization=self.organization,
         )
 
-    def test_landing_page_unauthenticated(self) -> None:
-        """Test landing page renders for unauthenticated users."""
+    def test_landing_page_unauthenticated_redirects_to_login(self) -> None:
+        """Test landing page redirects unauthenticated users to login."""
         response = self.client.get(reverse("core:landing"))
-        assert response.status_code == 200
-        assert b"Notipus" in response.content
+        assert response.status_code == 302
+        assert "/accounts/login/" in response.url
 
-    def test_landing_page_authenticated_redirects(self) -> None:
+    def test_landing_page_authenticated_redirects_to_dashboard(self) -> None:
         """Test landing page redirects authenticated users to dashboard."""
         self.client.login(username="testuser", password="testpass123")
         response = self.client.get(reverse("core:landing"))

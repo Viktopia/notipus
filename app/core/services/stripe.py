@@ -560,3 +560,251 @@ class StripeAPI:
         except Exception as e:
             logger.error(f"Unexpected error getting price by lookup key: {e!s}")
             return None
+
+    def create_product(
+        self,
+        name: str,
+        description: str = "",
+        metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Create a Stripe Product.
+
+        Args:
+            name: Product name (displayed on invoices, checkout, etc.).
+            description: Product description.
+            metadata: Additional metadata (e.g., plan_name, features).
+
+        Returns:
+            Created product data dictionary, or None on failure.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            product_params: dict[str, Any] = {
+                "name": name,
+            }
+
+            if description:
+                product_params["description"] = description
+
+            if metadata:
+                product_params["metadata"] = metadata
+
+            product = stripe.Product.create(**product_params)
+
+            logger.info(f"Created Stripe product {product.id}: {name}")
+            return {
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "metadata": dict(product.metadata) if product.metadata else {},
+                "active": product.active,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error creating product: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating product: {e!s}")
+            return None
+
+    def create_price(
+        self,
+        product_id: str,
+        unit_amount: int,
+        currency: str = "usd",
+        interval: str = "month",
+        lookup_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Create a recurring Stripe Price for a product.
+
+        Args:
+            product_id: The Stripe Product ID to attach the price to.
+            unit_amount: Price amount in cents (e.g., 2900 for $29.00).
+            currency: Three-letter ISO currency code (default: usd).
+            interval: Billing interval ('month' or 'year').
+            lookup_key: Optional lookup key for stable price references.
+
+        Returns:
+            Created price data dictionary, or None on failure.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            price_params: dict[str, Any] = {
+                "product": product_id,
+                "unit_amount": unit_amount,
+                "currency": currency,
+                "recurring": {"interval": interval},
+            }
+
+            if lookup_key:
+                price_params["lookup_key"] = lookup_key
+                # Transfer lookup key if it already exists on another price
+                price_params["transfer_lookup_key"] = True
+
+            price = stripe.Price.create(**price_params)
+
+            logger.info(
+                f"Created Stripe price {price.id} for product {product_id}: "
+                f"{unit_amount} {currency}/{interval}"
+            )
+            return {
+                "id": price.id,
+                "product": price.product,
+                "unit_amount": price.unit_amount,
+                "currency": price.currency,
+                "recurring": {
+                    "interval": price.recurring.interval,
+                    "interval_count": price.recurring.interval_count,
+                },
+                "lookup_key": price.lookup_key,
+                "active": price.active,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error creating price: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating price: {e!s}")
+            return None
+
+    def list_products(
+        self,
+        active_only: bool = True,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List Stripe Products.
+
+        Args:
+            active_only: Only return active products.
+            limit: Maximum number of products to return.
+
+        Returns:
+            List of product dictionaries.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            params: dict[str, Any] = {"limit": limit}
+
+            if active_only:
+                params["active"] = True
+
+            products = stripe.Product.list(**params)
+
+            result = []
+            for product in products.data:
+                result.append(
+                    {
+                        "id": product.id,
+                        "name": product.name,
+                        "description": product.description,
+                        "metadata": dict(product.metadata) if product.metadata else {},
+                        "active": product.active,
+                    }
+                )
+
+            logger.info(f"Retrieved {len(result)} products from Stripe")
+            return result
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error listing products: {e!s}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error listing products: {e!s}")
+            return []
+
+    def get_product_by_metadata(
+        self,
+        key: str,
+        value: str,
+    ) -> dict[str, Any] | None:
+        """Find a product by metadata key-value pair.
+
+        Args:
+            key: Metadata key to search for.
+            value: Metadata value to match.
+
+        Returns:
+            Product data dictionary if found, None otherwise.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            # Stripe doesn't support direct metadata filtering in list,
+            # so we need to fetch all and filter
+            products = stripe.Product.list(limit=100, active=True)
+
+            for product in products.data:
+                if product.metadata and product.metadata.get(key) == value:
+                    logger.info(f"Found product {product.id} with {key}={value}")
+                    return {
+                        "id": product.id,
+                        "name": product.name,
+                        "description": product.description,
+                        "metadata": dict(product.metadata),
+                        "active": product.active,
+                    }
+
+            logger.info(f"No product found with metadata {key}={value}")
+            return None
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error searching products: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error searching products: {e!s}")
+            return None
+
+    def update_product(
+        self,
+        product_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Update an existing Stripe Product.
+
+        Args:
+            product_id: The Stripe Product ID to update.
+            name: New product name (optional).
+            description: New product description (optional).
+            metadata: New metadata to set (optional, replaces existing).
+
+        Returns:
+            Updated product data dictionary, or None on failure.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            update_params: dict[str, Any] = {}
+
+            if name is not None:
+                update_params["name"] = name
+            if description is not None:
+                update_params["description"] = description
+            if metadata is not None:
+                update_params["metadata"] = metadata
+
+            if not update_params:
+                logger.warning("No update parameters provided for product")
+                return None
+
+            product = stripe.Product.modify(product_id, **update_params)
+
+            logger.info(f"Updated Stripe product {product.id}")
+            return {
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "metadata": dict(product.metadata) if product.metadata else {},
+                "active": product.active,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error updating product: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error updating product: {e!s}")
+            return None

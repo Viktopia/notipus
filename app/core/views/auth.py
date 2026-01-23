@@ -11,7 +11,7 @@ from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 
 from ..models import UserProfile
 
@@ -33,18 +33,18 @@ def home(request: HttpRequest) -> HttpResponse:
     return HttpResponse("Welcome to the Django Project!")
 
 
-def landing(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
-    """Landing page for new users.
+def landing(request: HttpRequest) -> HttpResponseRedirect:
+    """Redirect to appropriate page based on authentication status.
 
     Args:
         request: The HTTP request object.
 
     Returns:
-        Landing page or redirect to dashboard if authenticated.
+        Redirect to dashboard if authenticated, otherwise to login page.
     """
     if request.user.is_authenticated:
         return redirect("core:dashboard")
-    return render(request, "core/landing.html.j2")
+    return redirect("account_login")
 
 
 def slack_auth(request: HttpRequest) -> HttpResponseRedirect:

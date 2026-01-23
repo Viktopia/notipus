@@ -201,6 +201,42 @@ uv run python app/manage.py migrate
 uv run python app/manage.py collectstatic
 ```
 
+### Stripe Plan Setup
+
+The `setup_stripe_plans` management command creates Products and Prices in Stripe for your subscription plans, then updates the database with the actual Stripe Price IDs.
+
+```bash
+# Preview what will be created (dry-run mode)
+uv run python app/manage.py setup_stripe_plans --dry-run
+
+# Create all plans in Stripe
+uv run python app/manage.py setup_stripe_plans
+
+# Sync a specific plan only
+uv run python app/manage.py setup_stripe_plans --plan basic
+
+# Force recreate prices (useful when updating pricing)
+uv run python app/manage.py setup_stripe_plans --force
+```
+
+**What it does:**
+
+- Creates a Stripe Product for each paid plan with metadata (plan name, limits, features)
+- Creates monthly and yearly recurring Prices with lookup keys (`{plan}_monthly`, `{plan}_yearly`)
+- Updates the `Plan` model with the returned Stripe Price IDs
+- Skips plans that already have valid Stripe prices (idempotent by default)
+- Reuses existing Products if found by metadata
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would be created without making changes |
+| `--force` | Recreate prices even if they already exist |
+| `--plan NAME` | Only sync a specific plan (e.g., `basic`, `pro`, `enterprise`) |
+
+**Note:** Free and trial plans (price = $0) are automatically skipped.
+
 ## Architecture
 
 The service is built with a modular, multi-tenant architecture that separates concerns and makes it easy to extend:
@@ -394,7 +430,17 @@ Redis is used for multiple purposes:
 - `STRIPE_CANCEL_URL`: Redirect URL after cancelled checkout (default: `http://localhost:8000/billing/checkout/cancel/`)
 - `STRIPE_PORTAL_RETURN_URL`: Return URL from Customer Portal (default: `http://localhost:8000/billing/`)
 
-**Legacy plan ID mapping (optional, prefer Stripe as source of truth):**
+**Setting up Stripe Plans:**
+
+After configuring your Stripe keys, run the setup command to create Products and Prices in Stripe:
+
+```bash
+uv run python app/manage.py setup_stripe_plans
+```
+
+This creates Stripe Products/Prices for your plans and updates the database with the Price IDs. See [Stripe Plan Setup](#stripe-plan-setup) for more details.
+
+**Legacy plan ID mapping (optional, prefer using the setup command above):**
 
 - `STRIPE_BASIC_PLAN`: Stripe price ID for basic plan
 - `STRIPE_PRO_PLAN`: Stripe price ID for pro plan
