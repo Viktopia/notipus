@@ -6,9 +6,9 @@ configuration, and disconnection.
 
 Modules:
     - slack: Slack OAuth for notifications
-    - stripe: Stripe Connect OAuth for payment webhooks
-    - shopify: Shopify webhook configuration
-    - chargify: Chargify/Maxio webhook configuration
+    - stripe: Stripe webhook configuration (manual setup)
+    - shopify: Shopify OAuth and webhook configuration
+    - chargify: Chargify/Maxio webhook configuration (manual setup)
 
 To add a new integration:
     1. Create a new module (e.g., `discord.py`)
@@ -46,8 +46,6 @@ from .slack import (
 from .stripe import (
     disconnect_stripe,
     integrate_stripe,
-    stripe_connect,
-    stripe_connect_callback,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,8 +64,6 @@ __all__ = [
     "configure_slack",
     # Stripe
     "integrate_stripe",
-    "stripe_connect",
-    "stripe_connect_callback",
     "disconnect_stripe",
     # Shopify
     "integrate_shopify",

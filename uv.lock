@@ -682,6 +682,7 @@ dependencies = [
     { name = "psycopg2" },
     { name = "redis" },
     { name = "requests" },
+    { name = "sentry-sdk", extra = ["django"] },
     { name = "shopifyapi" },
     { name = "stripe" },
     { name = "uvicorn", extra = ["standard"] },
@@ -712,6 +713,7 @@ requires-dist = [
     { name = "psycopg2", specifier = ">=2.9.10,<3.0.0" },
     { name = "redis", specifier = ">=5.2.0,<6.0.0" },
     { name = "requests", specifier = ">=2.32.3,<3.0.0" },
+    { name = "sentry-sdk", extras = ["django"], specifier = ">=2.50.0" },
     { name = "shopifyapi", specifier = ">=12.7.0,<13.0.0" },
     { name = "stripe", specifier = ">=12.3.0,<13.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
@@ -1094,6 +1096,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d4/70/cfcb693dc294e034c6fed837fa2ec98b27cc97a26db5d049345364f504bf/ruff-0.8.6-py3-none-win32.whl", hash = "sha256:e169ea1b9eae61c99b257dc83b9ee6c76f89042752cb2d83486a7d6e48e8f764", size = 8799729, upload-time = "2025-01-04T12:22:49.016Z" },
     { url = "https://files.pythonhosted.org/packages/60/22/ae6bcaa0edc83af42751bd193138bfb7598b2990939d3e40494d6c00698c/ruff-0.8.6-py3-none-win_amd64.whl", hash = "sha256:f1d70bef3d16fdc897ee290d7d20da3cbe4e26349f62e8a0274e7a3f4ce7a905", size = 9673857, upload-time = "2025-01-04T12:22:53.052Z" },
     { url = "https://files.pythonhosted.org/packages/91/f8/3765e053acd07baa055c96b2065c7fab91f911b3c076dfea71006666f5b0/ruff-0.8.6-py3-none-win_arm64.whl", hash = "sha256:7d7fc2377a04b6e04ffe588caad613d0c460eb2ecba4c0ccbbfe2bc973cbc162", size = 9149556, upload-time = "2025-01-04T12:22:57.173Z" },
+]
+
+[[package]]
+name = "sentry-sdk"
+version = "2.50.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/15/8a/3c4f53d32c21012e9870913544e56bfa9e931aede080779a0f177513f534/sentry_sdk-2.50.0.tar.gz", hash = "sha256:873437a989ee1b8b25579847bae8384515bf18cfed231b06c591b735c1781fe3", size = 401233, upload-time = "2026-01-20T12:53:16.244Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4e/5b/cbc2bb9569f03c8e15d928357e7e6179e5cfab45544a3bbac8aec4caf9be/sentry_sdk-2.50.0-py2.py3-none-any.whl", hash = "sha256:0ef0ed7168657ceb5a0be081f4102d92042a125462d1d1a29277992e344e749e", size = 424961, upload-time = "2026-01-20T12:53:14.826Z" },
+]
+
+[package.optional-dependencies]
+django = [
+    { name = "django" },
 ]
 
 [[package]]

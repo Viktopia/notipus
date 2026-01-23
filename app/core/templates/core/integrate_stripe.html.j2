@@ -1,0 +1,307 @@
+{% extends "core/base.html.j2" %}
+
+{% block title %}
+    Connect Stripe - Notipus
+{% endblock title %}
+
+{% block content %}
+    <div class="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+        <!-- Header -->
+        <div class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                <div class="md:flex md:items-center md:justify-between">
+                    <div class="flex-1 min-w-0">
+                        <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate flex items-center gap-3">
+                            <svg class="w-10 h-10" viewBox="0 0 24 24" fill="#635bff">
+                                <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z"/>
+                            </svg>
+                            Connect Stripe
+                        </h2>
+                        <p class="mt-1 text-lg text-gray-600">
+                            Receive payment and subscription webhooks from your Stripe account
+                        </p>
+                    </div>
+                    <div class="mt-4 flex md:mt-0 md:ml-4">
+                        <a href="{% url 'core:integrations' %}"
+                           class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200">
+                            <i class="ti ti-arrow-left mr-2"></i>
+                            Back to Integrations
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content -->
+        <div class="max-w-4xl mx-auto py-8 sm:px-6 lg:px-8">
+            {% if existing_integration %}
+                <!-- Already Connected -->
+                <div class="bg-green-50 border border-green-200 rounded-xl p-6 mb-8">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-green-400"
+                                 fill="currentColor"
+                                 viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-green-800">Stripe is connected!</h3>
+                            <div class="mt-2 text-sm text-green-700">
+                                <p>Your Stripe account is successfully connected. You can update your webhook signing secret below if needed.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Integration Setup -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+                <div class="flex items-center mb-6">
+                    <div class="h-12 w-12 bg-[#635bff]/10 rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="#635bff">
+                            <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-xl font-semibold text-gray-900">Stripe Integration Setup</h3>
+                        <p class="text-gray-600">Configure webhook notifications from your Stripe account</p>
+                    </div>
+                </div>
+
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+
+                    <!-- Webhook Secret -->
+                    <div>
+                        <label for="webhook_secret" class="block text-sm font-medium text-gray-700">Webhook Signing Secret</label>
+                        <div class="mt-1">
+                            <input type="password"
+                                   name="webhook_secret"
+                                   id="webhook_secret"
+                                   value="{% if existing_integration %}{{ existing_integration.webhook_secret }}{% endif %}"
+                                   class="shadow-sm focus:ring-[#635bff] focus:border-[#635bff] block w-full sm:text-sm border-gray-300 rounded-md"
+                                   placeholder="whsec_..."
+                                   required>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-500">
+                            You'll find this in your Stripe Dashboard under Developers &rarr; Webhooks &rarr; your endpoint &rarr; Signing secret
+                        </p>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="flex justify-end">
+                        <button type="submit"
+                                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-[#635bff] hover:bg-[#5851db] transition-all duration-200">
+                            <svg class="mr-2 h-5 w-5"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
+                                </path>
+                            </svg>
+                            {% if existing_integration %}
+                                Update
+                            {% else %}
+                                Connect
+                            {% endif %}
+                            Stripe
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Webhook URL Configuration -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="ti ti-webhook text-[#635bff]"></i>
+                    Webhook Configuration
+                </h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Webhook Endpoint URL</label>
+                        <div class="flex">
+                            <input type="text"
+                                   id="webhook-url"
+                                   value="{{ webhook_url }}"
+                                   readonly
+                                   class="flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-l-lg focus:ring-[#635bff] focus:border-[#635bff] block w-full p-2.5 font-mono">
+                            <button onclick="copyToClipboard('{{ webhook_url }}')"
+                                    class="inline-flex items-center px-3 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 focus:ring-2 focus:ring-[#635bff]">
+                                <i class="ti ti-copy mr-1"></i> Copy
+                            </button>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-500">Add this URL as your webhook endpoint in the Stripe Dashboard.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Webhook Events -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="ti ti-list-check text-[#635bff]"></i>
+                    Events to Enable
+                </h3>
+                <p class="text-sm text-gray-600 mb-4">When creating your webhook endpoint in Stripe, select these events:</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {% for event in webhook_events %}
+                        <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                            <i class="ti ti-check text-green-500"></i>
+                            <code class="text-sm text-gray-700">{{ event }}</code>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Setup Instructions -->
+            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="ti ti-list-numbers text-[#635bff]"></i>
+                    Setup Instructions
+                </h3>
+
+                <div class="space-y-4">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
+                                1
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Go to your Stripe Dashboard</h4>
+                            <p class="text-sm text-gray-500">
+                                Navigate to <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener" class="text-[#635bff] hover:underline">Developers &rarr; Webhooks</a> in your Stripe Dashboard
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
+                                2
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Add a new endpoint</h4>
+                            <p class="text-sm text-gray-500">
+                                Click "Add endpoint" and paste the webhook URL from above
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
+                                3
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Select events</h4>
+                            <p class="text-sm text-gray-500">
+                                Choose the events listed above, or select "receive all events" if you prefer
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
+                                4
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Copy the signing secret</h4>
+                            <p class="text-sm text-gray-500">
+                                After creating the endpoint, click on it to reveal the "Signing secret" (starts with <code class="bg-gray-100 px-1 rounded">whsec_</code>). Copy and paste it in the form above.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
+                                5
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Test the connection</h4>
+                            <p class="text-sm text-gray-500">
+                                Use the "Send test webhook" feature in Stripe to verify the integration is working
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Benefits -->
+            <div class="mt-8 bg-gradient-to-r from-[#635bff]/5 to-indigo-50 rounded-xl p-6 border border-[#635bff]/20">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <i class="ti ti-sparkles text-[#635bff]"></i>
+                    What you'll get with Stripe integration:
+                </h3>
+                <ul class="space-y-2 text-gray-700">
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-[#635bff] mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Real-time notifications for subscription changes
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-[#635bff] mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Instant alerts for successful and failed payments
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-[#635bff] mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Trial ending reminders
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-[#635bff] mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Checkout completion notifications
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="h-4 w-4 text-[#635bff] mr-2"
+                             fill="currentColor"
+                             viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                            </path>
+                        </svg>
+                        Intelligent notifications to your preferred channels
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript for copy to clipboard -->
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                NotipusUI.toast('Webhook URL copied to clipboard!', 'success');
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+                NotipusUI.toast('Failed to copy to clipboard', 'error');
+            });
+        }
+    </script>
+{% endblock content %}

@@ -116,18 +116,25 @@
                                     <div class="flex-shrink-0">
                                         {% if integration.connected %}
                                             {% if integration.id == "stripe_customer" %}
-                                                <form method="post"
-                                                      action="{% url 'core:disconnect_stripe' %}"
-                                                      class="inline"
-                                                      id="disconnect-stripe-form">
-                                                    {% csrf_token %}
-                                                    <button type="button"
-                                                            onclick="confirmDisconnectStripe()"
-                                                            class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                                                        <i class="ti ti-unlink"></i>
-                                                        Disconnect
-                                                    </button>
-                                                </form>
+                                                <div class="flex flex-col items-end gap-2">
+                                                    <a href="{% url 'core:integrate_stripe' %}"
+                                                       class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                                                        <i class="ti ti-settings"></i>
+                                                        Configure
+                                                    </a>
+                                                    <form method="post"
+                                                          action="{% url 'core:disconnect_stripe' %}"
+                                                          class="inline"
+                                                          id="disconnect-stripe-form">
+                                                        {% csrf_token %}
+                                                        <button type="button"
+                                                                onclick="confirmDisconnectStripe()"
+                                                                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                                                            <i class="ti ti-unlink"></i>
+                                                            Disconnect
+                                                        </button>
+                                                    </form>
+                                                </div>
                                             {% elif integration.id == "shopify" %}
                                                 <form method="post"
                                                       action="{% url 'core:disconnect_shopify' %}"
@@ -141,6 +148,12 @@
                                                         Disconnect
                                                     </button>
                                                 </form>
+                                            {% elif integration.id == "chargify" %}
+                                                <a href="{% url 'core:integrate_chargify' %}"
+                                                   class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                                                    <i class="ti ti-settings"></i>
+                                                    Configure
+                                                </a>
                                             {% else %}
                                                 <button type="button"
                                                         class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
@@ -499,7 +512,7 @@
         async function confirmDisconnectStripe() {
             const confirmed = await NotipusUI.confirmDisconnect(
                 'Stripe',
-                'You will stop receiving payment notifications. The webhook endpoint will be removed from your Stripe account.'
+                'You will stop receiving payment notifications. Remember to remove the webhook from your Stripe Dashboard.'
             );
             if (confirmed) {
                 document.getElementById('disconnect-stripe-form').submit();

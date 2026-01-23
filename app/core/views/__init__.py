@@ -45,8 +45,6 @@ from .integrations import (
     shopify_connect_callback,
     slack_connect,
     slack_connect_callback,
-    stripe_connect,
-    stripe_connect_callback,
     test_slack,
 )
 from .members import (
@@ -90,8 +88,6 @@ __all__ = [
     "integrate_stripe",
     "slack_connect",
     "slack_connect_callback",
-    "stripe_connect",
-    "stripe_connect_callback",
     "shopify_connect",
     "shopify_connect_callback",
     "disconnect_slack",

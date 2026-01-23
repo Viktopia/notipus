@@ -15,7 +15,15 @@ import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import sentry_sdk
 from django.utils.functional import SimpleLazyObject
+
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN", ""),
+    # Add data like request headers and IP for users, see
+    # https://docs.sentry.io/platforms/python/data-management/data-collected/
+    send_default_pii=True,
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

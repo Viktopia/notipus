@@ -8,9 +8,25 @@ from typing import Any, Generator
 from unittest.mock import Mock, patch
 
 import pytest
+import sentry_sdk
 from django.http import HttpRequest
 from django.test import Client
 from django.test.client import RequestFactory
+
+
+@pytest.fixture(autouse=True)
+def disable_sentry() -> Generator[None, None, None]:
+    """Disable Sentry during tests to prevent sending test errors.
+
+    This fixture runs automatically for all tests.
+
+    Yields:
+        None
+    """
+    # Disable Sentry by reinitializing with empty DSN
+    sentry_sdk.init(dsn="")
+    yield
+
 
 # Test organization UUID for multi-tenant webhook endpoints
 TEST_ORG_UUID = "12345678-1234-5678-1234-567812345678"

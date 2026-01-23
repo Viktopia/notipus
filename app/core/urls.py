@@ -90,12 +90,6 @@ urlpatterns = [
         views.configure_slack,
         name="configure_slack",
     ),
-    path("api/connect/stripe/", views.stripe_connect, name="stripe_connect"),
-    path(
-        "api/connect/stripe/callback/",
-        views.stripe_connect_callback,
-        name="stripe_connect_callback",
-    ),
     path(
         "api/disconnect/stripe/",
         views.disconnect_stripe,

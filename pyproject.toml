@@ -17,6 +17,7 @@ dependencies = [
     "webauthn>=2.6.0,<3.0.0",
     "redis>=5.2.0,<6.0.0",
     "whitenoise>=6.11.0",
+    "sentry-sdk[django]>=2.50.0",
 ]
 
 [dependency-groups]
