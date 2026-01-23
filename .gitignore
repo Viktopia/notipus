@@ -172,3 +172,4 @@ app/static/tabler-fonts/
 
 # Django collectstatic output
 app/staticfiles/
+shopify.app.toml

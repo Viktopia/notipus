@@ -81,12 +81,16 @@ def create_workspace(request: HttpRequest) -> HttpResponse | HttpResponseRedirec
                 role="owner",
             )
 
-            # Also create user profile for backward compatibility (slack_user_id)
-            UserProfile.objects.create(
+            # Also create/update user profile for backward compatibility (slack_user_id)
+            # Use get_or_create to handle users who already have a profile from SSO
+            user_profile, created = UserProfile.objects.get_or_create(
                 user=request.user,
-                workspace=workspace,
-                slack_user_id="",  # Will be set when connecting Slack
+                defaults={"workspace": workspace, "slack_user_id": None},
             )
+            if not created:
+                # Update existing profile's workspace
+                user_profile.workspace = workspace
+                user_profile.save()
 
             messages.success(request, f"Workspace '{name}' created successfully!")
             return redirect("core:dashboard")

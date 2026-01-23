@@ -36,11 +36,11 @@ COPY postcss.config.js /app/
 COPY ./app/ .
 
 # Build frontend assets
-RUN mkdir -p static/dist static/webfonts static/tabler-fonts && \
+RUN mkdir -p static/dist/fonts static/webfonts && \
     cp -r /app/node_modules/@fortawesome/fontawesome-free/webfonts/* static/webfonts/ && \
-    cp /app/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.woff2 static/tabler-fonts/ && \
-    cp /app/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.woff static/tabler-fonts/ && \
-    cp /app/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.ttf static/tabler-fonts/ && \
+    cp /app/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.woff2 static/dist/fonts/ && \
+    cp /app/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.woff static/dist/fonts/ && \
+    cp /app/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.ttf static/dist/fonts/ && \
     bun x tailwindcss -i /app/src/css/main.css -o static/dist/main.css --minify
 
 # Collect static files

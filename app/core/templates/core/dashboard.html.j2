@@ -12,7 +12,7 @@
             <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                 <div class="md:flex md:items-center md:justify-between">
                     <div class="flex-1 min-w-0">
-                        <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate">Welcome back! 👋</h2>
+                        <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate flex items-center gap-2">Welcome back! <i class="ti ti-hand-wave text-primary-500"></i></h2>
                         <p class="mt-1 text-lg text-gray-600">Ready to manage your webhooks</p>
                     </div>
                     <div class="mt-4 flex md:mt-0 md:ml-4 space-x-3">
@@ -73,7 +73,7 @@
                         </div>
                         <div class="ml-5">
                             <div class="flex items-center">
-                                <h3 class="text-lg font-semibold text-primary-900">Welcome to Notipus! 🚀</h3>
+                                <h3 class="text-lg font-semibold text-primary-900 flex items-center gap-2">Welcome to Notipus! <i class="ti ti-rocket text-primary-600"></i></h3>
                                 <span class="ml-3 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-800 border border-primary-200">
                                     Getting Started
                                 </span>
@@ -115,8 +115,8 @@
                                 <div class="ml-4">
                                     <h2 class="text-xl font-bold text-gray-900">{{ organization.name }}</h2>
                                     <div class="flex items-center space-x-4 mt-1">
-                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gradient-to-r from-primary-100 to-primary-200 text-primary-800 border border-primary-200">
-                                            ✨ {{ organization.subscription_plan|title }} Plan
+                                        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gradient-to-r from-primary-100 to-primary-200 text-primary-800 border border-primary-200">
+                                            <i class="ti ti-sparkles"></i> {{ organization.subscription_plan|title }} Plan
                                         </span>
                                         <span class="flex items-center text-sm text-gray-500">
                                             <svg class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400"
@@ -195,20 +195,20 @@
                             <div class="flex items-center space-x-4">
                                 <!-- Status Badge -->
                                 {% if usage_percentage >= 90 %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 border border-red-200">
-                                        ⚠️ Near Limit
+                                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 border border-red-200">
+                                        <i class="ti ti-alert-triangle"></i> Near Limit
                                     </span>
                                 {% elif usage_percentage >= 75 %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-                                        📊 High Usage
+                                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                        <i class="ti ti-chart-bar"></i> High Usage
                                     </span>
                                 {% elif usage_percentage >= 50 %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                                        📈 On Track
+                                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                        <i class="ti ti-trending-up"></i> On Track
                                     </span>
                                 {% else %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
-                                        ✅ Looking Good
+                                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
+                                        <i class="ti ti-circle-check"></i> Looking Good
                                     </span>
                                 {% endif %}
 
@@ -334,11 +334,11 @@
                                     <div class="ml-4 flex-1">
                                         <div class="flex items-center justify-between">
                                             <div>
-                                                <h4 class="text-sm font-medium text-gray-900">
+                                                <h4 class="text-sm font-medium text-gray-900 flex items-center gap-1">
                                                     {% if activity.type == "payment" %}
-                                                        💳 Payment {{ activity.status|title }}
+                                                        <i class="ti ti-credit-card"></i> Payment {{ activity.status|title }}
                                                     {% else %}
-                                                        📦 Order {{ activity.status|title }}
+                                                        <i class="ti ti-package"></i> Order {{ activity.status|title }}
                                                     {% endif %}
                                                 </h4>
                                                 <p class="text-sm text-gray-500">
@@ -352,16 +352,16 @@
                                             <div class="text-right">
                                                 <div class="text-xs text-gray-400">{{ activity.processed_at|date:"M j, H:i" }}</div>
                                                 {% if activity.status == "completed" or activity.status == "paid" %}
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                        ✅ Success
+                                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        <i class="ti ti-circle-check"></i> Success
                                                     </span>
                                                 {% elif activity.status == "failed" or activity.status == "declined" %}
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                                        ❌ Failed
+                                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                        <i class="ti ti-circle-x"></i> Failed
                                                     </span>
                                                 {% else %}
-                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                        ⏳ {{ activity.status|title }}
+                                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                        <i class="ti ti-clock"></i> {{ activity.status|title }}
                                                     </span>
                                                 {% endif %}
                                             </div>

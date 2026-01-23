@@ -544,7 +544,7 @@ class UserProfile(models.Model):
     """
 
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    slack_user_id = models.CharField(max_length=255, unique=True)
+    slack_user_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
 
     class Meta:

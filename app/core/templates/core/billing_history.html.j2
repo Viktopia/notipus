@@ -12,7 +12,7 @@
             <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                 <div class="md:flex md:items-center md:justify-between">
                     <div class="flex-1 min-w-0">
-                        <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate">📄 Billing History</h2>
+                        <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl sm:truncate flex items-center gap-3"><i class="ti ti-file-invoice text-primary-600"></i> Billing History</h2>
                         <p class="mt-1 text-lg text-gray-600">View your invoices, payments, and billing activity</p>
                     </div>
                     <div class="mt-4 flex md:mt-0 md:ml-4">
@@ -85,16 +85,16 @@
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${{ invoice.amount|floatformat:2|intcomma }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             {% if invoice.status == "paid" %}
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    ✅ Paid
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    <i class="ti ti-circle-check"></i> Paid
                                                 </span>
                                             {% elif invoice.status == "pending" %}
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                    ⏳ Pending
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                    <i class="ti ti-clock"></i> Pending
                                                 </span>
                                             {% elif invoice.status == "failed" %}
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                                    ❌ Failed
+                                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                    <i class="ti ti-circle-x"></i> Failed
                                                 </span>
                                             {% else %}
                                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
@@ -132,14 +132,14 @@
                     </div>
                     <h3 class="text-xl font-semibold text-gray-900 mb-2">No billing history yet</h3>
                     <p class="text-gray-600 mb-6">
-                        {% if organization.subscription_status == "trial" %}
+                        {% if workspace.subscription_status == "trial" %}
                             You're currently on a free trial. Your billing history will appear here once you upgrade to a paid plan.
                         {% else %}
                             Your invoices and payment history will appear here.
                         {% endif %}
                     </p>
 
-                    {% if organization.subscription_status == "trial" %}
+                    {% if workspace.subscription_status == "trial" %}
                         <a href="{% url 'core:upgrade_plan' %}"
                            class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all duration-200">
                             <svg class="mr-2 h-5 w-5"
@@ -191,14 +191,14 @@
                         <div class="ml-3">
                             <h3 class="text-lg font-semibold text-gray-900">Next Payment</h3>
                             <p class="text-2xl font-bold text-gray-900">
-                                {% if organization.subscription_status == "trial" %}
+                                {% if workspace.subscription_status == "trial" %}
                                     {{ trial_days_remaining }}
                                 {% else %}
                                     {{ rate_limit_info.reset_time|date:"j" }}
                                 {% endif %}
                             </p>
                             <p class="text-sm text-gray-500">
-                                {% if organization.subscription_status == "trial" %}
+                                {% if workspace.subscription_status == "trial" %}
                                     days until trial ends
                                 {% else %}
                                     days until billing
@@ -224,9 +224,8 @@
                             <p class="mb-2">If you have questions about your bill or need assistance with payments, we're here to help.</p>
                             <div class="flex flex-wrap gap-4">
                                 <a href="mailto:billing@notipus.com"
-                                   class="text-blue-800 hover:text-blue-900 font-medium">📧 Email Support</a>
-                                <a href="#" class="text-blue-800 hover:text-blue-900 font-medium">📞 Call Us</a>
-                                <a href="#" class="text-blue-800 hover:text-blue-900 font-medium">💬 Live Chat</a>
+                                   class="text-blue-800 hover:text-blue-900 font-medium inline-flex items-center gap-1"><i class="ti ti-mail"></i> Email Support</a>
+                                <a href="#" class="text-blue-800 hover:text-blue-900 font-medium inline-flex items-center gap-1"><i class="ti ti-message-circle"></i> Live Chat</a>
                             </div>
                         </div>
                     </div>

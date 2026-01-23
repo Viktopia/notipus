@@ -4,7 +4,7 @@ These tests ensure that templates render correctly without errors,
 especially custom error templates (404, 500) and key application pages.
 """
 
-from core.models import Plan, UserProfile, Workspace
+from core.models import Plan, UserProfile, Workspace, WorkspaceMember
 from core.views import custom_404, custom_500
 from django.contrib.auth.models import User
 from django.template.loader import get_template, render_to_string
@@ -188,6 +188,14 @@ class BillingTemplateTests(TestCase):
             user=self.user,
             slack_user_id="U789012",
             workspace=self.workspace,
+        )
+
+        # Create WorkspaceMember to associate user with workspace
+        self.workspace_member = WorkspaceMember.objects.create(
+            user=self.user,
+            workspace=self.workspace,
+            role="owner",
+            is_active=True,
         )
 
         # Get or create a plan (plan may already exist from migrations)

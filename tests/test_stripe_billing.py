@@ -28,20 +28,22 @@ class TestStripeAPICheckout:
         return StripeAPI()
 
     @pytest.fixture
-    def mock_organization(self) -> MagicMock:
-        """Create a mock organization for testing.
+    def mock_workspace(self) -> MagicMock:
+        """Create a mock workspace for testing.
 
         Returns:
-            Mock organization with standard attributes.
+            Mock workspace with standard attributes.
         """
-        org = MagicMock()
-        org.id = 1
-        org.uuid = "test-uuid-1234"
-        org.name = "Test Organization"
-        org.stripe_customer_id = "cus_test123"
-        org.users.exists.return_value = True
-        org.users.first.return_value = MagicMock(email="test@example.com")
-        return org
+        workspace = MagicMock()
+        workspace.id = 1
+        workspace.uuid = "test-uuid-1234"
+        workspace.name = "Test Workspace"
+        workspace.stripe_customer_id = "cus_test123"
+        workspace.members.exists.return_value = True
+        first_member = MagicMock()
+        first_member.user = MagicMock(email="test@example.com")
+        workspace.members.first.return_value = first_member
+        return workspace
 
     @patch("core.services.stripe.stripe.checkout.Session.create")
     def test_create_checkout_session_success(
@@ -301,62 +303,64 @@ class TestStripeAPIGetOrCreateCustomer:
         return StripeAPI()
 
     @pytest.fixture
-    def mock_organization(self) -> MagicMock:
-        """Create a mock organization for testing.
+    def mock_workspace(self) -> MagicMock:
+        """Create a mock workspace for testing.
 
         Returns:
-            Mock organization with standard attributes.
+            Mock workspace with standard attributes.
         """
-        org = MagicMock()
-        org.id = 1
-        org.uuid = "test-uuid-1234"
-        org.name = "Test Organization"
-        org.stripe_customer_id = ""
-        org.users.exists.return_value = True
-        org.users.first.return_value = MagicMock(email="test@example.com")
-        return org
+        workspace = MagicMock()
+        workspace.id = 1
+        workspace.uuid = "test-uuid-1234"
+        workspace.name = "Test Workspace"
+        workspace.stripe_customer_id = ""
+        workspace.members.exists.return_value = True
+        first_member = MagicMock()
+        first_member.user = MagicMock(email="test@example.com")
+        workspace.members.first.return_value = first_member
+        return workspace
 
     @patch("core.services.stripe.stripe.Customer.create")
     def test_creates_new_customer_when_none_exists(
         self,
         mock_create: MagicMock,
         stripe_api: StripeAPI,
-        mock_organization: MagicMock,
+        mock_workspace: MagicMock,
     ) -> None:
-        """Test customer creation when organization has no Stripe customer.
+        """Test customer creation when workspace has no Stripe customer.
 
         Args:
             mock_create: Mock for Stripe customer create.
             stripe_api: StripeAPI fixture.
-            mock_organization: Mock organization fixture.
+            mock_workspace: Mock workspace fixture.
         """
         mock_customer = Mock()
         mock_customer.id = "cus_new123"
         mock_customer.to_dict.return_value = {"id": "cus_new123"}
         mock_create.return_value = mock_customer
 
-        result = stripe_api.get_or_create_customer(mock_organization)
+        result = stripe_api.get_or_create_customer(mock_workspace)
 
         assert result is not None
         assert result["id"] == "cus_new123"
         mock_create.assert_called_once()
-        mock_organization.save.assert_called_once()
+        mock_workspace.save.assert_called_once()
 
     @patch("core.services.stripe.stripe.Customer.retrieve")
     def test_retrieves_existing_customer(
         self,
         mock_retrieve: MagicMock,
         stripe_api: StripeAPI,
-        mock_organization: MagicMock,
+        mock_workspace: MagicMock,
     ) -> None:
         """Test retrieval of existing Stripe customer.
 
         Args:
             mock_retrieve: Mock for Stripe customer retrieve.
             stripe_api: StripeAPI fixture.
-            mock_organization: Mock organization fixture.
+            mock_workspace: Mock workspace fixture.
         """
-        mock_organization.stripe_customer_id = "cus_existing123"
+        mock_workspace.stripe_customer_id = "cus_existing123"
 
         mock_customer = Mock()
         mock_customer.id = "cus_existing123"
@@ -364,7 +368,7 @@ class TestStripeAPIGetOrCreateCustomer:
         mock_customer.to_dict.return_value = {"id": "cus_existing123"}
         mock_retrieve.return_value = mock_customer
 
-        result = stripe_api.get_or_create_customer(mock_organization)
+        result = stripe_api.get_or_create_customer(mock_workspace)
 
         assert result is not None
         assert result["id"] == "cus_existing123"
@@ -388,7 +392,7 @@ class TestBillingServiceWebhooks:
         with patch.object(
             BillingService, "_get_customer_id", return_value="cus_test123"
         ):
-            with patch("core.models.Organization.objects.filter") as mock_filter:
+            with patch("core.models.Workspace.objects.filter") as mock_filter:
                 mock_filter.return_value.update.return_value = 1
                 # This should not raise
                 BillingService.handle_checkout_completed(session_data)
@@ -411,8 +415,9 @@ class TestBillingServiceWebhooks:
             "trial_end": 1704067200,
         }
 
-        with patch("core.models.Organization.objects.filter") as mock_filter:
-            mock_filter.return_value.first.return_value = MagicMock(name="Test Org")
+        with patch("core.models.Workspace.objects.filter") as mock_filter:
+            mock_ws = MagicMock(name="Test Workspace")
+            mock_filter.return_value.first.return_value = mock_ws
             # Should not raise
             BillingService.handle_trial_ending(subscription_data)
 
@@ -423,7 +428,7 @@ class TestBillingServiceWebhooks:
             "period_end": 1704067200,
         }
 
-        with patch("core.models.Organization.objects.filter") as mock_filter:
+        with patch("core.models.Workspace.objects.filter") as mock_filter:
             mock_filter.return_value.update.return_value = 1
             BillingService.handle_invoice_paid(invoice_data)
             mock_filter.assert_called_once_with(stripe_customer_id="cus_test123")
@@ -435,8 +440,9 @@ class TestBillingServiceWebhooks:
             "hosted_invoice_url": "https://invoice.stripe.com/i/test123",
         }
 
-        with patch("core.models.Organization.objects.filter") as mock_filter:
-            mock_filter.return_value.first.return_value = MagicMock(name="Test Org")
+        with patch("core.models.Workspace.objects.filter") as mock_filter:
+            mock_ws = MagicMock(name="Test Workspace")
+            mock_filter.return_value.first.return_value = mock_ws
             # Should not raise
             BillingService.handle_payment_action_required(invoice_data)
 
