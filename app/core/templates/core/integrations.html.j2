@@ -158,6 +158,25 @@
                                                         Disconnect
                                                     </button>
                                                 </form>
+                                            {% elif integration.id == "shopify" %}
+                                                <form method="post"
+                                                      action="{% url 'core:disconnect_shopify' %}"
+                                                      class="inline"
+                                                      id="disconnect-shopify-form">
+                                                    {% csrf_token %}
+                                                    <button type="button"
+                                                            onclick="confirmDisconnectShopify()"
+                                                            class="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-red-700 bg-white hover:bg-red-50 transition-colors">
+                                                        <svg class="w-4 h-4 mr-2"
+                                                             fill="none"
+                                                             stroke="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                                                            </path>
+                                                        </svg>
+                                                        Disconnect
+                                                    </button>
+                                                </form>
                                             {% else %}
                                                 <button type="button"
                                                         class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
@@ -601,6 +620,16 @@
             );
             if (confirmed) {
                 document.getElementById('disconnect-stripe-form').submit();
+            }
+        }
+
+        async function confirmDisconnectShopify() {
+            const confirmed = await NotipusUI.confirmDisconnect(
+                'Shopify',
+                'You will stop receiving order notifications. The webhook subscriptions will be removed from your Shopify store.'
+            );
+            if (confirmed) {
+                document.getElementById('disconnect-shopify-form').submit();
             }
         }
 

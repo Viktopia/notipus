@@ -6,7 +6,7 @@
 
 {% block content %}
     <div class="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div class="max-w-4xl mx-auto">
+        <div class="max-w-2xl mx-auto">
             <!-- Header -->
             <div class="mb-8">
                 <div class="flex items-center">
@@ -22,7 +22,7 @@
                         </div>
                         <div>
                             <h1 class="text-3xl font-bold text-gray-900">Connect Shopify</h1>
-                            <p class="mt-2 text-sm text-gray-600">Receive webhooks from your Shopify store</p>
+                            <p class="mt-2 text-sm text-gray-600">Receive order and customer notifications from your Shopify store</p>
                         </div>
                     </div>
                 </div>
@@ -31,12 +31,17 @@
             <!-- Messages -->
             {% if messages %}
                 {% for message in messages %}
-                    <div class="mb-6 p-4 rounded-md {% if message.tags == 'error' %}bg-red-50 border border-red-200{% else %}bg-green-50 border border-green-200{% endif %}">
+                    <div class="mb-6 p-4 rounded-md {% if message.tags == 'error' %}bg-red-50 border border-red-200{% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-200{% else %}bg-green-50 border border-green-200{% endif %}">
                         <div class="flex">
                             <div class="flex-shrink-0">
                                 {% if message.tags == 'error' %}
                                     <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd">
+                                        </path>
+                                    </svg>
+                                {% elif message.tags == 'warning' %}
+                                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd">
                                         </path>
                                     </svg>
                                 {% else %}
@@ -49,239 +54,275 @@
                                 {% endif %}
                             </div>
                             <div class="ml-3">
-                                <p class="text-sm {% if message.tags == 'error' %}text-red-700{% else %}text-green-700{% endif %}">{{ message }}</p>
+                                <p class="text-sm {% if message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-yellow-700{% else %}text-green-700{% endif %}">{{ message }}</p>
                             </div>
                         </div>
                     </div>
                 {% endfor %}
             {% endif %}
 
-            <!-- What This Integration Does -->
-            <div class="bg-white shadow rounded-lg mb-8">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h2 class="text-lg font-medium text-gray-900">What This Integration Does</h2>
-                </div>
-                <div class="px-6 py-6">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="text-center">
-                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                                <svg class="w-6 h-6 text-blue-600"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                </svg>
-                            </div>
-                            <h3 class="text-sm font-medium text-gray-900">Real-time Notifications</h3>
-                            <p class="mt-1 text-sm text-gray-500">Get instant alerts when customers place orders</p>
-                        </div>
-                        <div class="text-center">
-                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                                <svg class="w-6 h-6 text-green-600"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+            {% if integration %}
+                <!-- Connected State -->
+                <div class="bg-white shadow rounded-lg mb-8">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-medium text-gray-900">Connection Status</h2>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd">
                                     </path>
                                 </svg>
-                            </div>
-                            <h3 class="text-sm font-medium text-gray-900">Order Analytics</h3>
-                            <p class="mt-1 text-sm text-gray-500">Track sales performance and customer behavior</p>
+                                Connected
+                            </span>
                         </div>
-                        <div class="text-center">
-                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                                <svg class="w-6 h-6 text-purple-600"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4">
+                    </div>
+                    <div class="px-6 py-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">Connected Store</p>
+                                <p class="text-sm text-gray-500">{{ integration.integration_settings.shop_domain }}</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <a href="https://{{ integration.integration_settings.shop_domain }}/admin"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                    </svg>
+                                    View in Shopify
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Webhook Info -->
+                        <div class="mt-6 pt-6 border-t border-gray-200">
+                            <h3 class="text-sm font-medium text-gray-900 mb-3">Webhook Configuration</h3>
+                            <div class="bg-gray-50 rounded-md p-4">
+                                <div class="flex items-center text-sm text-gray-600">
+                                    <svg class="w-4 h-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd">
+                                        </path>
+                                    </svg>
+                                    Webhooks automatically configured for order and customer events
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Disconnect Button -->
+                        <div class="mt-6 pt-6 border-t border-gray-200">
+                            <form method="post"
+                                  action="{% url 'core:disconnect_shopify' %}"
+                                  id="disconnect-shopify-form">
+                                {% csrf_token %}
+                                <button type="button"
+                                        onclick="confirmDisconnectShopify()"
+                                        class="inline-flex items-center px-4 py-2 border border-red-300 shadow-sm text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                                        </path>
+                                    </svg>
+                                    Disconnect Shopify
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+            {% elif not shopify_configured %}
+                <!-- Not Configured State -->
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">Shopify Integration Not Configured</h3>
+                            <div class="mt-2 text-sm text-yellow-700">
+                                <p>The Shopify integration has not been configured for this application. Please contact support for assistance.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            {% else %}
+                <!-- Connect Form -->
+                <div class="bg-white shadow rounded-lg mb-8">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">Connect Your Store</h2>
+                        <p class="mt-1 text-sm text-gray-500">Enter your Shopify store URL to get started</p>
+                    </div>
+                    <div class="px-6 py-6">
+                        <form method="post" action="{% url 'core:shopify_connect' %}" id="shopify-connect-form">
+                            {% csrf_token %}
+                            <div class="mb-6">
+                                <label for="shop_url" class="block text-sm font-medium text-gray-700 mb-2">
+                                    Store URL
+                                </label>
+                                <div class="mt-1 flex rounded-md shadow-sm">
+                                    <input type="text"
+                                           name="shop_url"
+                                           id="shop_url"
+                                           class="flex-1 min-w-0 block w-full px-3 py-3 rounded-l-md border border-gray-300 focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                                           placeholder="mystore"
+                                           required
+                                           pattern="[a-zA-Z0-9][a-zA-Z0-9\-_]*"
+                                           title="Enter your store name (letters, numbers, hyphens, and underscores only)">
+                                    <span class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
+                                        .myshopify.com
+                                    </span>
+                                </div>
+                                <p class="mt-2 text-sm text-gray-500">
+                                    Enter your Shopify store name. For example, if your store URL is
+                                    <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mystore.myshopify.com</code>,
+                                    enter <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mystore</code>.
+                                </p>
+                            </div>
+                            <button type="submit"
+                                    class="w-full inline-flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                </svg>
+                                Connect to Shopify
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- What This Integration Does -->
+                <div class="bg-white shadow rounded-lg mb-8">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">What This Integration Does</h2>
+                    </div>
+                    <div class="px-6 py-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                                    <svg class="w-6 h-6 text-blue-600"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="text-sm font-medium text-gray-900">Real-time Notifications</h3>
+                                <p class="mt-1 text-sm text-gray-500">Get instant alerts when customers place orders</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                                    <svg class="w-6 h-6 text-green-600"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="text-sm font-medium text-gray-900">Automatic Setup</h3>
+                                <p class="mt-1 text-sm text-gray-500">Webhooks are configured automatically for you</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                                    <svg class="w-6 h-6 text-purple-600"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="text-sm font-medium text-gray-900">Order Tracking</h3>
+                                <p class="mt-1 text-sm text-gray-500">Track orders, payments, and fulfillment status</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Events We Track -->
+                <div class="bg-white shadow rounded-lg mb-8">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">Events We Track</h2>
+                        <p class="mt-1 text-sm text-gray-500">Automatically receive notifications for these events</p>
+                    </div>
+                    <div class="px-6 py-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-green-500 mr-3"
+                                     fill="currentColor"
+                                     viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
                                     </path>
                                 </svg>
+                                <span class="text-sm text-gray-700">New orders created</span>
                             </div>
-                            <h3 class="text-sm font-medium text-gray-900">Automation Ready</h3>
-                            <p class="mt-1 text-sm text-gray-500">Trigger workflows based on store events</p>
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-green-500 mr-3"
+                                     fill="currentColor"
+                                     viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                                    </path>
+                                </svg>
+                                <span class="text-sm text-gray-700">Orders paid</span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-green-500 mr-3"
+                                     fill="currentColor"
+                                     viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                                    </path>
+                                </svg>
+                                <span class="text-sm text-gray-700">Orders fulfilled</span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-green-500 mr-3"
+                                     fill="currentColor"
+                                     viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                                    </path>
+                                </svg>
+                                <span class="text-sm text-gray-700">Orders cancelled</span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-green-500 mr-3"
+                                     fill="currentColor"
+                                     viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                                    </path>
+                                </svg>
+                                <span class="text-sm text-gray-700">Customer updates</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Setup Instructions -->
-            <div class="bg-white shadow rounded-lg mb-8">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h2 class="text-lg font-medium text-gray-900">Setup Instructions</h2>
-                    <p class="mt-1 text-sm text-gray-500">Follow these steps to connect your Shopify store</p>
-                </div>
-                <div class="px-6 py-6">
-                    <div class="space-y-6">
-                        <!-- Step 1 -->
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                    <span class="text-sm font-medium text-primary-600">1</span>
-                                </div>
-                            </div>
-                            <div class="ml-4">
-                                <h3 class="text-lg font-medium text-gray-900">Access Your Shopify Admin</h3>
-                                <p class="mt-1 text-sm text-gray-600">
-                                    Log into your Shopify admin panel and navigate to
-                                    <strong>Settings → Notifications → Webhooks</strong>
-                                </p>
-                            </div>
+                <!-- Security Note -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd">
+                                </path>
+                            </svg>
                         </div>
-
-                        <!-- Step 2 -->
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                    <span class="text-sm font-medium text-primary-600">2</span>
-                                </div>
-                            </div>
-                            <div class="ml-4">
-                                <h3 class="text-lg font-medium text-gray-900">Add Webhook Endpoint</h3>
-                                <p class="mt-1 text-sm text-gray-600 mb-3">Click "Create webhook" and use this URL for your endpoint:</p>
-                                <div class="bg-gray-50 border border-gray-200 rounded-md p-3">
-                                    <div class="flex items-center justify-between">
-                                        <code class="text-sm text-gray-800 break-all">
-                                            http://localhost/webhook/customer/{{ organization.uuid }}/shopify/
-                                        </code>
-                                        <button type="button"
-                                                onclick="copyToClipboard('http://localhost/webhook/customer/{{ organization.uuid }}/shopify/')"
-                                                class="ml-2 flex-shrink-0 inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
-                                                </path>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <p class="mt-2 text-xs text-gray-500">
-                                    ⚠️ <strong>Important:</strong> Replace <code>localhost</code> with your actual domain when deploying to production
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Step 3 -->
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                    <span class="text-sm font-medium text-primary-600">3</span>
-                                </div>
-                            </div>
-                            <div class="ml-4">
-                                <h3 class="text-lg font-medium text-gray-900">Configure Events</h3>
-                                <p class="mt-1 text-sm text-gray-600 mb-3">Select the events you want to receive notifications for:</p>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    <div class="flex items-center">
-                                        <svg class="w-4 h-4 text-green-500 mr-2"
-                                             fill="currentColor"
-                                             viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                            </path>
-                                        </svg>
-                                        <span class="text-sm text-gray-700">Order created</span>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <svg class="w-4 h-4 text-green-500 mr-2"
-                                             fill="currentColor"
-                                             viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                            </path>
-                                        </svg>
-                                        <span class="text-sm text-gray-700">Order paid</span>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <svg class="w-4 h-4 text-green-500 mr-2"
-                                             fill="currentColor"
-                                             viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                            </path>
-                                        </svg>
-                                        <span class="text-sm text-gray-700">Order cancelled</span>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <svg class="w-4 h-4 text-green-500 mr-2"
-                                             fill="currentColor"
-                                             viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                            </path>
-                                        </svg>
-                                        <span class="text-sm text-gray-700">Order fulfilled</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Step 4 -->
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                    <span class="text-sm font-medium text-primary-600">4</span>
-                                </div>
-                            </div>
-                            <div class="ml-4">
-                                <h3 class="text-lg font-medium text-gray-900">Set Format to JSON</h3>
-                                <p class="mt-1 text-sm text-gray-600">
-                                    Make sure the webhook format is set to <strong>JSON</strong> for proper processing.
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Step 5 -->
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                    <span class="text-sm font-medium text-primary-600">5</span>
-                                </div>
-                            </div>
-                            <div class="ml-4">
-                                <h3 class="text-lg font-medium text-gray-900">Test the Connection</h3>
-                                <p class="mt-1 text-sm text-gray-600">
-                                    Create a test order in your Shopify store to verify the webhooks are working correctly.
-                                    Check your notification dashboard to confirm you're receiving events.
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-blue-800">Secure OAuth Connection</h3>
+                            <div class="mt-2 text-sm text-blue-700">
+                                <p>
+                                    You'll be redirected to Shopify to authorize this connection. We only request
+                                    read access to orders and customers, plus permission to set up webhooks.
+                                    You can revoke access at any time from your Shopify admin.
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            {% endif %}
 
-            <!-- Troubleshooting -->
-            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-yellow-400"
-                             fill="currentColor"
-                             viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd">
-                            </path>
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-yellow-800">Troubleshooting Tips</h3>
-                        <div class="mt-2 text-sm text-yellow-700">
-                            <ul class="list-disc list-inside space-y-1">
-                                <li>
-                                    <strong>Webhook not receiving data?</strong> Check that your Shopify webhook URL is exactly as shown above
-                                </li>
-                                <li>
-                                    <strong>Invalid URL error?</strong> Make sure you're using your production domain instead of localhost
-                                </li>
-                                <li>
-                                    <strong>HTTP errors?</strong> Verify your webhook endpoint is publicly accessible
-                                </li>
-                                <li>
-                                    <strong>Still having issues?</strong> Check Shopify's webhook delivery logs in your admin panel
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex justify-between">
+            <!-- Back Button -->
+            <div class="mt-8">
                 <a href="{% url 'core:integrations' %}"
-                   class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition duration-150 ease-in-out">
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                     <svg class="w-4 h-4 mr-2"
                          fill="none"
                          stroke="currentColor"
@@ -290,28 +331,19 @@
                     </svg>
                     Back to Integrations
                 </a>
-
-                <a href="{% url 'core:dashboard' %}"
-                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition duration-150 ease-in-out">
-                    <svg class="w-4 h-4 mr-2"
-                         fill="none"
-                         stroke="currentColor"
-                         viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
-                        </path>
-                    </svg>
-                    Complete Setup
-                </a>
             </div>
         </div>
     </div>
 
     <script>
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(function() {
-                // Could add a toast notification here
-                alert('Webhook URL copied to clipboard!');
-            });
+        async function confirmDisconnectShopify() {
+            const confirmed = await NotipusUI.confirmDisconnect(
+                'Shopify',
+                'You will stop receiving order notifications. The webhook subscriptions will be removed from your Shopify store.'
+            );
+            if (confirmed) {
+                document.getElementById('disconnect-shopify-form').submit();
+            }
         }
     </script>
 {% endblock content %}

@@ -77,6 +77,17 @@ urlpatterns = [
         views.disconnect_stripe,
         name="disconnect_stripe",
     ),
+    path("api/connect/shopify/", views.shopify_connect, name="shopify_connect"),
+    path(
+        "api/connect/shopify/callback/",
+        views.shopify_connect_callback,
+        name="shopify_connect_callback",
+    ),
+    path(
+        "api/disconnect/shopify/",
+        views.disconnect_shopify,
+        name="disconnect_shopify",
+    ),
     # WebAuthn endpoints
     path(
         "webauthn/register/begin/",

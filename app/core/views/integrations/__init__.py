@@ -28,7 +28,12 @@ from ...models import UserProfile
 
 # Import all integration views for re-export
 from .chargify import integrate_chargify
-from .shopify import connect_shopify, integrate_shopify
+from .shopify import (
+    disconnect_shopify,
+    integrate_shopify,
+    shopify_connect,
+    shopify_connect_callback,
+)
 from .slack import (
     configure_slack,
     disconnect_slack,
@@ -66,7 +71,9 @@ __all__ = [
     "disconnect_stripe",
     # Shopify
     "integrate_shopify",
-    "connect_shopify",
+    "shopify_connect",
+    "shopify_connect_callback",
+    "disconnect_shopify",
     # Chargify
     "integrate_chargify",
 ]

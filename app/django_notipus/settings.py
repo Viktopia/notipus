@@ -468,6 +468,15 @@ STRIPE_CONNECT_REDIRECT_URI = os.environ.get(
     "STRIPE_CONNECT_REDIRECT_URI", "http://localhost:8000/api/connect/stripe/callback/"
 )
 
+# Shopify OAuth configuration (for customer integrations - receiving webhooks)
+SHOPIFY_CLIENT_ID = os.environ.get("SHOPIFY_CLIENT_ID", "")
+SHOPIFY_CLIENT_SECRET = os.environ.get("SHOPIFY_CLIENT_SECRET", "")
+SHOPIFY_REDIRECT_URI = os.environ.get(
+    "SHOPIFY_REDIRECT_URI", "http://localhost:8000/api/connect/shopify/callback/"
+)
+SHOPIFY_API_VERSION = "2025-01"  # Stable API version for webhook management
+SHOPIFY_SCOPES = "read_orders,read_customers,write_webhooks"
+
 # Base URL for webhook endpoints (used in OAuth callbacks)
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
 
