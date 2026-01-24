@@ -266,9 +266,24 @@ class EventProcessor:
         enriched_data = event_data.copy()
 
         # Store the event data in database
-        if event_data.get("type") in ["payment_success", "payment_failure"]:
+        # All payment/subscription events should be stored for activity tracking
+        payment_event_types = {
+            "payment_success",
+            "payment_failure",
+            "subscription_created",
+            "subscription_updated",
+            "subscription_deleted",
+            "checkout_completed",
+            "invoice_paid",
+            "trial_ending",
+            "payment_action_required",
+        }
+        event_type = event_data.get("type")
+        provider = event_data.get("provider", "").lower()
+
+        if event_type in payment_event_types:
             self.db_lookup.store_payment_record(event_data)
-        elif event_data.get("provider") == "shopify":
+        elif provider == "shopify":
             self.db_lookup.store_order_record(event_data)
 
         # Perform cross-reference lookups

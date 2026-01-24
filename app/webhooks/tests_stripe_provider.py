@@ -10,6 +10,7 @@ The tests cover:
 - Error handling for various failure scenarios (invalid signatures, malformed data)
 - Event data transformation and normalization
 - Edge cases and security validation
+- Customer data retrieval from Stripe API
 
 The StripeSourcePlugin is responsible for validating webhook authenticity,
 parsing event data, and triggering appropriate billing service handlers
@@ -40,63 +41,160 @@ class StripeProviderTest(TestCase):
             request.headers["Stripe-Signature"] = signature
         return request
 
-    def test_get_customer_data(self) -> None:
-        """Test getting customer data."""
+    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
+    def test_get_customer_data_success(self, mock_retrieve: Mock) -> None:
+        """Test getting customer data from Stripe API."""
+        mock_retrieve.return_value = {
+            "id": "cus_123",
+            "email": "john@acme.com",
+            "name": "John Doe",
+            "metadata": {"company": "Acme Inc"},
+            "deleted": False,
+        }
+
         result = self.provider.get_customer_data("cus_123")
 
         expected = {
-            "company_name": "<COMPANY_NAME>",
-            "email": "<EMAIL>",
-            "first_name": "<FIRST_NAME>",
-            "last_name": "<LAST_NAME>",
+            "company_name": "Acme Inc",
+            "email": "john@acme.com",
+            "first_name": "John",
+            "last_name": "Doe",
+        }
+        self.assertEqual(result, expected)
+        mock_retrieve.assert_called_once_with("cus_123")
+
+    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
+    def test_get_customer_data_no_company(self, mock_retrieve: Mock) -> None:
+        """Test getting customer data without company metadata."""
+        mock_retrieve.return_value = {
+            "id": "cus_123",
+            "email": "jane@example.com",
+            "name": "Jane Smith",
+            "metadata": {},
         }
 
+        result = self.provider.get_customer_data("cus_123")
+
+        self.assertEqual(result["company_name"], "")
+        self.assertEqual(result["email"], "jane@example.com")
+        self.assertEqual(result["first_name"], "Jane")
+        self.assertEqual(result["last_name"], "Smith")
+
+    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
+    def test_get_customer_data_single_name(self, mock_retrieve: Mock) -> None:
+        """Test getting customer data with single name."""
+        mock_retrieve.return_value = {
+            "id": "cus_123",
+            "email": "prince@example.com",
+            "name": "Prince",
+            "metadata": {},
+        }
+
+        result = self.provider.get_customer_data("cus_123")
+
+        self.assertEqual(result["first_name"], "Prince")
+        self.assertEqual(result["last_name"], "")
+
+    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
+    def test_get_customer_data_deleted_customer(self, mock_retrieve: Mock) -> None:
+        """Test getting data for deleted customer."""
+        mock_customer = Mock()
+        mock_customer.deleted = True
+        mock_retrieve.return_value = mock_customer
+
+        result = self.provider.get_customer_data("cus_deleted")
+
+        expected = {
+            "company_name": "",
+            "email": "",
+            "first_name": "",
+            "last_name": "",
+        }
+        self.assertEqual(result, expected)
+
+    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
+    def test_get_customer_data_api_error(self, mock_retrieve: Mock) -> None:
+        """Test handling Stripe API errors."""
+        import stripe.error
+
+        mock_retrieve.side_effect = stripe.error.InvalidRequestError(
+            "No such customer", "customer"
+        )
+
+        result = self.provider.get_customer_data("cus_invalid")
+
+        expected = {
+            "company_name": "",
+            "email": "",
+            "first_name": "",
+            "last_name": "",
+        }
+        self.assertEqual(result, expected)
+
+    def test_get_customer_data_empty_id(self) -> None:
+        """Test getting customer data with empty ID."""
+        result = self.provider.get_customer_data("")
+
+        expected = {
+            "company_name": "",
+            "email": "",
+            "first_name": "",
+            "last_name": "",
+        }
         self.assertEqual(result, expected)
 
     def test_build_stripe_event_data(self) -> None:
         """Test building Stripe event data structure."""
-        data = {"status": "succeeded", "created": 1234567890, "currency": "usd"}
+        data = {
+            "id": "in_123",
+            "status": "succeeded",
+            "created": 1234567890,
+            "currency": "usd",
+        }
 
         result = self.provider._build_stripe_event_data(
-            "payment_success", "cus_123", data, "2000"
+            "payment_success", "cus_123", data, 20.00
         )
 
         expected = {
             "type": "payment_success",
             "customer_id": "cus_123",
+            "provider": "stripe",
+            "external_id": "in_123",
             "status": "succeeded",
             "created_at": 1234567890,
             "currency": "USD",
-            "amount": 2000.0,
+            "amount": 20.00,
         }
 
         self.assertEqual(result, expected)
 
     def test_build_stripe_event_data_default_currency(self) -> None:
         """Test building event data with missing currency."""
-        data = {"status": "succeeded", "created": 1234567890}
+        data = {"id": "in_123", "status": "succeeded", "created": 1234567890}
 
         result = self.provider._build_stripe_event_data(
-            "payment_success", "cus_123", data, "2000"
+            "payment_success", "cus_123", data, 20.00
         )
 
         self.assertEqual(result["currency"], "USD")
+        self.assertEqual(result["external_id"], "in_123")
 
     def test_handle_stripe_billing_unknown_event(self) -> None:
-        """Test handling unknown billing event."""
+        """Test handling unknown billing event returns 0."""
         data = {"amount_due": 1500}
 
         amount = self.provider._handle_stripe_billing("unknown_event", data)
 
-        self.assertEqual(amount, "0")
+        self.assertEqual(amount, 0.0)
 
-    def test_handle_stripe_billing_missing_amount_due(self) -> None:
-        """Test handling payment events with missing amount_due."""
-        data = {}  # Missing amount_due
+    def test_handle_stripe_billing_missing_amount(self) -> None:
+        """Test handling payment events with missing amount returns 0."""
+        data = {}  # Missing amount_paid
 
         amount = self.provider._handle_stripe_billing("payment_success", data)
 
-        self.assertEqual(amount, "0")
+        self.assertEqual(amount, 0.0)
 
     def test_handle_stripe_billing_missing_plan_amount(self) -> None:
         """Test handling subscription created with missing plan amount."""
@@ -104,7 +202,26 @@ class StripeProviderTest(TestCase):
 
         amount = self.provider._handle_stripe_billing("subscription_created", data)
 
-        self.assertEqual(amount, "0")
+        self.assertEqual(amount, 0.0)
+
+    def test_handle_stripe_billing_converts_cents_to_dollars(self) -> None:
+        """Test that billing amounts are converted from cents to dollars."""
+        data = {"amount_paid": 2500}  # 2500 cents = $25.00
+
+        amount = self.provider._handle_stripe_billing("payment_success", data)
+
+        self.assertEqual(amount, 25.00)
+
+    def test_handle_stripe_billing_payment_success_uses_amount_paid(self) -> None:
+        """Test that payment_success uses amount_paid, not amount_due."""
+        data = {
+            "amount_due": 0,  # After payment, amount_due is 0
+            "amount_paid": 5000,  # $50.00
+        }
+
+        amount = self.provider._handle_stripe_billing("payment_success", data)
+
+        self.assertEqual(amount, 50.00)
 
     def test_extract_stripe_event_info_subscription_created(self) -> None:
         """Test extracting event info for subscription created."""
@@ -237,8 +354,9 @@ class StripeProviderTest(TestCase):
         mock_event.type = "invoice.payment_succeeded"
         mock_event.data.object = Mock()
         mock_event.data.object.to_dict.return_value = {
+            "id": "in_123",
             "customer": "cus_123",
-            "amount_due": 2000,
+            "amount_paid": 2000,  # 2000 cents = $20.00
             "currency": "usd",
             "status": "succeeded",
             "created": 1234567890,
@@ -249,16 +367,18 @@ class StripeProviderTest(TestCase):
             '{"type": "invoice.payment_succeeded"}', "t=123456789,v1=test_signature"
         )
 
-        with patch.object(self.provider, "_handle_stripe_billing", return_value="2000"):
+        with patch.object(self.provider, "_handle_stripe_billing", return_value=20.00):
             result = self.provider.parse_webhook(request)
 
         expected = {
             "type": "payment_success",
             "customer_id": "cus_123",
+            "provider": "stripe",
+            "external_id": "in_123",
             "status": "succeeded",
             "created_at": 1234567890,
             "currency": "USD",
-            "amount": 2000.0,
+            "amount": 20.00,
         }
 
         self.assertEqual(result, expected)

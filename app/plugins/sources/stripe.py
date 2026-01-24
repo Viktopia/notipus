@@ -24,8 +24,11 @@ class StripeSourcePlugin(BaseSourcePlugin):
     verification and parses various subscription and payment events.
 
     Attributes:
+        PROVIDER_NAME: Provider identifier used in event data.
         EVENT_TYPE_MAPPING: Maps Stripe event types to internal types.
     """
+
+    PROVIDER_NAME: ClassVar[str] = "stripe"
 
     EVENT_TYPE_MAPPING: ClassVar[dict[str, str]] = {
         "customer.subscription.created": "subscription_created",
@@ -136,56 +139,60 @@ class StripeSourcePlugin(BaseSourcePlugin):
 
         return event_type, data
 
-    def _handle_stripe_billing(self, event_type: str, data: dict[str, Any]) -> str:
-        """Handle billing service calls and return amount.
+    def _handle_stripe_billing(self, event_type: str, data: dict[str, Any]) -> float:
+        """Handle billing service calls and return amount in dollars.
+
+        Stripe amounts are in cents, so we divide by 100 to get dollars.
 
         Args:
             event_type: The normalized event type.
             data: Event data dictionary.
 
         Returns:
-            Amount as a string.
+            Amount in dollars as a float.
         """
         from webhooks.services.billing import BillingService
 
+        amount_cents: int = 0
+
         if event_type == "subscription_created":
-            amount = str(data.get("plan", {}).get("amount", 0))
+            amount_cents = data.get("plan", {}).get("amount", 0)
             BillingService.handle_subscription_created(data)
         elif event_type == "subscription_updated":
-            amount = str(data.get("plan", {}).get("amount", 0))
+            amount_cents = data.get("plan", {}).get("amount", 0)
             BillingService.handle_subscription_updated(data)
         elif event_type == "subscription_deleted":
-            amount = "0"
+            amount_cents = 0
             BillingService.handle_subscription_deleted(data)
         elif event_type == "payment_success":
-            amount = str(data.get("amount_due", 0))
+            # Use amount_paid, not amount_due (amount_due is 0 after payment succeeds)
+            amount_cents = data.get("amount_paid", 0)
             BillingService.handle_payment_success(data)
         elif event_type == "payment_failure":
-            amount = str(data.get("amount_due", 0))
+            amount_cents = data.get("amount_due", 0)
             BillingService.handle_payment_failed(data)
         elif event_type == "checkout_completed":
-            amount = str(data.get("amount_total", 0))
+            amount_cents = data.get("amount_total", 0)
             BillingService.handle_checkout_completed(data)
         elif event_type == "trial_ending":
-            amount = "0"
+            amount_cents = 0
             BillingService.handle_trial_ending(data)
         elif event_type == "invoice_paid":
-            amount = str(data.get("amount_paid", 0))
+            amount_cents = data.get("amount_paid", 0)
             BillingService.handle_invoice_paid(data)
         elif event_type == "payment_action_required":
-            amount = str(data.get("amount_due", 0))
+            amount_cents = data.get("amount_due", 0)
             BillingService.handle_payment_action_required(data)
-        else:
-            amount = "0"
 
-        return amount
+        # Convert cents to dollars
+        return float(amount_cents) / 100.0
 
     def _build_stripe_event_data(
         self,
         event_type: str,
         customer_id: str,
         data: dict[str, Any],
-        amount: str,
+        amount: float,
     ) -> dict[str, Any]:
         """Build Stripe event data structure.
 
@@ -193,7 +200,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
             event_type: The normalized event type.
             customer_id: Customer identifier.
             data: Raw event data.
-            amount: Payment amount as string.
+            amount: Payment amount in dollars.
 
         Returns:
             Standardized event data dictionary.
@@ -201,10 +208,12 @@ class StripeSourcePlugin(BaseSourcePlugin):
         return {
             "type": event_type,
             "customer_id": customer_id,
+            "provider": self.PROVIDER_NAME,
+            "external_id": data.get("id", ""),
             "status": data.get("status"),
             "created_at": data.get("created"),
             "currency": str(data.get("currency", "USD")).upper(),
-            "amount": float(amount),
+            "amount": amount,
         }
 
     def parse_webhook(
@@ -283,17 +292,92 @@ class StripeSourcePlugin(BaseSourcePlugin):
             raise InvalidDataError("Missing required fields") from e
 
     def get_customer_data(self, customer_id: str) -> dict[str, Any]:
-        """Get customer data placeholder.
+        """Get customer data from Stripe API.
+
+        Fetches customer details including email, name, and company info
+        from the Stripe Customer object.
 
         Args:
-            customer_id: The customer identifier.
+            customer_id: The Stripe customer identifier (e.g., "cus_xxx").
 
         Returns:
-            Dictionary with placeholder customer data.
+            Dictionary with customer data including:
+            - company_name: From metadata or empty string
+            - email: Customer email
+            - first_name: First part of name
+            - last_name: Last part of name
+        """
+        if not customer_id:
+            logger.warning("Empty customer_id provided to get_customer_data")
+            return self._empty_customer_data()
+
+        try:
+            customer = stripe.Customer.retrieve(customer_id)
+
+            # Handle deleted customers
+            if getattr(customer, "deleted", False):
+                logger.info(f"Customer {customer_id} has been deleted")
+                return self._empty_customer_data()
+
+            # Extract email
+            email = customer.get("email", "") or ""
+
+            # Extract name and split into first/last
+            name = customer.get("name", "") or ""
+            first_name, last_name = self._split_name(name)
+
+            # Extract company name from metadata or use empty string
+            metadata = customer.get("metadata", {}) or {}
+            company_name = (
+                metadata.get("company")
+                or metadata.get("company_name")
+                or metadata.get("organization")
+                or ""
+            )
+
+            return {
+                "company_name": company_name,
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+            }
+
+        except stripe.error.InvalidRequestError as e:
+            logger.warning(f"Invalid customer ID {customer_id}: {e}")
+            return self._empty_customer_data()
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe API error fetching customer {customer_id}: {e}")
+            return self._empty_customer_data()
+        except Exception as e:
+            logger.error(f"Unexpected error fetching customer {customer_id}: {e}")
+            return self._empty_customer_data()
+
+    def _empty_customer_data(self) -> dict[str, Any]:
+        """Return empty customer data structure.
+
+        Returns:
+            Dictionary with empty customer fields.
         """
         return {
-            "company_name": "<COMPANY_NAME>",
-            "email": "<EMAIL>",
-            "first_name": "<FIRST_NAME>",
-            "last_name": "<LAST_NAME>",
+            "company_name": "",
+            "email": "",
+            "first_name": "",
+            "last_name": "",
         }
+
+    def _split_name(self, full_name: str) -> tuple[str, str]:
+        """Split a full name into first and last name.
+
+        Args:
+            full_name: The full name string.
+
+        Returns:
+            Tuple of (first_name, last_name).
+        """
+        if not full_name:
+            return "", ""
+
+        parts = full_name.strip().split(None, 1)
+        if len(parts) == 1:
+            return parts[0], ""
+        return parts[0], parts[1]

@@ -1,0 +1,227 @@
+"""Event consolidation service for preventing notification spam.
+
+This module provides a service to consolidate related webhook events
+that arrive in quick succession for the same customer. For example,
+when a Stripe subscription is created, multiple events fire:
+- subscription_created
+- invoice.payment_succeeded
+- invoice.paid
+
+Without consolidation, this results in 3 separate Slack notifications.
+This service tracks recent events and suppresses redundant ones.
+"""
+
+import logging
+from typing import ClassVar
+
+from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
+
+
+class EventConsolidationService:
+    """Consolidate related webhook events to prevent notification spam.
+
+    Uses Django's cache to track recent events per customer/workspace.
+    When a "primary" event is processed, subsequent "secondary" events
+    within the consolidation window are suppressed.
+
+    Note on race conditions: The suppression list update (get + set) is not
+    atomic. If two primary events for the same customer arrive simultaneously,
+    one's suppression list could be partially lost. This is acceptable because:
+    1. It's a rare edge case (sub-second timing for same customer)
+    2. The worst outcome is an extra notification, not a missed one
+    3. Using atomic operations would add complexity for minimal benefit
+
+    Attributes:
+        CONSOLIDATION_WINDOW_SECONDS: Time window for event consolidation.
+        DEDUP_WINDOW_MULTIPLIER: Multiplier for deduplication window vs consolidation.
+        PRIMARY_EVENTS: Mapping of primary events to events they suppress.
+    """
+
+    # Time window (in seconds) during which related events are consolidated
+    CONSOLIDATION_WINDOW_SECONDS: ClassVar[int] = 10
+
+    # Deduplication window is longer than consolidation to catch delayed retries
+    # Multiplier of 6 means 60 seconds for dedup vs 10 seconds for consolidation
+    DEDUP_WINDOW_MULTIPLIER: ClassVar[int] = 6
+
+    # Events that suppress other events when processed first
+    # Format: {primary_event: {events_to_suppress}}
+    PRIMARY_EVENTS: ClassVar[dict[str, set[str]]] = {
+        # New subscription suppresses the payment notifications that follow
+        "subscription_created": {"payment_success", "invoice_paid"},
+        # Subscription deletion suppresses final invoice notification
+        "subscription_deleted": {"invoice_paid"},
+        # Checkout completion suppresses payment notifications
+        "checkout_completed": {"payment_success", "invoice_paid"},
+    }
+
+    # Events that should never be suppressed (always important)
+    NEVER_SUPPRESS: ClassVar[set[str]] = {
+        "payment_failure",
+        "payment_action_required",
+        "trial_ending",
+    }
+
+    def __init__(self) -> None:
+        """Initialize the consolidation service."""
+        pass
+
+    def _get_cache_key(
+        self, workspace_id: str, customer_id: str, event_type: str
+    ) -> str:
+        """Generate cache key for event tracking.
+
+        Args:
+            workspace_id: The workspace UUID.
+            customer_id: The customer identifier.
+            event_type: The event type.
+
+        Returns:
+            Cache key string.
+        """
+        return f"event_consolidation:{workspace_id}:{customer_id}:{event_type}"
+
+    def _get_suppression_key(self, workspace_id: str, customer_id: str) -> str:
+        """Generate cache key for tracking which events to suppress.
+
+        Args:
+            workspace_id: The workspace UUID.
+            customer_id: The customer identifier.
+
+        Returns:
+            Cache key string for suppression tracking.
+        """
+        return f"event_suppress:{workspace_id}:{customer_id}"
+
+    def should_send_notification(
+        self,
+        event_type: str,
+        customer_id: str,
+        workspace_id: str,
+    ) -> bool:
+        """Check if notification should be sent or suppressed.
+
+        This method:
+        1. Never suppresses critical events (payment failures, etc.)
+        2. Checks if this event type should be suppressed due to a recent primary event
+        3. If this is a primary event, marks secondary events for suppression
+
+        Args:
+            event_type: The normalized event type (e.g., "subscription_created").
+            customer_id: The customer identifier.
+            workspace_id: The workspace UUID.
+
+        Returns:
+            True if notification should be sent, False if it should be suppressed.
+        """
+        if not customer_id or not workspace_id:
+            # Can't consolidate without identifiers, so allow the notification
+            return True
+
+        # Never suppress critical events
+        if event_type in self.NEVER_SUPPRESS:
+            logger.debug(
+                f"Event {event_type} is in NEVER_SUPPRESS list, allowing notification"
+            )
+            return True
+
+        # Check if this event should be suppressed
+        suppression_key = self._get_suppression_key(workspace_id, customer_id)
+        suppressed_events = cache.get(suppression_key) or set()
+
+        if event_type in suppressed_events:
+            logger.info(
+                f"Suppressing {event_type} notification for customer {customer_id} "
+                f"in workspace {workspace_id} (consolidation with primary event)"
+            )
+            return False
+
+        # If this is a primary event, mark secondary events for suppression
+        if event_type in self.PRIMARY_EVENTS:
+            events_to_suppress = self.PRIMARY_EVENTS[event_type]
+            self._mark_events_for_suppression(
+                workspace_id, customer_id, events_to_suppress
+            )
+            logger.debug(
+                f"Primary event {event_type} processed, marking {events_to_suppress} "
+                f"for suppression"
+            )
+
+        return True
+
+    def _mark_events_for_suppression(
+        self,
+        workspace_id: str,
+        customer_id: str,
+        events_to_suppress: set[str],
+    ) -> None:
+        """Mark events for suppression within the consolidation window.
+
+        Args:
+            workspace_id: The workspace UUID.
+            customer_id: The customer identifier.
+            events_to_suppress: Set of event types to suppress.
+        """
+        suppression_key = self._get_suppression_key(workspace_id, customer_id)
+
+        # Get existing suppressed events and merge
+        existing = cache.get(suppression_key) or set()
+        updated = existing | events_to_suppress
+
+        # Store with TTL
+        cache.set(
+            suppression_key,
+            updated,
+            timeout=self.CONSOLIDATION_WINDOW_SECONDS,
+        )
+
+    def record_event(
+        self,
+        event_type: str,
+        customer_id: str,
+        workspace_id: str,
+        external_id: str | None = None,
+    ) -> None:
+        """Record that an event was processed (for deduplication).
+
+        This can be used for exact deduplication based on external_id,
+        in addition to the type-based consolidation.
+
+        Args:
+            event_type: The event type.
+            customer_id: The customer identifier.
+            workspace_id: The workspace UUID.
+            external_id: Optional external event ID for exact deduplication.
+        """
+        if external_id:
+            dedup_key = f"event_dedup:{workspace_id}:{external_id}"
+            dedup_timeout = (
+                self.CONSOLIDATION_WINDOW_SECONDS * self.DEDUP_WINDOW_MULTIPLIER
+            )
+            cache.set(dedup_key, True, timeout=dedup_timeout)
+
+    def is_duplicate(
+        self,
+        workspace_id: str,
+        external_id: str | None,
+    ) -> bool:
+        """Check if an event with this external_id was already processed.
+
+        Args:
+            workspace_id: The workspace UUID.
+            external_id: The external event ID.
+
+        Returns:
+            True if this is a duplicate event.
+        """
+        if not external_id:
+            return False
+
+        dedup_key = f"event_dedup:{workspace_id}:{external_id}"
+        return cache.get(dedup_key) is not None
+
+
+# Global instance for convenience
+event_consolidation_service = EventConsolidationService()

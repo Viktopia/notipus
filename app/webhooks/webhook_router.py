@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, Optional
 
@@ -9,9 +10,69 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .exceptions import WebhookError, WebhookSignatureError
+from .services.event_consolidation import event_consolidation_service
 from .services.rate_limiter import RateLimitException, rate_limiter
 
 logger = logging.getLogger(__name__)
+
+
+def _log_webhook_payload(
+    request: HttpRequest, provider_name: str, workspace_uuid: Optional[str] = None
+) -> None:
+    """
+    Log the raw webhook payload for analysis when LOG_WEBHOOKS is enabled.
+
+    This logs the complete request body and relevant headers to help with
+    debugging and understanding webhook patterns from providers.
+    """
+    if not settings.LOG_WEBHOOKS:
+        return
+
+    try:
+        # Get the raw body
+        raw_body = request.body.decode("utf-8")
+
+        # Try to parse as JSON for prettier logging
+        try:
+            body_data = json.loads(raw_body)
+            body_str = json.dumps(body_data, indent=2, default=str)
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON, log as-is (could be form data)
+            body_str = raw_body
+
+        # Extract relevant headers (excluding sensitive auth headers)
+        relevant_headers = {
+            "Content-Type": request.headers.get("Content-Type"),
+            "Content-Length": request.headers.get("Content-Length"),
+            "User-Agent": request.headers.get("User-Agent"),
+            "X-Forwarded-For": request.headers.get("X-Forwarded-For"),
+        }
+
+        # Add provider-specific signature headers for reference
+        signature_headers = [
+            "X-Shopify-Hmac-SHA256",
+            "Stripe-Signature",
+            "X-Chargify-Webhook-Signature-Hmac-Sha-256",
+        ]
+        for header in signature_headers:
+            if header in request.headers:
+                # Log presence of signature but not the value for security
+                relevant_headers[header] = "[PRESENT]"
+
+        logger.info(
+            f"WEBHOOK_LOG [{provider_name}] "
+            f"workspace={workspace_uuid or 'global'} "
+            f"method={request.method} path={request.path}",
+            extra={
+                "webhook_provider": provider_name,
+                "workspace_uuid": workspace_uuid,
+                "headers": relevant_headers,
+                "body": body_str,
+            },
+        )
+    except Exception as e:
+        # Don't let logging errors break webhook processing
+        logger.warning(f"Failed to log webhook payload: {e}")
 
 
 def create_success_response(message: str) -> dict:
@@ -115,11 +176,55 @@ def _process_webhook_data(
     provider_name: str,
     workspace: Optional[Workspace] = None,
 ) -> JsonResponse:
-    """Process webhook data and return success response."""
+    """Process webhook data and return success response.
+
+    Includes event consolidation to prevent notification spam when
+    multiple related events fire in quick succession.
+    """
     from .services.slack_client import SlackClient
 
     # Get customer data
     customer_data = provider.get_customer_data(event_data["customer_id"])
+
+    # Check event consolidation - should we send a notification?
+    event_type = event_data.get("type", "")
+    customer_id = event_data.get("customer_id", "")
+    workspace_id = str(workspace.uuid) if workspace else ""
+    external_id = event_data.get("external_id", "")
+
+    # Check for exact duplicate (same external_id)
+    if event_consolidation_service.is_duplicate(workspace_id, external_id):
+        logger.info(
+            f"Skipping duplicate event {external_id} for workspace {workspace_id}"
+        )
+        return JsonResponse(
+            create_success_response(
+                f"{provider_name} webhook processed (duplicate suppressed)"
+            ),
+            status=200,
+        )
+
+    # Check if this event should be suppressed due to consolidation
+    should_notify = event_consolidation_service.should_send_notification(
+        event_type=event_type,
+        customer_id=customer_id,
+        workspace_id=workspace_id,
+    )
+
+    if not should_notify:
+        # Record the event for deduplication, but don't send notification
+        event_consolidation_service.record_event(
+            event_type=event_type,
+            customer_id=customer_id,
+            workspace_id=workspace_id,
+            external_id=external_id,
+        )
+        return JsonResponse(
+            create_success_response(
+                f"{provider_name} webhook processed (consolidated)"
+            ),
+            status=200,
+        )
 
     # Format notification
     notification = settings.EVENT_PROCESSOR.format_notification(
@@ -133,6 +238,13 @@ def _process_webhook_data(
         slack_client = SlackClient(webhook_url=slack_webhook_url)
         try:
             slack_client.send_notification(notification)
+            # Record the event after successful send
+            event_consolidation_service.record_event(
+                event_type=event_type,
+                customer_id=customer_id,
+                workspace_id=workspace_id,
+                external_id=external_id,
+            )
         except Exception as e:
             logger.error(
                 f"Failed to send Slack notification for workspace "
@@ -235,6 +347,9 @@ def customer_shopify_webhook(
     request: HttpRequest, organization_uuid: str
 ) -> JsonResponse:
     """Handle customer-specific Shopify webhook requests with rate limiting"""
+    # Log raw webhook payload before any processing
+    _log_webhook_payload(request, "shopify", organization_uuid)
+
     logger.info(
         f"Processing customer Shopify webhook for workspace {organization_uuid}",
         extra={
@@ -273,6 +388,9 @@ def customer_chargify_webhook(
     request: HttpRequest, organization_uuid: str
 ) -> JsonResponse:
     """Handle customer-specific Chargify/Maxio webhook requests with rate limiting"""
+    # Log raw webhook payload before any processing
+    _log_webhook_payload(request, "chargify", organization_uuid)
+
     logger.info(
         f"Processing customer Chargify/Maxio webhook "
         f"for workspace {organization_uuid}",
@@ -311,6 +429,9 @@ def customer_stripe_webhook(
     request: HttpRequest, organization_uuid: str
 ) -> JsonResponse:
     """Handle customer-specific Stripe webhook requests with rate limiting"""
+    # Log raw webhook payload before any processing
+    _log_webhook_payload(request, "stripe", organization_uuid)
+
     logger.info(
         f"Processing customer Stripe webhook for workspace {organization_uuid}",
         extra={
@@ -350,6 +471,9 @@ def customer_stripe_webhook(
 @require_http_methods(["POST"])
 def billing_stripe_webhook(request: HttpRequest) -> JsonResponse:
     """Handle global Stripe billing webhooks for Notipus revenue"""
+    # Log raw webhook payload before any processing
+    _log_webhook_payload(request, "stripe_billing")
+
     logger.info(
         "Processing global billing Stripe webhook",
         extra={"content_type": request.content_type},

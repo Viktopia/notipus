@@ -55,11 +55,57 @@ class DatabaseLookupService:
         """
         return f"webhook_activity:{date_str}"
 
-    def store_payment_record(self, event_data: dict[str, Any]) -> bool:
-        """Store a payment record in Redis with TTL.
+    def _normalize_status(self, status: str | None) -> str:
+        """Normalize status string for consistent display.
 
         Args:
-            event_data: Dictionary containing payment event data.
+            status: Raw status string from event data.
+
+        Returns:
+            Normalized status string.
+        """
+        if not status:
+            return "pending"
+        status = str(status).lower()
+        if status in ["successful", "completed", "paid"]:
+            return "success"
+        if status in ["declined", "error"]:
+            return "failed"
+        if status in ["active", "trialing"]:
+            return "active"
+        if status in ["canceled", "cancelled"]:
+            return "cancelled"
+        return status
+
+    def _get_event_display_type(self, event_type: str) -> str:
+        """Map event type to display category.
+
+        Args:
+            event_type: The original event type string.
+
+        Returns:
+            Display category for the event.
+        """
+        type_category_map = {
+            "payment_success": "payment",
+            "payment_failure": "payment",
+            "subscription_created": "subscription",
+            "subscription_updated": "subscription",
+            "subscription_deleted": "subscription",
+            "checkout_completed": "checkout",
+            "invoice_paid": "payment",
+            "trial_ending": "subscription",
+            "payment_action_required": "payment",
+        }
+        return type_category_map.get(event_type, "payment")
+
+    def store_payment_record(self, event_data: dict[str, Any]) -> bool:
+        """Store a payment/subscription record in Redis with TTL.
+
+        Handles all event types including payments, subscriptions, and checkouts.
+
+        Args:
+            event_data: Dictionary containing event data.
 
         Returns:
             True if storage was successful, False otherwise.
@@ -67,36 +113,39 @@ class DatabaseLookupService:
         try:
             provider = event_data.get("provider", "").lower()
             if not provider:
-                logger.warning("Missing provider in payment event data")
+                logger.warning("Missing provider in event data")
                 return False
 
-            # Extract required fields
+            # Extract and validate fields
             external_id = (
                 event_data.get("external_id")
                 or event_data.get("transaction_id")
                 or event_data.get("id")
             )
             customer_id = event_data.get("customer_id")
-            amount = event_data.get("amount")
-            status = event_data.get("status", "pending").lower()
-            currency = event_data.get("currency", "USD")
-
-            if not external_id or not customer_id or amount is None:
+            if not customer_id:
                 logger.warning(
-                    f"Missing required fields in payment event: {event_data}"
+                    f"Missing customer_id in event: {event_data.get('type')}"
                 )
                 return False
 
-            # Normalize status
-            if status in ["successful", "completed", "paid"]:
-                status = "success"
-            elif status in ["declined", "error"]:
-                status = "failed"
+            # Generate fallback ID if needed
+            now = timezone.now()
+            if not external_id:
+                external_id = f"{provider}_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+
+            # Extract other fields with defaults
+            # The `or` fallback handles explicit None values from some providers
+            amount = event_data.get("amount", 0) or 0
+            currency = event_data.get("currency", "USD") or "USD"
+            status = self._normalize_status(event_data.get("status"))
+            event_type = event_data.get("type", "payment")
+            display_type = self._get_event_display_type(event_type)
 
             # Create webhook record for Redis
-            now = timezone.now()
             webhook_record = {
-                "type": "payment",
+                "type": display_type,
+                "event_type": event_type,
                 "provider": provider,
                 "external_id": str(external_id),
                 "customer_id": str(customer_id),
@@ -106,7 +155,6 @@ class DatabaseLookupService:
                 "metadata": event_data.get("metadata", {}),
                 "processed_at": now.isoformat(),
                 "timestamp": now.timestamp(),
-                # Cross-reference fields
                 "shopify_order_ref": event_data.get("shopify_order_ref", ""),
                 "chargify_transaction_id": event_data.get(
                     "chargify_transaction_id", ""
@@ -118,7 +166,7 @@ class DatabaseLookupService:
 
             # Store in Redis with TTL
             timestamp_key = now.strftime("%Y%m%d_%H%M%S_%f")
-            webhook_key = self._get_webhook_key("payment", timestamp_key)
+            webhook_key = self._get_webhook_key(display_type, timestamp_key)
 
             cache.set(webhook_key, json.dumps(webhook_record), timeout=self.ttl_seconds)
 
@@ -145,11 +193,13 @@ class DatabaseLookupService:
                 activity_key, json.dumps(current_activity), timeout=self.ttl_seconds
             )
 
-            logger.info(f"Stored payment record in Redis: {provider} {external_id}")
+            logger.info(
+                f"Stored {event_type} record in Redis: {provider} {external_id}"
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Error storing payment record in Redis: {e!s}", exc_info=True)
+            logger.error(f"Error storing event record in Redis: {e!s}", exc_info=True)
             return False
 
     def _validate_order_data(self, event_data: dict[str, Any]) -> dict[str, Any] | None:

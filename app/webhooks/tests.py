@@ -2,9 +2,11 @@ import json
 from unittest.mock import Mock, patch
 
 from core.models import Integration, Workspace
-from django.test import TestCase
+from django.http import HttpRequest
+from django.test import TestCase, override_settings
 from plugins.sources.base import InvalidDataError
 from plugins.sources.stripe import StripeSourcePlugin
+from webhooks.webhook_router import _log_webhook_payload
 
 
 class ChargifyWebhookTest(TestCase):
@@ -107,61 +109,76 @@ class StripeProviderTest(TestCase):
         self.webhook_secret = "test_webhook_secret"
         self.provider = StripeSourcePlugin(self.webhook_secret)
 
-    def test_get_customer_data(self):
-        """Test getting customer data"""
+    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
+    def test_get_customer_data(self, mock_retrieve):
+        """Test getting customer data from Stripe API."""
+        mock_retrieve.return_value = {
+            "id": "cus_123",
+            "email": "test@acme.com",
+            "name": "Test User",
+            "metadata": {"company": "Acme Corp"},
+        }
+
         result = self.provider.get_customer_data("cus_123")
 
         expected = {
-            "company_name": "<COMPANY_NAME>",
-            "email": "<EMAIL>",
-            "first_name": "<FIRST_NAME>",
-            "last_name": "<LAST_NAME>",
+            "company_name": "Acme Corp",
+            "email": "test@acme.com",
+            "first_name": "Test",
+            "last_name": "User",
         }
 
         self.assertEqual(result, expected)
 
     def test_build_stripe_event_data(self):
-        """Test building Stripe event data structure"""
-        data = {"status": "succeeded", "created": 1234567890, "currency": "usd"}
+        """Test building Stripe event data structure."""
+        data = {
+            "id": "in_123",
+            "status": "succeeded",
+            "created": 1234567890,
+            "currency": "usd",
+        }
 
         result = self.provider._build_stripe_event_data(
-            "payment_success", "cus_123", data, "2000"
+            "payment_success", "cus_123", data, 20.00
         )
 
         expected = {
             "type": "payment_success",
             "customer_id": "cus_123",
+            "provider": "stripe",
+            "external_id": "in_123",
             "status": "succeeded",
             "created_at": 1234567890,
             "currency": "USD",
-            "amount": 2000.0,
+            "amount": 20.00,
         }
 
         self.assertEqual(result, expected)
 
     def test_handle_stripe_billing_unknown_event(self):
-        """Test handling unknown billing event"""
+        """Test handling unknown billing event."""
         data = {"amount_due": 1500}
 
         amount = self.provider._handle_stripe_billing("unknown_event", data)
 
-        self.assertEqual(amount, "0")
+        self.assertEqual(amount, 0.0)
 
-    def test_handle_stripe_billing_missing_amount_due(self):
-        """Test handling payment events with missing amount_due"""
-        data = {}  # Missing amount_due
+    def test_handle_stripe_billing_missing_amount_paid(self):
+        """Test handling payment events with missing amount_paid."""
+        data = {}  # Missing amount_paid
 
         amount = self.provider._handle_stripe_billing("payment_success", data)
 
-        self.assertEqual(amount, "0")
+        self.assertEqual(amount, 0.0)
 
     def test_handle_stripe_billing_missing_plan_amount(self):
-        """Test handling subscription created with missing plan amount"""
+        """Test handling subscription created with missing plan amount."""
         data = {"plan": {}}  # Missing amount
 
         amount = self.provider._handle_stripe_billing("subscription_created", data)
 
-        self.assertEqual(amount, "0")
+        self.assertEqual(amount, 0.0)
 
     def test_extract_stripe_event_info_unsupported_event(self):
         """Test extracting info for unsupported event type."""
@@ -178,3 +195,113 @@ class StripeProviderTest(TestCase):
 
         with self.assertRaises(InvalidDataError):
             self.provider._extract_stripe_event_info(mock_event)
+
+
+class WebhookLoggingTest(TestCase):
+    """Test webhook payload logging functionality."""
+
+    def _create_mock_request(
+        self, body: bytes, content_type: str = "application/json"
+    ) -> Mock:
+        """Create a mock HTTP request with the given body."""
+        request = Mock(spec=HttpRequest)
+        request.body = body
+        request.method = "POST"
+        request.path = "/webhook/customer/test-uuid/stripe/"
+        request.content_type = content_type
+        request.headers = {
+            "Content-Type": content_type,
+            "Content-Length": str(len(body)),
+            "User-Agent": "Stripe/1.0",
+        }
+        return request
+
+    @override_settings(LOG_WEBHOOKS=False)
+    @patch("webhooks.webhook_router.logger")
+    def test_logging_disabled_does_not_log(self, mock_logger: Mock) -> None:
+        """Test that logging is skipped when LOG_WEBHOOKS is disabled."""
+        request = self._create_mock_request(b'{"event": "test"}')
+
+        _log_webhook_payload(request, "stripe", "test-uuid")
+
+        mock_logger.info.assert_not_called()
+
+    @override_settings(LOG_WEBHOOKS=True)
+    @patch("webhooks.webhook_router.logger")
+    def test_logging_enabled_logs_json_payload(self, mock_logger: Mock) -> None:
+        """Test that JSON webhook payloads are logged when enabled."""
+        payload = {"event": "payment_success", "customer_id": "cus_123"}
+        request = self._create_mock_request(json.dumps(payload).encode("utf-8"))
+
+        _log_webhook_payload(request, "stripe", "test-uuid")
+
+        mock_logger.info.assert_called_once()
+        call_args = mock_logger.info.call_args
+        # Check the log message format
+        assert "WEBHOOK_LOG [stripe]" in call_args[0][0]
+        assert "workspace=test-uuid" in call_args[0][0]
+        # Check extra data contains body
+        assert "body" in call_args[1]["extra"]
+        assert "payment_success" in call_args[1]["extra"]["body"]
+
+    @override_settings(LOG_WEBHOOKS=True)
+    @patch("webhooks.webhook_router.logger")
+    def test_logging_enabled_logs_form_payload(self, mock_logger: Mock) -> None:
+        """Test that form data payloads are logged when enabled."""
+        payload = b"event=payment_success&customer_id=67890"
+        request = self._create_mock_request(
+            payload, content_type="application/x-www-form-urlencoded"
+        )
+
+        _log_webhook_payload(request, "chargify", "test-uuid")
+
+        mock_logger.info.assert_called_once()
+        call_args = mock_logger.info.call_args
+        assert "WEBHOOK_LOG [chargify]" in call_args[0][0]
+        # Form data is logged as-is since it's not JSON
+        assert "payment_success" in call_args[1]["extra"]["body"]
+
+    @override_settings(LOG_WEBHOOKS=True)
+    @patch("webhooks.webhook_router.logger")
+    def test_logging_with_no_workspace(self, mock_logger: Mock) -> None:
+        """Test logging for global webhooks without workspace."""
+        request = self._create_mock_request(b'{"event": "test"}')
+
+        _log_webhook_payload(request, "stripe_billing")
+
+        mock_logger.info.assert_called_once()
+        call_args = mock_logger.info.call_args
+        assert "workspace=global" in call_args[0][0]
+
+    @override_settings(LOG_WEBHOOKS=True)
+    @patch("webhooks.webhook_router.logger")
+    def test_logging_handles_decode_errors_gracefully(self, mock_logger: Mock) -> None:
+        """Test that invalid UTF-8 data doesn't break logging."""
+        # Invalid UTF-8 sequence
+        request = Mock(spec=HttpRequest)
+        request.body = b"\xff\xfe"  # Invalid UTF-8
+        request.method = "POST"
+        request.path = "/webhook/test/"
+        request.headers = {}
+
+        # Should not raise, just log a warning
+        _log_webhook_payload(request, "stripe", "test-uuid")
+
+        # Should have logged a warning about failure
+        mock_logger.warning.assert_called_once()
+        assert "Failed to log webhook payload" in mock_logger.warning.call_args[0][0]
+
+    @override_settings(LOG_WEBHOOKS=True)
+    @patch("webhooks.webhook_router.logger")
+    def test_logging_masks_signature_headers(self, mock_logger: Mock) -> None:
+        """Test that signature headers are masked in logs."""
+        request = self._create_mock_request(b'{"event": "test"}')
+        request.headers["Stripe-Signature"] = "secret-signature-value"
+
+        _log_webhook_payload(request, "stripe", "test-uuid")
+
+        mock_logger.info.assert_called_once()
+        call_args = mock_logger.info.call_args
+        headers = call_args[1]["extra"]["headers"]
+        # Signature should be masked, not the actual value
+        assert headers.get("Stripe-Signature") == "[PRESENT]"
