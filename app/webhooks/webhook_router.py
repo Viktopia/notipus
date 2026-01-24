@@ -255,9 +255,9 @@ def customer_shopify_webhook(
             is_active=True,
         )
 
-        from .providers.shopify import ShopifyProvider
+        from plugins.sources.shopify import ShopifySourcePlugin
 
-        provider = ShopifyProvider(webhook_secret=integration.webhook_secret)
+        provider = ShopifySourcePlugin(webhook_secret=integration.webhook_secret)
 
         return _process_webhook(request, provider, "customer_shopify", workspace)
 
@@ -291,9 +291,9 @@ def customer_chargify_webhook(
             workspace=workspace, integration_type="chargify", is_active=True
         )
 
-        from .providers.chargify import ChargifyProvider
+        from plugins.sources.chargify import ChargifySourcePlugin
 
-        provider = ChargifyProvider(webhook_secret=integration.webhook_secret)
+        provider = ChargifySourcePlugin(webhook_secret=integration.webhook_secret)
 
         return _process_webhook(request, provider, "customer_chargify", workspace)
 
@@ -331,9 +331,9 @@ def customer_stripe_webhook(
             is_active=True,
         )
 
-        from .providers.stripe import StripeProvider
+        from plugins.sources.stripe import StripeSourcePlugin
 
-        provider = StripeProvider(webhook_secret=integration.webhook_secret)
+        provider = StripeSourcePlugin(webhook_secret=integration.webhook_secret)
 
         return _process_webhook(request, provider, "customer_stripe", workspace)
 
@@ -357,14 +357,13 @@ def billing_stripe_webhook(request: HttpRequest) -> JsonResponse:
 
     try:
         from core.models import GlobalBillingIntegration
-
-        from .providers.stripe import StripeProvider
+        from plugins.sources.stripe import StripeSourcePlugin
 
         billing_integration = get_object_or_404(
             GlobalBillingIntegration, integration_type="stripe_billing", is_active=True
         )
 
-        provider = StripeProvider(webhook_secret=billing_integration.webhook_secret)
+        provider = StripeSourcePlugin(webhook_secret=billing_integration.webhook_secret)
 
         return _process_webhook(request, provider, "billing_stripe")
 

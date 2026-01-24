@@ -7,16 +7,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 from core.services.shopify import ShopifyAPI
-from webhooks.providers.base import CustomerNotFoundError, InvalidDataError
-from webhooks.providers.shopify import ShopifyProvider
+from plugins.sources.base import CustomerNotFoundError, InvalidDataError
+from plugins.sources.shopify import ShopifySourcePlugin
 
 
-class TestShopifyProvider:
-    """Comprehensive tests for ShopifyProvider"""
+class TestShopifySourcePlugin:
+    """Comprehensive tests for ShopifySourcePlugin"""
 
     @pytest.fixture
     def provider(self):
-        return ShopifyProvider(webhook_secret="test_secret")
+        return ShopifySourcePlugin(webhook_secret="test_secret")
 
     def test_init(self, provider):
         """Test provider initialization"""

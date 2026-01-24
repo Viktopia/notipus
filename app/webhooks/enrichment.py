@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .providers.base import PaymentEvent, PaymentProvider
+from plugins.sources.base import BaseSourcePlugin, PaymentEvent
 
 
 @dataclass
@@ -24,7 +24,7 @@ class EnrichedNotification:
 
 
 class NotificationEnricher:
-    def __init__(self, provider: PaymentProvider):
+    def __init__(self, provider: BaseSourcePlugin):
         self.provider = provider
 
     def enrich_notification(self, event: PaymentEvent) -> EnrichedNotification:

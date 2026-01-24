@@ -1,11 +1,15 @@
-"""Slack formatter for RichNotification objects.
+"""Slack destination plugin for notification delivery.
 
 This module converts RichNotification objects into Slack Block Kit JSON
-format for delivery via the Slack API.
+format and sends them via Slack's incoming webhook API.
 """
 
+import logging
 from typing import Any
 
+import requests
+from plugins.base import PluginCapability, PluginMetadata, PluginType
+from plugins.destinations.base import BaseDestinationPlugin
 from webhooks.models.rich_notification import (
     ActionButton,
     CompanyInfo,
@@ -17,7 +21,10 @@ from webhooks.models.rich_notification import (
     RichNotification,
 )
 
-from .base import BaseFormatter, FormatterRegistry
+logger = logging.getLogger(__name__)
+
+# Default timeout for Slack API requests (seconds)
+DEFAULT_TIMEOUT = 30
 
 # Semantic icon to Slack emoji mapping
 SLACK_ICONS: dict[str, str] = {
@@ -105,18 +112,41 @@ SEVERITY_COLORS: dict[NotificationSeverity, str] = {
 }
 
 
-@FormatterRegistry.register
-class SlackFormatter(BaseFormatter):
-    """Format RichNotification as Slack Block Kit JSON.
+class SlackDestinationPlugin(BaseDestinationPlugin):
+    """Format and send RichNotification as Slack Block Kit JSON.
 
-    This formatter converts target-agnostic RichNotification objects
-    into Slack's Block Kit format for rich message display.
+    This plugin converts target-agnostic RichNotification objects
+    into Slack's Block Kit format and delivers them via incoming webhooks.
     """
 
     @classmethod
-    def get_target_name(cls) -> str:
-        """Return 'slack' as the target identifier."""
-        return "slack"
+    def get_metadata(cls) -> PluginMetadata:
+        """Return plugin metadata.
+
+        Returns:
+            PluginMetadata describing the Slack destination plugin.
+        """
+        return PluginMetadata(
+            name="slack",
+            display_name="Slack",
+            version="1.0.0",
+            description="Send notifications to Slack via incoming webhooks",
+            plugin_type=PluginType.DESTINATION,
+            capabilities={
+                PluginCapability.RICH_FORMATTING,
+                PluginCapability.ATTACHMENTS,
+                PluginCapability.ACTIONS,
+            },
+            priority=100,
+        )
+
+    def __init__(self, timeout: int = DEFAULT_TIMEOUT) -> None:
+        """Initialize the Slack destination plugin.
+
+        Args:
+            timeout: Request timeout in seconds (default: 30).
+        """
+        self.timeout = timeout
 
     def format(self, n: RichNotification) -> dict[str, Any]:
         """Format notification as Slack Block Kit message.
@@ -166,6 +196,46 @@ class SlackFormatter(BaseFormatter):
             "blocks": blocks,
             "color": SEVERITY_COLORS.get(n.severity, "#17a2b8"),
         }
+
+    def send(self, formatted: Any, credentials: dict[str, Any]) -> bool:
+        """Send formatted notification to Slack via webhook.
+
+        Args:
+            formatted: Slack Block Kit formatted message.
+            credentials: Dictionary containing 'webhook_url'.
+
+        Returns:
+            True if message was sent successfully.
+
+        Raises:
+            ValueError: If webhook_url is missing from credentials.
+            RuntimeError: If the request fails or times out.
+        """
+        webhook_url = credentials.get("webhook_url")
+        if not webhook_url:
+            raise ValueError("Missing 'webhook_url' in credentials")
+
+        try:
+            response = requests.post(
+                webhook_url,
+                json=formatted,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return True
+        except requests.exceptions.Timeout:
+            logger.error(
+                "Slack request timed out",
+                extra={"timeout": self.timeout},
+            )
+            raise RuntimeError("Slack request timed out") from None
+        except requests.exceptions.RequestException as e:
+            logger.error(
+                "Failed to send message to Slack",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+            raise RuntimeError("Failed to send notification to Slack") from e
 
     def _format_header(self, n: RichNotification) -> dict[str, Any]:
         """Format the notification header block.

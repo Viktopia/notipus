@@ -11,17 +11,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import RequestFactory
-from webhooks.providers import ChargifyProvider
-from webhooks.providers.base import InvalidDataError
+from plugins.sources.base import InvalidDataError
+from plugins.sources.chargify import ChargifySourcePlugin
 
 
 class TestChargifyWebhookValidation:
     """Test Chargify webhook signature validation."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider instance for testing."""
-        return ChargifyProvider(webhook_secret="test_secret_key")
+        return ChargifySourcePlugin(webhook_secret="test_secret_key")
 
     @pytest.fixture
     def request_factory(self) -> RequestFactory:
@@ -99,7 +99,7 @@ class TestChargifyWebhookValidation:
         self, request_factory, settings
     ):
         """Test that missing webhook secret bypasses validation in DEBUG mode only"""
-        provider = ChargifyProvider(webhook_secret="")
+        provider = ChargifySourcePlugin(webhook_secret="")
 
         request = request_factory.post(
             "/webhook/chargify/",
@@ -115,7 +115,7 @@ class TestChargifyWebhookValidation:
         self, request_factory, settings
     ):
         """Test that missing webhook secret rejects in production (DEBUG=False)"""
-        provider = ChargifyProvider(webhook_secret="")
+        provider = ChargifySourcePlugin(webhook_secret="")
 
         request = request_factory.post(
             "/webhook/chargify/",
@@ -132,9 +132,9 @@ class TestChargifyWebhookParsing:
     """Test Chargify webhook data parsing."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider instance for testing."""
-        return ChargifyProvider(webhook_secret="test_secret")
+        return ChargifySourcePlugin(webhook_secret="test_secret")
 
     @pytest.fixture
     def request_factory(self) -> RequestFactory:
@@ -291,14 +291,14 @@ class TestChargifyWebhookDeduplication:
     """Test Chargify webhook deduplication logic."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider with short dedup window for testing."""
 
         # Create a custom provider class for testing with shorter dedup window
-        class TestChargifyProvider(ChargifyProvider):
+        class TestChargifySourcePlugin(ChargifySourcePlugin):
             _DEDUP_WINDOW_SECONDS = 60  # 1 minute for testing
 
-        return TestChargifyProvider(webhook_secret="test_secret")
+        return TestChargifySourcePlugin(webhook_secret="test_secret")
 
     def test_webhook_deduplication_prevents_duplicates(self, provider):
         """Test that duplicate webhook IDs are rejected"""
@@ -319,7 +319,7 @@ class TestChargifyWebhookDeduplication:
         """Test that old webhook entries are cleaned up"""
 
         # Create a provider with very short dedup window for this test
-        class QuickTestProvider(ChargifyProvider):
+        class QuickTestProvider(ChargifySourcePlugin):
             _DEDUP_WINDOW_SECONDS = 1  # 1 second for quick testing
 
         quick_provider = QuickTestProvider(webhook_secret="test_secret")
@@ -357,9 +357,9 @@ class TestChargifyWebhookTimestampValidation:
     """Test Chargify webhook timestamp validation."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider instance for testing."""
-        return ChargifyProvider(webhook_secret="test_secret")
+        return ChargifySourcePlugin(webhook_secret="test_secret")
 
     @pytest.fixture
     def request_factory(self) -> RequestFactory:
@@ -435,9 +435,9 @@ class TestChargifyShopifyOrderMatching:
     """Test Shopify order reference extraction from Chargify memos."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider instance for testing."""
-        return ChargifyProvider(webhook_secret="test_secret")
+        return ChargifySourcePlugin(webhook_secret="test_secret")
 
     def test_explicit_shopify_order_extraction(self, provider):
         """Test extraction of explicit Shopify order references"""
@@ -482,9 +482,9 @@ class TestChargifyErrorHandling:
     """Test error handling in Chargify webhook processing."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider instance for testing."""
-        return ChargifyProvider(webhook_secret="test_secret")
+        return ChargifySourcePlugin(webhook_secret="test_secret")
 
     @pytest.fixture
     def request_factory(self) -> RequestFactory:
@@ -574,13 +574,13 @@ class TestChargifyErrorHandling:
         assert result["metadata"]["memo"] == large_memo
 
 
-class TestChargifyProviderIntegration:
+class TestChargifySourcePluginIntegration:
     """Integration tests for Chargify provider."""
 
     @pytest.fixture
-    def provider(self) -> ChargifyProvider:
+    def provider(self) -> ChargifySourcePlugin:
         """Create a Chargify provider instance for testing."""
-        return ChargifyProvider(webhook_secret="test_secret")
+        return ChargifySourcePlugin(webhook_secret="test_secret")
 
     def test_customer_data_extraction(self, provider):
         """Test customer data extraction from webhook data"""

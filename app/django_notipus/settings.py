@@ -499,43 +499,51 @@ SHOPIFY_SCOPES = "read_orders,read_customers,write_webhooks"
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
 
 # ============================================================================
-# Enrichment Plugin Configuration
+# Unified Plugin Configuration
 # ============================================================================
-# Each plugin can be enabled/disabled and configured independently.
-# Plugins are auto-discovered from core.providers package.
+# All plugins (enrichment, sources, destinations) are configured here.
+# Plugins are auto-discovered from the plugins package.
+# See docs/adr/001-unified-plugin-architecture.md for details.
 
-ENRICHMENT_PLUGINS: dict = {
-    "brandfetch": {
-        "enabled": True,
-        "priority": 100,  # Higher priority = preferred for data blending
-        "config": {
-            "api_key": os.environ.get("BRANDFETCH_API_KEY", ""),
-            "base_url": os.environ.get(
-                "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
-            ),
-            "timeout": 10,  # Request timeout in seconds
+PLUGINS: dict = {
+    # Enrichment plugins - enrich customer data with company information
+    "enrichment": {
+        "brandfetch": {
+            "enabled": True,
+            "priority": 100,  # Higher priority = preferred for data blending
+            "config": {
+                "api_key": os.environ.get("BRANDFETCH_API_KEY", ""),
+                "base_url": os.environ.get(
+                    "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
+                ),
+                "timeout": 10,  # Request timeout in seconds
+            },
         },
+        # Future enrichment plugins:
+        # "clearbit": {"enabled": False, "priority": 80, "config": {...}},
+        # "apollo": {"enabled": False, "priority": 70, "config": {...}},
     },
-    # Future plugins can be added here:
-    # "openai": {
-    #     "enabled": True,
-    #     "priority": 50,
-    #     "config": {
-    #         "api_key": os.environ.get("OPENAI_API_KEY", ""),
-    #         "model": "gpt-4",
-    #     },
-    # },
-    # "clearbit": {
-    #     "enabled": False,
-    #     "priority": 80,
-    #     "config": {
-    #         "api_key": os.environ.get("CLEARBIT_API_KEY", ""),
-    #     },
-    # },
+    # Source plugins - receive webhooks from payment providers
+    "source": {
+        "stripe": {"enabled": True},
+        "shopify": {"enabled": True},
+        "chargify": {"enabled": True},
+        # Future source plugins:
+        # "paddle": {"enabled": False},
+        # "lemonsqueezy": {"enabled": False},
+    },
+    # Destination plugins - send notifications to various platforms
+    "destination": {
+        "slack": {"enabled": True},
+        # Future destination plugins:
+        # "discord": {"enabled": False},
+        # "email": {"enabled": False},
+        # "teams": {"enabled": False},
+    },
 }
 
-# Auto-discover plugins in core.providers package
-ENRICHMENT_PLUGIN_AUTODISCOVER = True
+# Auto-discover plugins from app/plugins/ package
+PLUGIN_AUTODISCOVER = True
 
 
 # Note: Provider factories removed - now handled per-tenant

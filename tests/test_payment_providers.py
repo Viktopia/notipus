@@ -9,23 +9,24 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from webhooks.providers import ChargifyProvider, PaymentProvider, ShopifyProvider
-from webhooks.providers.base import InvalidDataError
+from plugins.sources.base import BaseSourcePlugin, InvalidDataError
+from plugins.sources.chargify import ChargifySourcePlugin
+from plugins.sources.shopify import ShopifySourcePlugin
 from webhooks.services.event_processor import EventProcessor
 
 
 def test_payment_provider_interface() -> None:
     """Test that payment providers implement the required interface.
 
-    Verifies all providers are instances of PaymentProvider.
+    Verifies all providers are instances of BaseSourcePlugin.
     """
-    providers: list[PaymentProvider] = [
-        ChargifyProvider(webhook_secret="test_secret"),
-        ShopifyProvider(webhook_secret="test_secret"),
+    providers: list[BaseSourcePlugin] = [
+        ChargifySourcePlugin(webhook_secret="test_secret"),
+        ShopifySourcePlugin(webhook_secret="test_secret"),
     ]
 
     for provider in providers:
-        assert isinstance(provider, PaymentProvider)
+        assert isinstance(provider, BaseSourcePlugin)
 
 
 def test_chargify_payment_failure_parsing() -> None:
@@ -34,7 +35,7 @@ def test_chargify_payment_failure_parsing() -> None:
     Tests that payment failure events are correctly parsed with
     customer data, amount, and metadata.
     """
-    provider = ChargifyProvider(webhook_secret="test_secret")
+    provider = ChargifySourcePlugin(webhook_secret="test_secret")
 
     # Create a mock request (analogous to Flask request)
     mock_request = MagicMock()
@@ -82,7 +83,7 @@ def test_shopify_order_parsing() -> None:
     Tests that orders/paid events are correctly parsed with
     customer, order, and line item data.
     """
-    provider = ShopifyProvider(webhook_secret="test_secret")
+    provider = ShopifySourcePlugin(webhook_secret="test_secret")
 
     # Create a mock request
     mock_request = MagicMock()
@@ -168,7 +169,7 @@ def test_chargify_webhook_validation() -> None:
 
     Tests HMAC signature validation for Chargify webhooks.
     """
-    provider = ChargifyProvider(webhook_secret="test_secret")
+    provider = ChargifySourcePlugin(webhook_secret="test_secret")
 
     # Create a mock request with headers
     mock_request = MagicMock()
@@ -193,7 +194,7 @@ def test_shopify_webhook_validation() -> None:
 
     Tests HMAC-SHA256 signature validation and required headers.
     """
-    provider = ShopifyProvider("test_secret")
+    provider = ShopifySourcePlugin("test_secret")
 
     # Create a mock request with a valid signature
     mock_request = Mock()
@@ -246,7 +247,7 @@ def test_shopify_test_webhook(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Test webhooks should be ignored and return None.
     """
-    provider = ShopifyProvider("test_secret")
+    provider = ShopifySourcePlugin("test_secret")
 
     # Create a mock request
     mock_request = Mock()
@@ -270,7 +271,7 @@ def test_shopify_invalid_webhook_data() -> None:
     Tests various invalid data scenarios including wrong content type,
     empty data, missing customer ID, and invalid amount.
     """
-    provider = ShopifyProvider("test_secret")
+    provider = ShopifySourcePlugin("test_secret")
 
     # Create a mock request
     mock_request = Mock()
@@ -309,7 +310,7 @@ def test_invalid_webhook_data() -> None:
 
     Tests that empty form data raises InvalidDataError.
     """
-    chargify = ChargifyProvider(webhook_secret="test_secret")
+    chargify = ChargifySourcePlugin(webhook_secret="test_secret")
 
     # Test Chargify with invalid data
     mock_chargify_request = MagicMock()
@@ -330,7 +331,7 @@ def test_chargify_subscription_state_change() -> None:
 
     Tests that subscription cancellation events are correctly parsed.
     """
-    provider = ChargifyProvider(webhook_secret="test_secret")
+    provider = ChargifySourcePlugin(webhook_secret="test_secret")
     provider._webhook_cache.clear()  # Clear cache before test
 
     mock_request = MagicMock()
@@ -370,7 +371,7 @@ def test_shopify_customer_data_update() -> None:
 
     Tests that customer update events include company and profile data.
     """
-    provider = ShopifyProvider(webhook_secret="test_secret")
+    provider = ShopifySourcePlugin(webhook_secret="test_secret")
 
     mock_request = Mock()
     mock_request.content_type = "application/json"
@@ -429,7 +430,7 @@ def test_chargify_webhook_deduplication() -> None:
     Tests that duplicate webhook IDs are rejected while
     different webhook IDs are processed.
     """
-    provider = ChargifyProvider("")
+    provider = ChargifySourcePlugin("")
     provider._DEDUP_WINDOW_SECONDS = (
         60  # Set deduplication window to 60 seconds for testing
     )
@@ -536,7 +537,7 @@ def test_chargify_memo_parsing() -> None:
 
     Tests various memo formats to extract Shopify order IDs.
     """
-    provider = ChargifyProvider(webhook_secret="test_secret")
+    provider = ChargifySourcePlugin(webhook_secret="test_secret")
 
     # Test different memo formats
     test_cases: list[tuple[str, str | None]] = [
@@ -576,7 +577,7 @@ def test_chargify_payment_success_with_shopify_ref() -> None:
 
     Tests that memo parsing extracts Shopify order references.
     """
-    provider = ChargifyProvider(webhook_secret="test_secret")
+    provider = ChargifySourcePlugin(webhook_secret="test_secret")
 
     # Create a mock request
     mock_request = MagicMock()

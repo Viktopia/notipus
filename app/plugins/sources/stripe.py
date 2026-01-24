@@ -1,6 +1,6 @@
-"""Stripe payment provider implementation.
+"""Stripe source plugin implementation.
 
-This module implements the PaymentProvider interface for Stripe,
+This module implements the BaseSourcePlugin interface for Stripe,
 handling webhook validation, parsing, and customer data retrieval
 using the official Stripe SDK.
 """
@@ -11,16 +11,16 @@ from typing import Any, ClassVar
 import stripe
 from django.conf import settings
 from django.http import HttpRequest
-
-from .base import InvalidDataError, PaymentProvider
+from plugins.base import PluginCapability, PluginMetadata, PluginType
+from plugins.sources.base import BaseSourcePlugin, InvalidDataError
 
 logger = logging.getLogger(__name__)
 
 
-class StripeProvider(PaymentProvider):
+class StripeSourcePlugin(BaseSourcePlugin):
     """Handle Stripe webhooks using official Stripe SDK.
 
-    This provider validates webhook signatures using Stripe's built-in
+    This plugin validates webhook signatures using Stripe's built-in
     verification and parses various subscription and payment events.
 
     Attributes:
@@ -40,8 +40,29 @@ class StripeProvider(PaymentProvider):
         "test": "test",
     }
 
-    def __init__(self, webhook_secret: str) -> None:
-        """Initialize Stripe provider with webhook secret.
+    @classmethod
+    def get_metadata(cls) -> PluginMetadata:
+        """Return plugin metadata.
+
+        Returns:
+            PluginMetadata describing the Stripe source plugin.
+        """
+        return PluginMetadata(
+            name="stripe",
+            display_name="Stripe",
+            version="1.0.0",
+            description="Stripe webhook handler for payments and subscriptions",
+            plugin_type=PluginType.SOURCE,
+            capabilities={
+                PluginCapability.WEBHOOK_VALIDATION,
+                PluginCapability.CUSTOMER_DATA,
+                PluginCapability.PAYMENT_HISTORY,
+            },
+            priority=100,
+        )
+
+    def __init__(self, webhook_secret: str = "") -> None:
+        """Initialize Stripe plugin with webhook secret.
 
         Args:
             webhook_secret: Stripe webhook signing secret.
@@ -125,7 +146,7 @@ class StripeProvider(PaymentProvider):
         Returns:
             Amount as a string.
         """
-        from ..services.billing import BillingService
+        from webhooks.services.billing import BillingService
 
         if event_type == "subscription_created":
             amount = str(data.get("plan", {}).get("amount", 0))

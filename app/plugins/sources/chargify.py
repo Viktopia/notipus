@@ -1,6 +1,6 @@
-"""Chargify (Maxio Advanced Billing) payment provider implementation.
+"""Chargify (Maxio Advanced Billing) source plugin implementation.
 
-This module implements the PaymentProvider interface for Chargify,
+This module implements the BaseSourcePlugin interface for Chargify,
 handling webhook validation, parsing, and customer data retrieval.
 """
 
@@ -14,14 +14,18 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 from django.http import HttpRequest
-
-from .base import CustomerNotFoundError, InvalidDataError, PaymentProvider
+from plugins.base import PluginCapability, PluginMetadata, PluginType
+from plugins.sources.base import (
+    BaseSourcePlugin,
+    CustomerNotFoundError,
+    InvalidDataError,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class ChargifyProvider(PaymentProvider):
-    """Chargify (Maxio Advanced Billing) payment provider implementation.
+class ChargifySourcePlugin(BaseSourcePlugin):
+    """Chargify (Maxio Advanced Billing) source plugin implementation.
 
     Handles webhook validation using HMAC signatures (SHA-256 preferred,
     with MD5 fallback), deduplication, and parsing of various subscription
@@ -68,8 +72,28 @@ class ChargifyProvider(PaymentProvider):
     _DEDUP_WINDOW_SECONDS: ClassVar[int] = 300  # 5 minutes
     _TIMESTAMP_TOLERANCE_SECONDS: ClassVar[int] = 300  # 5 minutes tolerance
 
-    def __init__(self, webhook_secret: str) -> None:
-        """Initialize provider with webhook secret.
+    @classmethod
+    def get_metadata(cls) -> PluginMetadata:
+        """Return plugin metadata.
+
+        Returns:
+            PluginMetadata describing the Chargify source plugin.
+        """
+        return PluginMetadata(
+            name="chargify",
+            display_name="Chargify (Maxio)",
+            version="1.0.0",
+            description="Chargify/Maxio webhook handler for subscriptions and payments",
+            plugin_type=PluginType.SOURCE,
+            capabilities={
+                PluginCapability.WEBHOOK_VALIDATION,
+                PluginCapability.CUSTOMER_DATA,
+            },
+            priority=100,
+        )
+
+    def __init__(self, webhook_secret: str = "") -> None:
+        """Initialize plugin with webhook secret.
 
         Args:
             webhook_secret: Secret key for webhook signature validation.

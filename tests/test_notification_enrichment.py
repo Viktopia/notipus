@@ -8,8 +8,8 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from plugins.sources.base import BaseSourcePlugin, PaymentEvent
 from webhooks.enrichment import NotificationEnricher
-from webhooks.providers.base import PaymentEvent, PaymentProvider
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def mock_provider() -> MagicMock:
         MagicMock configured with payment history, usage metrics,
         customer data, and related events.
     """
-    provider = MagicMock(spec=PaymentProvider)
+    provider = MagicMock(spec=BaseSourcePlugin)
     provider.get_payment_history.return_value = [
         {
             "id": "pmt_123",

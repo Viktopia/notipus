@@ -1,6 +1,6 @@
-"""Shopify payment provider implementation.
+"""Shopify source plugin implementation.
 
-This module implements the PaymentProvider interface for Shopify,
+This module implements the BaseSourcePlugin interface for Shopify,
 handling webhook validation, parsing, and customer data retrieval
 using HMAC-SHA256 signature verification.
 """
@@ -13,16 +13,20 @@ import logging
 from typing import Any, ClassVar
 
 from django.http import HttpRequest
-
-from .base import CustomerNotFoundError, InvalidDataError, PaymentProvider
+from plugins.base import PluginCapability, PluginMetadata, PluginType
+from plugins.sources.base import (
+    BaseSourcePlugin,
+    CustomerNotFoundError,
+    InvalidDataError,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class ShopifyProvider(PaymentProvider):
+class ShopifySourcePlugin(BaseSourcePlugin):
     """Handle Shopify webhooks and customer data.
 
-    This provider validates webhook signatures using HMAC-SHA256
+    This plugin validates webhook signatures using HMAC-SHA256
     verification as recommended by Shopify's documentation.
 
     Attributes:
@@ -36,8 +40,28 @@ class ShopifyProvider(PaymentProvider):
         "test": "test",
     }
 
-    def __init__(self, webhook_secret: str) -> None:
-        """Initialize provider with webhook secret.
+    @classmethod
+    def get_metadata(cls) -> PluginMetadata:
+        """Return plugin metadata.
+
+        Returns:
+            PluginMetadata describing the Shopify source plugin.
+        """
+        return PluginMetadata(
+            name="shopify",
+            display_name="Shopify",
+            version="1.0.0",
+            description="Shopify webhook handler for orders and customers",
+            plugin_type=PluginType.SOURCE,
+            capabilities={
+                PluginCapability.WEBHOOK_VALIDATION,
+                PluginCapability.CUSTOMER_DATA,
+            },
+            priority=100,
+        )
+
+    def __init__(self, webhook_secret: str = "") -> None:
+        """Initialize plugin with webhook secret.
 
         Args:
             webhook_secret: Secret key for webhook signature validation.

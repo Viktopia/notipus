@@ -1,17 +1,22 @@
-"""Base classes and exceptions for payment provider implementations.
+"""Base class for source plugins (webhook providers).
 
-This module defines the abstract base class for payment providers and
-common exceptions used across all provider implementations.
+Source plugins handle incoming webhooks from payment providers and other
+external services, validating signatures and parsing event data.
 """
 
-from abc import ABC, abstractmethod
+import logging
+from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from django.http import HttpRequest
+from plugins.base import BasePlugin, PluginMetadata
+
+logger = logging.getLogger(__name__)
 
 
+# Exceptions for source plugins
 class WebhookValidationError(Exception):
     """Raised when webhook validation fails.
 
@@ -63,7 +68,7 @@ class InvalidEventType(WebhookError):
 
 @dataclass(slots=True)
 class CustomerData:
-    """Customer information from a payment provider.
+    """Customer information from a source provider.
 
     Attributes:
         id: Unique customer identifier.
@@ -90,7 +95,7 @@ class CustomerData:
 
 @dataclass(slots=True)
 class SubscriptionData:
-    """Subscription information from a payment provider.
+    """Subscription information from a source provider.
 
     Attributes:
         id: Unique subscription identifier.
@@ -115,7 +120,7 @@ class SubscriptionData:
 
 @dataclass(slots=True)
 class PaymentEvent:
-    """Payment event data from a provider webhook.
+    """Payment event data from a source webhook.
 
     Attributes:
         id: Unique event identifier.
@@ -142,23 +147,68 @@ class PaymentEvent:
     retry_count: int | None = None
 
 
-class PaymentProvider(ABC):
-    """Abstract base class for payment provider implementations.
+class BaseSourcePlugin(BasePlugin):
+    """Base class for source plugins (webhook providers).
 
-    Defines the interface that all payment providers must implement
-    to handle webhooks and retrieve customer/payment data.
+    Source plugins handle incoming webhooks from payment providers,
+    validating signatures and parsing event data into a standardized format.
 
-    Attributes:
-        webhook_secret: Secret key for validating webhook signatures.
+    Unlike enrichment plugins which are configured globally, source plugins
+    are typically instantiated per-workspace with workspace-specific
+    credentials (webhook_secret).
+
+    Subclasses must implement:
+    - get_metadata(): Return plugin metadata with plugin_type=SOURCE
+    - validate_webhook(): Validate webhook signature
+    - parse_webhook(): Parse webhook data into standardized format
+
+    Subclasses may override:
+    - get_customer_data(): Retrieve customer information
+    - get_payment_history(): Get payment history for a customer
+    - get_usage_metrics(): Get usage metrics for a customer
+    - get_related_events(): Get related events for a customer
+
+    Example:
+        class MySourcePlugin(BaseSourcePlugin):
+            @classmethod
+            def get_metadata(cls) -> PluginMetadata:
+                return PluginMetadata(
+                    name="my_source",
+                    display_name="My Source",
+                    version="1.0.0",
+                    description="Webhook handler for My Source",
+                    plugin_type=PluginType.SOURCE,
+                    capabilities={PluginCapability.WEBHOOK_VALIDATION},
+                )
+
+            def validate_webhook(self, request: HttpRequest) -> bool:
+                # Validate signature
+                return True
+
+            def parse_webhook(self, request: HttpRequest) -> dict[str, Any]:
+                # Parse and return standardized event data
+                return {"type": "payment_success", ...}
     """
 
-    def __init__(self, webhook_secret: str) -> None:
-        """Initialize the provider with webhook credentials.
+    def __init__(self, webhook_secret: str = "") -> None:
+        """Initialize the source plugin with webhook credentials.
 
         Args:
             webhook_secret: Secret key for webhook validation.
         """
         self.webhook_secret = webhook_secret
+
+    @classmethod
+    @abstractmethod
+    def get_metadata(cls) -> PluginMetadata:
+        """Return plugin metadata.
+
+        Must set plugin_type=PluginType.SOURCE.
+
+        Returns:
+            PluginMetadata describing this source plugin.
+        """
+        pass
 
     @abstractmethod
     def validate_webhook(self, request: HttpRequest) -> bool:
@@ -170,6 +220,7 @@ class PaymentProvider(ABC):
         Returns:
             True if the webhook is valid, False otherwise.
         """
+        pass
 
     @abstractmethod
     def parse_webhook(
@@ -183,10 +234,15 @@ class PaymentProvider(ABC):
 
         Returns:
             Parsed webhook data dictionary, or None for test webhooks.
+            The dictionary should contain at minimum:
+            - type: Event type string
+            - customer_id: Customer identifier
+            - status: Event status
 
         Raises:
             InvalidDataError: If the webhook data is invalid.
         """
+        pass
 
     def get_payment_history(self, customer_id: str) -> list[dict[str, Any]]:
         """Get payment history for a customer.
@@ -211,7 +267,7 @@ class PaymentProvider(ABC):
         return {}
 
     def get_customer_data(self, customer_id: str) -> dict[str, Any]:
-        """Get customer data from the provider.
+        """Get customer data from the source provider.
 
         Args:
             customer_id: The customer's unique identifier.

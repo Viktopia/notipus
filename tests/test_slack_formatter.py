@@ -1,12 +1,12 @@
-"""Tests for the SlackFormatter.
+"""Tests for the SlackDestinationPlugin.
 
-This module tests the SlackFormatter class that converts
+This module tests the SlackDestinationPlugin class that converts
 RichNotification objects to Slack Block Kit JSON.
 """
 
 import pytest
-from webhooks.formatters.base import FormatterRegistry
-from webhooks.formatters.slack import SlackFormatter
+from plugins.destinations.base import BaseDestinationPlugin
+from plugins.destinations.slack import SlackDestinationPlugin
 from webhooks.models.rich_notification import (
     ActionButton,
     CompanyInfo,
@@ -20,9 +20,9 @@ from webhooks.models.rich_notification import (
 
 
 @pytest.fixture
-def formatter() -> SlackFormatter:
-    """Create a SlackFormatter instance."""
-    return SlackFormatter()
+def formatter() -> SlackDestinationPlugin:
+    """Create a SlackDestinationPlugin instance."""
+    return SlackDestinationPlugin()
 
 
 @pytest.fixture
@@ -93,35 +93,38 @@ def notification_with_actions(basic_notification: RichNotification) -> RichNotif
     return basic_notification
 
 
-class TestSlackFormatterRegistration:
-    """Test SlackFormatter registration."""
+class TestSlackDestinationPluginRegistration:
+    """Test SlackDestinationPlugin registration."""
 
-    def test_formatter_registered(self) -> None:
-        """Test SlackFormatter is registered with the registry."""
-        assert FormatterRegistry.is_registered("slack")
+    def test_plugin_metadata(self) -> None:
+        """Test SlackDestinationPlugin has correct metadata."""
+        metadata = SlackDestinationPlugin.get_metadata()
+        assert metadata.name == "slack"
 
-    def test_get_formatter_from_registry(self) -> None:
-        """Test getting SlackFormatter from registry."""
-        formatter = FormatterRegistry.get("slack")
-        assert isinstance(formatter, SlackFormatter)
+    def test_plugin_instance(self) -> None:
+        """Test creating SlackDestinationPlugin instance."""
+        plugin = SlackDestinationPlugin()
+        assert isinstance(plugin, SlackDestinationPlugin)
+        assert isinstance(plugin, BaseDestinationPlugin)
 
-    def test_target_name(self) -> None:
-        """Test SlackFormatter target name."""
-        assert SlackFormatter.get_target_name() == "slack"
+    def test_plugin_name(self) -> None:
+        """Test SlackDestinationPlugin name."""
+        plugin = SlackDestinationPlugin()
+        assert plugin.get_plugin_name() == "slack"
 
 
-class TestSlackFormatterBasicOutput:
+class TestSlackDestinationPluginBasicOutput:
     """Test basic formatter output structure."""
 
     def test_format_returns_dict(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test that format returns a dictionary."""
         result = formatter.format(basic_notification)
         assert isinstance(result, dict)
 
     def test_format_has_blocks(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test that format output has blocks."""
         result = formatter.format(basic_notification)
@@ -130,7 +133,7 @@ class TestSlackFormatterBasicOutput:
         assert len(result["blocks"]) > 0
 
     def test_format_has_color(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test that format output has color."""
         result = formatter.format(basic_notification)
@@ -138,13 +141,13 @@ class TestSlackFormatterBasicOutput:
         assert result["color"].startswith("#")
 
     def test_success_color(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test success severity uses green color."""
         result = formatter.format(basic_notification)
         assert result["color"] == "#28a745"
 
-    def test_error_color(self, formatter: SlackFormatter) -> None:
+    def test_error_color(self, formatter: SlackDestinationPlugin) -> None:
         """Test error severity uses red color."""
         notification = RichNotification(
             type=NotificationType.PAYMENT_FAILURE,
@@ -159,11 +162,11 @@ class TestSlackFormatterBasicOutput:
         assert result["color"] == "#dc3545"
 
 
-class TestSlackFormatterHeader:
+class TestSlackDestinationPluginHeader:
     """Test header block formatting."""
 
     def test_header_block_present(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test header block is present."""
         result = formatter.format(basic_notification)
@@ -172,7 +175,7 @@ class TestSlackFormatterHeader:
         assert header_block["type"] == "header"
 
     def test_header_contains_headline(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test header contains headline text."""
         result = formatter.format(basic_notification)
@@ -181,7 +184,7 @@ class TestSlackFormatterHeader:
         assert "$299.00 from Acme Inc" in header_block["text"]["text"]
 
     def test_header_contains_emoji(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test header contains emoji."""
         result = formatter.format(basic_notification)
@@ -190,11 +193,13 @@ class TestSlackFormatterHeader:
         assert ":moneybag:" in header_block["text"]["text"]
 
 
-class TestSlackFormatterInsight:
+class TestSlackDestinationPluginInsight:
     """Test insight block formatting."""
 
     def test_insight_block_present(
-        self, formatter: SlackFormatter, notification_with_insight: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_insight: RichNotification,
     ) -> None:
         """Test insight block is present when notification has insight."""
         result = formatter.format(notification_with_insight)
@@ -209,7 +214,9 @@ class TestSlackFormatterInsight:
         assert len(insight_blocks) == 1
 
     def test_insight_contains_text(
-        self, formatter: SlackFormatter, notification_with_insight: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_insight: RichNotification,
     ) -> None:
         """Test insight contains the milestone text."""
         result = formatter.format(notification_with_insight)
@@ -224,7 +231,7 @@ class TestSlackFormatterInsight:
         pytest.fail("Insight text not found")
 
     def test_no_insight_block_without_insight(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test no insight block when notification has no insight."""
         basic_notification.insight = None
@@ -235,11 +242,11 @@ class TestSlackFormatterInsight:
         assert len(context_blocks) == 2  # Provider badge + customer footer
 
 
-class TestSlackFormatterProviderBadge:
+class TestSlackDestinationPluginProviderBadge:
     """Test provider badge formatting."""
 
     def test_provider_badge_present(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test provider badge is present."""
         result = formatter.format(basic_notification)
@@ -249,7 +256,7 @@ class TestSlackFormatterProviderBadge:
         assert len(context_blocks) >= 1
 
     def test_provider_badge_contains_provider(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test provider badge contains provider name."""
         result = formatter.format(basic_notification)
@@ -264,7 +271,7 @@ class TestSlackFormatterProviderBadge:
         pytest.fail("Provider not found in badge")
 
     def test_provider_badge_contains_payment_type(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test provider badge contains payment type."""
         result = formatter.format(basic_notification)
@@ -278,11 +285,11 @@ class TestSlackFormatterProviderBadge:
         pytest.fail("Payment type not found in badge")
 
 
-class TestSlackFormatterPaymentDetails:
+class TestSlackDestinationPluginPaymentDetails:
     """Test payment details section formatting."""
 
     def test_payment_details_present(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test payment details section is present."""
         result = formatter.format(basic_notification)
@@ -292,7 +299,7 @@ class TestSlackFormatterPaymentDetails:
         assert len(section_blocks) >= 1
 
     def test_payment_details_contains_amount(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test payment details contains amount."""
         result = formatter.format(basic_notification)
@@ -306,7 +313,7 @@ class TestSlackFormatterPaymentDetails:
         pytest.fail("Amount not found in payment details")
 
     def test_payment_details_contains_arr(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test payment details contains ARR for monthly subscriptions."""
         result = formatter.format(basic_notification)
@@ -319,11 +326,13 @@ class TestSlackFormatterPaymentDetails:
         pytest.fail("ARR not found in payment details")
 
 
-class TestSlackFormatterCompanySection:
+class TestSlackDestinationPluginCompanySection:
     """Test company section formatting."""
 
     def test_company_section_present(
-        self, formatter: SlackFormatter, notification_with_company: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_company: RichNotification,
     ) -> None:
         """Test company section is present when notification has company."""
         result = formatter.format(notification_with_company)
@@ -337,7 +346,9 @@ class TestSlackFormatterCompanySection:
         assert len(company_sections) == 1
 
     def test_company_section_has_logo(
-        self, formatter: SlackFormatter, notification_with_company: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_company: RichNotification,
     ) -> None:
         """Test company section has logo accessory."""
         result = formatter.format(notification_with_company)
@@ -353,7 +364,9 @@ class TestSlackFormatterCompanySection:
         pytest.fail("Company section with logo not found")
 
     def test_company_section_contains_industry(
-        self, formatter: SlackFormatter, notification_with_company: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_company: RichNotification,
     ) -> None:
         """Test company section contains industry."""
         result = formatter.format(notification_with_company)
@@ -366,11 +379,11 @@ class TestSlackFormatterCompanySection:
         pytest.fail("Industry not found in company section")
 
 
-class TestSlackFormatterCustomerFooter:
+class TestSlackDestinationPluginCustomerFooter:
     """Test customer footer formatting."""
 
     def test_customer_footer_present(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test customer footer is present."""
         result = formatter.format(basic_notification)
@@ -380,7 +393,7 @@ class TestSlackFormatterCustomerFooter:
         assert len(context_blocks) >= 1
 
     def test_customer_footer_contains_email(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test customer footer contains email."""
         result = formatter.format(basic_notification)
@@ -393,7 +406,7 @@ class TestSlackFormatterCustomerFooter:
         assert "alice@acme.com" in text
 
     def test_customer_footer_contains_tenure(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test customer footer contains tenure."""
         result = formatter.format(basic_notification)
@@ -404,7 +417,9 @@ class TestSlackFormatterCustomerFooter:
 
         assert "Since Mar 2024" in text
 
-    def test_customer_footer_shows_risk_flag(self, formatter: SlackFormatter) -> None:
+    def test_customer_footer_shows_risk_flag(
+        self, formatter: SlackDestinationPlugin
+    ) -> None:
         """Test customer footer shows risk flag."""
         notification = RichNotification(
             type=NotificationType.PAYMENT_FAILURE,
@@ -427,11 +442,13 @@ class TestSlackFormatterCustomerFooter:
         assert "At Risk" in text
 
 
-class TestSlackFormatterActions:
+class TestSlackDestinationPluginActions:
     """Test action buttons formatting."""
 
     def test_actions_block_present(
-        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_actions: RichNotification,
     ) -> None:
         """Test actions block is present when notification has actions."""
         result = formatter.format(notification_with_actions)
@@ -440,7 +457,9 @@ class TestSlackFormatterActions:
         assert len(actions_blocks) == 1
 
     def test_actions_contain_buttons(
-        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_actions: RichNotification,
     ) -> None:
         """Test actions block contains buttons."""
         result = formatter.format(notification_with_actions)
@@ -449,7 +468,9 @@ class TestSlackFormatterActions:
         assert len(actions_block["elements"]) == 2
 
     def test_button_has_correct_text(
-        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_actions: RichNotification,
     ) -> None:
         """Test buttons have correct text."""
         result = formatter.format(notification_with_actions)
@@ -461,7 +482,9 @@ class TestSlackFormatterActions:
         assert "Website" in button_texts
 
     def test_button_has_style(
-        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_actions: RichNotification,
     ) -> None:
         """Test primary button has style."""
         result = formatter.format(notification_with_actions)
@@ -476,7 +499,7 @@ class TestSlackFormatterActions:
         assert primary_button.get("style") == "primary"
 
     def test_no_actions_block_without_actions(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test no actions block when notification has no actions."""
         basic_notification.actions = []
@@ -486,11 +509,11 @@ class TestSlackFormatterActions:
         assert len(actions_blocks) == 0
 
 
-class TestSlackFormatterDivider:
+class TestSlackDestinationPluginDivider:
     """Test divider block."""
 
     def test_divider_present(
-        self, formatter: SlackFormatter, basic_notification: RichNotification
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
     ) -> None:
         """Test divider block is present."""
         result = formatter.format(basic_notification)
@@ -499,10 +522,10 @@ class TestSlackFormatterDivider:
         assert len(divider_blocks) >= 1
 
 
-class TestSlackFormatterEcommerceDetails:
+class TestSlackDestinationPluginEcommerceDetails:
     """Test e-commerce order details formatting."""
 
-    def test_ecommerce_order_details(self, formatter: SlackFormatter) -> None:
+    def test_ecommerce_order_details(self, formatter: SlackDestinationPlugin) -> None:
         """Test e-commerce order details formatting."""
         notification = RichNotification(
             type=NotificationType.PAYMENT_SUCCESS,
@@ -536,10 +559,10 @@ class TestSlackFormatterEcommerceDetails:
         pytest.fail("Order details not found")
 
 
-class TestSlackFormatterDetailSections:
+class TestSlackDestinationPluginDetailSections:
     """Test generic detail section formatting for non-payment events."""
 
-    def test_detail_section_rendered(self, formatter: SlackFormatter) -> None:
+    def test_detail_section_rendered(self, formatter: SlackDestinationPlugin) -> None:
         """Test detail sections are rendered for non-payment events."""
         from webhooks.models.rich_notification import DetailSection
 
@@ -577,7 +600,9 @@ class TestSlackFormatterDetailSections:
 
         assert found_section, "Detail section not found"
 
-    def test_detail_section_with_accessory(self, formatter: SlackFormatter) -> None:
+    def test_detail_section_with_accessory(
+        self, formatter: SlackDestinationPlugin
+    ) -> None:
         """Test detail section with accessory image."""
         from webhooks.models.rich_notification import DetailSection
 
@@ -616,7 +641,7 @@ class TestSlackFormatterDetailSections:
 
         pytest.fail("Detail section with accessory not found")
 
-    def test_multiple_detail_sections(self, formatter: SlackFormatter) -> None:
+    def test_multiple_detail_sections(self, formatter: SlackDestinationPlugin) -> None:
         """Test multiple detail sections are rendered."""
         notification = RichNotification(
             type=NotificationType.SUPPORT_TICKET,
@@ -653,10 +678,12 @@ class TestSlackFormatterDetailSections:
         assert context_found, "Customer Context section not found"
 
 
-class TestSlackFormatterNonPaymentEvents:
+class TestSlackDestinationPluginNonPaymentEvents:
     """Test formatting for non-payment event types."""
 
-    def test_usage_event_category_badge(self, formatter: SlackFormatter) -> None:
+    def test_usage_event_category_badge(
+        self, formatter: SlackDestinationPlugin
+    ) -> None:
         """Test usage event shows category badge instead of payment type."""
         notification = RichNotification(
             type=NotificationType.QUOTA_WARNING,
@@ -684,7 +711,9 @@ class TestSlackFormatterNonPaymentEvents:
 
         pytest.fail("Provider badge with category not found")
 
-    def test_system_event_without_customer(self, formatter: SlackFormatter) -> None:
+    def test_system_event_without_customer(
+        self, formatter: SlackDestinationPlugin
+    ) -> None:
         """Test system event can render without customer info."""
         notification = RichNotification(
             type=NotificationType.INTEGRATION_CONNECTED,
@@ -708,7 +737,7 @@ class TestSlackFormatterNonPaymentEvents:
             text = str(block.get("elements", [{}])[0].get("text", ""))
             assert "@" not in text  # No email in footer
 
-    def test_customer_event_formatting(self, formatter: SlackFormatter) -> None:
+    def test_customer_event_formatting(self, formatter: SlackDestinationPlugin) -> None:
         """Test customer event type formatting."""
         notification = RichNotification(
             type=NotificationType.CUSTOMER_CHURNED,
@@ -737,7 +766,7 @@ class TestSlackFormatterNonPaymentEvents:
         assert "At Risk" in text
 
 
-class TestSlackFormatterMetadata:
+class TestSlackDestinationPluginMetadata:
     """Test metadata field handling."""
 
     def test_metadata_available_on_notification(self) -> None:

@@ -6,13 +6,13 @@ with brand information from multiple plugin-based providers.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from core.models import Company
-from core.providers.base import BaseEnrichmentPlugin
-from core.providers.registry import EnrichmentPluginRegistry
 from core.services.logo_storage import get_logo_storage_service
 from django.conf import settings
+from plugins import PluginRegistry, PluginType
+from plugins.enrichment import BaseEnrichmentPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class DomainEnrichmentService:
 
     def __init__(self) -> None:
         """Initialize the enrichment service with plugin registry."""
-        self.registry = EnrichmentPluginRegistry()
+        self.registry = PluginRegistry.instance()
         self.blender = DataBlender()
         self._plugins: list[BaseEnrichmentPlugin] = []
         self._initialize()
@@ -134,14 +134,18 @@ class DomainEnrichmentService:
     def _initialize(self) -> None:
         """Initialize plugins from registry."""
         # Auto-discover plugins if enabled
-        if getattr(settings, "ENRICHMENT_PLUGIN_AUTODISCOVER", True):
+        if getattr(settings, "PLUGIN_AUTODISCOVER", True):
             self.registry.discover()
 
-        # Get enabled and available plugins
-        self._plugins = self.registry.get_enabled_plugins()
+        # Get enabled and available enrichment plugins
+        # Registry returns BasePlugin but ENRICHMENT type returns BaseEnrichmentPlugin
+        self._plugins = cast(
+            list[BaseEnrichmentPlugin],
+            self.registry.get_enabled(PluginType.ENRICHMENT),
+        )
 
         if self._plugins:
-            plugin_names = [p.get_provider_name() for p in self._plugins]
+            plugin_names = [p.get_plugin_name() for p in self._plugins]
             logger.info(f"Initialized enrichment service with plugins: {plugin_names}")
         else:
             logger.warning("No enrichment plugins available")
@@ -231,7 +235,7 @@ class DomainEnrichmentService:
         source_data: dict[str, dict[str, Any]] = {}
 
         for plugin in self._plugins:
-            plugin_name = plugin.get_provider_name()
+            plugin_name = plugin.get_plugin_name()
             try:
                 data = plugin.enrich_domain(domain)
                 if data:
@@ -277,7 +281,7 @@ class DomainEnrichmentService:
         Returns:
             List of plugin info dictionaries.
         """
-        return self.registry.list_plugins()
+        return self.registry.list_plugins(PluginType.ENRICHMENT)
 
     def refresh_enrichment(self, domain: str) -> Company | None:
         """Force refresh enrichment for a domain.

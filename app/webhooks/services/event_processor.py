@@ -12,8 +12,9 @@ from typing import Any, ClassVar
 from core.models import Company
 from core.services.enrichment import DomainEnrichmentService
 from core.utils.email_domain import extract_domain, is_enrichable_domain
+from plugins import PluginRegistry, PluginType
+from plugins.destinations.base import BaseDestinationPlugin
 
-from ..formatters.base import FormatterRegistry
 from ..models.notification import Notification, Section
 from ..models.rich_notification import RichNotification
 from .database_lookup import DatabaseLookupService
@@ -136,9 +137,12 @@ class EventProcessor:
             enriched_event_data, customer_data, company
         )
 
-        # Format for target platform
-        formatter = FormatterRegistry.get(target)
-        return formatter.format(notification)
+        # Format for target platform using destination plugin
+        registry = PluginRegistry.instance()
+        plugin = registry.get(PluginType.DESTINATION, target)
+        if plugin is None or not isinstance(plugin, BaseDestinationPlugin):
+            raise ValueError(f"No destination plugin found for target: {target}")
+        return plugin.format(notification)
 
     def build_rich_notification(
         self,

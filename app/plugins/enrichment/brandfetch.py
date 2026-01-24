@@ -9,12 +9,8 @@ from typing import Any
 
 import requests
 from django.conf import settings
-
-from .base import (
-    BaseEnrichmentPlugin,
-    PluginCapability,
-    PluginMetadata,
-)
+from plugins.base import PluginCapability, PluginMetadata, PluginType
+from plugins.enrichment.base import BaseEnrichmentPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +52,7 @@ class BrandfetchPlugin(BaseEnrichmentPlugin):
             display_name="Brandfetch",
             version="1.0.0",
             description="Brand logos, colors, and company info via Brandfetch API",
+            plugin_type=PluginType.ENRICHMENT,
             capabilities={
                 PluginCapability.LOGO,
                 PluginCapability.DESCRIPTION,
@@ -73,10 +70,11 @@ class BrandfetchPlugin(BaseEnrichmentPlugin):
         """Check if API key is configured.
 
         Returns:
-            True if an API key is available in ENRICHMENT_PLUGINS config.
+            True if an API key is available in PLUGINS config.
         """
-        enrichment_plugins = getattr(settings, "ENRICHMENT_PLUGINS", {})
-        plugin_config = enrichment_plugins.get("brandfetch", {}).get("config", {})
+        plugins_config = getattr(settings, "PLUGINS", {})
+        enrichment_config = plugins_config.get("enrichment", {})
+        plugin_config = enrichment_config.get("brandfetch", {}).get("config", {})
         return bool(plugin_config.get("api_key"))
 
     def configure(self, config: dict[str, Any]) -> None:
