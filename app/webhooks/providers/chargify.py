@@ -715,18 +715,31 @@ class ChargifyProvider(PaymentProvider):
         subscription_id = data.get("payload[subscription][id]", "")
         plan_name = data.get("payload[subscription][product][name]", "")
 
+        # Extract payment method info
+        payment_method = data.get("payload[transaction][payment_method]", "")
+        card_type = data.get("payload[transaction][card_type]", "")
+        card_last4 = data.get("payload[transaction][card_last_four]", "")
+
+        # Determine billing period from product handle or interval
+        billing_period = data.get("payload[subscription][product][interval]", "monthly")
+
         return {
             "type": "payment_success",
             "customer_id": data["payload[subscription][customer][id]"],
             "amount": amount_float,
             "currency": "USD",  # Chargify amounts are in USD
             "status": "success",
+            "provider": "chargify",
             "metadata": {
                 "subscription_id": subscription_id,
                 "transaction_id": data.get("payload[transaction][id]", ""),
                 "plan_name": plan_name,
                 "shopify_order_ref": shopify_order_ref,
                 "memo": memo,  # Include full memo for reference
+                "billing_period": billing_period,
+                "payment_method": payment_method,
+                "card_type": card_type,
+                "card_last4": card_last4,
             },
             "customer_data": customer_data,
         }
@@ -750,12 +763,22 @@ class ChargifyProvider(PaymentProvider):
         customer_data = self.get_customer_data(
             data["payload[subscription][customer][id]"]
         )
+
+        # Extract payment method info
+        payment_method = data.get("payload[transaction][payment_method]", "")
+        card_type = data.get("payload[transaction][card_type]", "")
+        card_last4 = data.get("payload[transaction][card_last_four]", "")
+
+        # Determine billing period
+        billing_period = data.get("payload[subscription][product][interval]", "monthly")
+
         return {
             "type": "payment_failure",
             "customer_id": data["payload[subscription][customer][id]"],
             "amount": float(amount) / 100,  # Convert cents to dollars
             "currency": "USD",  # Chargify amounts are in USD
             "status": "failed",
+            "provider": "chargify",
             "metadata": {
                 "subscription_id": data["payload[subscription][id]"],
                 "transaction_id": data.get("payload[transaction][id]", ""),
@@ -763,6 +786,10 @@ class ChargifyProvider(PaymentProvider):
                 "failure_reason": data.get(
                     "payload[transaction][failure_message]", "Unknown error"
                 ),
+                "billing_period": billing_period,
+                "payment_method": payment_method,
+                "card_type": card_type,
+                "card_last4": card_last4,
             },
             "customer_data": customer_data,
         }

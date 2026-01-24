@@ -1,1 +1,179 @@
-# Register your models here.
+"""Django admin configuration for core models.
+
+This module provides admin interfaces for managing core models,
+including Company enrichment data with search, filters, and bulk actions.
+"""
+
+import json
+from typing import TYPE_CHECKING
+
+from django.contrib import admin
+from django.utils.html import format_html
+
+from .models import Company
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+    from django.http import HttpRequest
+
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    """Admin interface for Company enrichment data."""
+
+    list_display = [
+        "domain",
+        "name",
+        "has_logo_display",
+        "has_brand_info_display",
+        "enrichment_sources_display",
+        "created_at",
+        "updated_at",
+    ]
+    list_filter = [
+        "created_at",
+        "updated_at",
+    ]
+    search_fields = ["domain", "name"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "brand_info_pretty",
+        "logo_preview",
+        "enrichment_sources_display",
+    ]
+    ordering = ["-updated_at"]
+    date_hierarchy = "created_at"
+
+    fieldsets = [
+        (
+            "Company Info",
+            {
+                "fields": ["domain", "name", "logo_preview"],
+            },
+        ),
+        (
+            "Brand Data",
+            {
+                "fields": ["brand_info_pretty", "enrichment_sources_display"],
+                "classes": ["collapse"],
+            },
+        ),
+        (
+            "Metadata",
+            {
+                "fields": ["created_at", "updated_at"],
+            },
+        ),
+    ]
+
+    actions = [
+        "purge_enrichment_data",
+        "refresh_enrichment",
+        "delete_selected_companies",
+    ]
+
+    @admin.display(boolean=True, description="Has Logo")
+    def has_logo_display(self, obj: Company) -> bool:
+        """Check if company has a logo."""
+        return obj.has_logo
+
+    @admin.display(boolean=True, description="Has Brand Info")
+    def has_brand_info_display(self, obj: Company) -> bool:
+        """Check if company has brand info."""
+        return bool(obj.brand_info)
+
+    @admin.display(description="Logo Preview")
+    def logo_preview(self, obj: Company) -> str:
+        """Display logo preview in admin."""
+        if obj.has_logo:
+            logo_url = obj.get_logo_url()
+            if logo_url:
+                return format_html(
+                    '<img src="{}" style="max-height: 50px; max-width: 100px;" />',
+                    logo_url,
+                )
+        return "-"
+
+    @admin.display(description="Brand Info (JSON)")
+    def brand_info_pretty(self, obj: Company) -> str:
+        """Display formatted brand info JSON."""
+        if obj.brand_info:
+            # Filter out internal fields for cleaner display
+            display_info = {
+                k: v for k, v in obj.brand_info.items() if not k.startswith("_")
+            }
+            return format_html(
+                '<pre style="white-space: pre-wrap; max-height: 300px; '
+                'overflow-y: auto;">{}</pre>',
+                json.dumps(display_info, indent=2),
+            )
+        return "-"
+
+    @admin.display(description="Enrichment Sources")
+    def enrichment_sources_display(self, obj: Company) -> str:
+        """Display which enrichment sources have contributed data."""
+        if not obj.brand_info:
+            return "-"
+
+        sources = obj.brand_info.get("_sources", {})
+        if not sources:
+            return "Legacy (no source tracking)"
+
+        source_names = list(sources.keys())
+        blended_at = obj.brand_info.get("_blended_at", "Unknown")
+
+        return format_html(
+            "<strong>Sources:</strong> {}<br>" "<strong>Last blended:</strong> {}",
+            ", ".join(source_names),
+            blended_at,
+        )
+
+    @admin.action(description="Purge enrichment data (keep domain)")
+    def purge_enrichment_data(
+        self,
+        request: "HttpRequest",
+        queryset: "QuerySet[Company]",
+    ) -> None:
+        """Clear enrichment data but keep the domain record."""
+        count = queryset.update(
+            name="",
+            brand_info={},
+            logo_data=None,
+            logo_content_type="",
+        )
+        self.message_user(request, f"Purged enrichment data for {count} companies.")
+
+    @admin.action(description="Refresh enrichment (re-fetch from sources)")
+    def refresh_enrichment(
+        self,
+        request: "HttpRequest",
+        queryset: "QuerySet[Company]",
+    ) -> None:
+        """Clear blended timestamp to trigger re-enrichment on next access."""
+        # Filter to companies with brand_info and clear _blended_at in memory
+        companies_to_update = []
+        for company in queryset.filter(brand_info__isnull=False):
+            if company.brand_info:
+                company.brand_info.pop("_blended_at", None)
+                companies_to_update.append(company)
+
+        # Bulk update to avoid N+1 queries
+        if companies_to_update:
+            Company.objects.bulk_update(companies_to_update, ["brand_info"])
+
+        self.message_user(
+            request,
+            f"Marked {len(companies_to_update)} companies for re-enrichment.",
+        )
+
+    @admin.action(description="Delete selected companies")
+    def delete_selected_companies(
+        self,
+        request: "HttpRequest",
+        queryset: "QuerySet[Company]",
+    ) -> None:
+        """Delete company records entirely."""
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(request, f"Deleted {count} companies.")

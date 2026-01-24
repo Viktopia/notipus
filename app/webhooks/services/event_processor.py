@@ -1,11 +1,15 @@
 """Event processor for webhook notifications.
 
 This module handles processing events from various providers and
-formatting them into Slack notifications.
+formatting them into Slack notifications with company enrichment.
 """
 
 import logging
 from typing import Any, ClassVar
+
+from core.models import Company
+from core.services.enrichment import DomainEnrichmentService
+from core.utils.email_domain import extract_domain, is_enrichable_domain
 
 from ..models.notification import Notification, Section
 from .database_lookup import DatabaseLookupService
@@ -35,8 +39,9 @@ class EventProcessor:
     }
 
     def __init__(self) -> None:
-        """Initialize the event processor with database lookup service."""
+        """Initialize the event processor with services."""
         self.db_lookup = DatabaseLookupService()
+        self.enrichment_service = DomainEnrichmentService()
 
     def process_event(
         self, event_data: dict[str, Any], customer_data: dict[str, Any]
@@ -104,9 +109,12 @@ class EventProcessor:
         # Store event data in database and perform cross-reference lookups
         enriched_event_data = self._enrich_with_cross_references(event_data)
 
+        # Enrich with company branding if email domain is enrichable
+        company = self._enrich_company(customer_data)
+
         # Create notification sections
         main_section = self._create_main_section(enriched_event_data, customer_data)
-        customer_section = self._create_customer_section(customer_data)
+        customer_section = self._create_customer_section(customer_data, company)
 
         # Add cross-reference section if we found related data
         sections = [main_section, customer_section]
@@ -189,6 +197,38 @@ class EventProcessor:
 
         return enriched_data
 
+    def _enrich_company(self, customer_data: dict[str, Any]) -> Company | None:
+        """Enrich customer data with company branding information.
+
+        Args:
+            customer_data: Customer data dictionary with email.
+
+        Returns:
+            Company model with branding data, or None if not enrichable.
+        """
+        customer_email = customer_data.get("email")
+        if not customer_email:
+            return None
+
+        # Check if domain is worth enriching (not free/disposable)
+        if not is_enrichable_domain(customer_email):
+            return None
+
+        # Extract domain and enrich
+        domain = extract_domain(customer_email)
+        if not domain:
+            return None
+
+        try:
+            company = self.enrichment_service.enrich_domain(domain)
+            if company:
+                logger.info(f"Enriched company data for domain: {domain}")
+            return company
+        except Exception as e:
+            # Don't fail webhook processing if enrichment fails
+            logger.warning(f"Failed to enrich company for {domain}: {e}")
+            return None
+
     def _has_cross_references(self, event_data: dict[str, Any]) -> bool:
         """Check if event data has cross-reference information.
 
@@ -268,22 +308,34 @@ class EventProcessor:
 
         return Section("📊 Event Details", fields)
 
-    def _create_customer_section(self, customer_data: dict[str, Any]) -> Section:
-        """Create the customer information section.
+    def _create_customer_section(
+        self, customer_data: dict[str, Any], company: Company | None = None
+    ) -> Section:
+        """Create the customer information section with optional company branding.
 
         Args:
             customer_data: Customer data dictionary.
+            company: Optional enriched Company model with branding.
 
         Returns:
-            Section containing customer information.
+            Section containing customer information and company logo.
         """
         fields: dict[str, str] = {}
 
-        # Company and contact info
-        company_name = customer_data.get("company_name") or customer_data.get(
-            "company", "Individual"
-        )
-        fields["Company"] = company_name
+        # Company and contact info - prefer enriched company name
+        if company and company.name:
+            company_display = company.name
+        else:
+            company_display = customer_data.get("company_name") or customer_data.get(
+                "company", "Individual"
+            )
+        fields["Company"] = company_display
+
+        # Add industry from enrichment if available
+        if company and company.brand_info:
+            industry = company.brand_info.get("industry")
+            if industry:
+                fields["Industry"] = industry
 
         if customer_data.get("email"):
             fields["Email"] = customer_data["email"]
@@ -300,7 +352,18 @@ class EventProcessor:
         if customer_data.get("total_spent"):
             fields["Total Spent"] = f"${customer_data['total_spent']}"
 
-        return Section("👤 Customer Info", fields)
+        # Create section with optional logo accessory
+        section = Section("👤 Customer Info", fields)
+
+        # Add company logo as accessory if available
+        if company and company.has_logo:
+            section.accessory = {
+                "type": "image",
+                "image_url": company.get_logo_url(),
+                "alt_text": company.name or company.domain,
+            }
+
+        return section
 
     def _get_title(self, event_data: dict[str, Any], company_name: str) -> str:
         """Generate notification title.

@@ -1,4 +1,4 @@
-"""Brandfetch API provider for domain enrichment.
+"""Brandfetch API plugin for domain enrichment.
 
 This module provides integration with the Brandfetch API v2 to retrieve
 brand information including logos, colors, and company details.
@@ -10,25 +10,92 @@ from typing import Any
 import requests
 from django.conf import settings
 
-from .base import BaseEnrichmentProvider
+from .base import (
+    BaseEnrichmentPlugin,
+    PluginCapability,
+    PluginMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class BrandfetchProvider(BaseEnrichmentProvider):
-    """Provider for enriching domains with brand data from Brandfetch API."""
+class BrandfetchPlugin(BaseEnrichmentPlugin):
+    """Plugin for enriching domains with brand data from Brandfetch API.
 
-    def __init__(
-        self, api_key: str | None = None, base_url: str = "https://api.brandfetch.io/v2"
-    ) -> None:
-        """Initialize the Brandfetch provider.
+    This plugin provides:
+    - Company logos
+    - Company descriptions
+    - Industry classification
+    - Social links
+    - Brand colors
+    - Year founded
+    """
+
+    # Default configuration
+    DEFAULT_BASE_URL = "https://api.brandfetch.io/v2"
+    DEFAULT_TIMEOUT = 10
+
+    def __init__(self) -> None:
+        """Initialize the Brandfetch plugin.
+
+        Configuration is set via the configure() method.
+        """
+        self.api_key: str | None = None
+        self.base_url: str = self.DEFAULT_BASE_URL
+        self.timeout: int = self.DEFAULT_TIMEOUT
+
+    @classmethod
+    def get_metadata(cls) -> PluginMetadata:
+        """Return plugin metadata.
+
+        Returns:
+            PluginMetadata describing the Brandfetch plugin.
+        """
+        return PluginMetadata(
+            name="brandfetch",
+            display_name="Brandfetch",
+            version="1.0.0",
+            description="Brand logos, colors, and company info via Brandfetch API",
+            capabilities={
+                PluginCapability.LOGO,
+                PluginCapability.DESCRIPTION,
+                PluginCapability.INDUSTRY,
+                PluginCapability.SOCIAL_LINKS,
+                PluginCapability.COLORS,
+                PluginCapability.YEAR_FOUNDED,
+            },
+            priority=100,
+            config_keys=["api_key"],
+        )
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Check if API key is configured.
+
+        Returns:
+            True if an API key is available in ENRICHMENT_PLUGINS config.
+        """
+        enrichment_plugins = getattr(settings, "ENRICHMENT_PLUGINS", {})
+        plugin_config = enrichment_plugins.get("brandfetch", {}).get("config", {})
+        return bool(plugin_config.get("api_key"))
+
+    def configure(self, config: dict[str, Any]) -> None:
+        """Configure plugin with settings.
 
         Args:
-            api_key: Optional API key. Falls back to settings.BRANDFETCH_API_KEY.
-            base_url: Base URL for the Brandfetch API.
+            config: Configuration dictionary with:
+                - api_key: Brandfetch API key (required)
+                - base_url: API base URL (optional)
+                - timeout: Request timeout in seconds (optional)
         """
-        self.api_key = api_key or getattr(settings, "BRANDFETCH_API_KEY", None)
-        self.base_url = base_url
+        self.api_key = config.get("api_key")
+        self.base_url = config.get("base_url", self.DEFAULT_BASE_URL)
+        self.timeout = config.get("timeout", self.DEFAULT_TIMEOUT)
+
+        if self.api_key:
+            logger.debug("Brandfetch plugin configured with API key")
+        else:
+            logger.warning("Brandfetch plugin configured without API key")
 
     def enrich_domain(self, domain: str) -> dict[str, Any]:
         """Enrich domain with brand data from Brandfetch API v2.
@@ -55,11 +122,10 @@ class BrandfetchProvider(BaseEnrichmentProvider):
         }
 
         try:
-            # Add timeout for reliability
-            timeout = 10  # seconds
-
             response = requests.get(
-                f"{self.base_url}/brands/{domain}", headers=headers, timeout=timeout
+                f"{self.base_url}/brands/{domain}",
+                headers=headers,
+                timeout=self.timeout,
             )
             response.raise_for_status()
             brand_data = response.json()

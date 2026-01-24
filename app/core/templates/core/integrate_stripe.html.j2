@@ -138,21 +138,35 @@
                 </div>
             </div>
 
-            <!-- Webhook Events -->
+            <!-- Webhook Configuration Details -->
             <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <i class="ti ti-list-check text-[#635bff]"></i>
-                    Events to Enable
+                    Webhook Configuration Details
                 </h3>
-                <p class="text-sm text-gray-600 mb-4">When creating your webhook endpoint in Stripe, select these events:</p>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {% for event in webhook_events %}
-                        <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                            <i class="ti ti-check text-green-500"></i>
-                            <code class="text-sm text-gray-700">{{ event }}</code>
-                        </div>
-                    {% endfor %}
+                <!-- API Version -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-medium text-gray-900 mb-2">API Version</h4>
+                    <div class="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <i class="ti ti-info-circle text-blue-500"></i>
+                        <span class="text-sm text-blue-800">Select <strong>2025-12-15.clover</strong> (Latest version) when prompted for API version</span>
+                    </div>
+                </div>
+
+                <!-- Events -->
+                <div>
+                    <h4 class="text-sm font-medium text-gray-900 mb-2">Events to Enable</h4>
+                    <p class="text-sm text-gray-600 mb-3">Search for and select each of these events in the Stripe wizard:</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {% for event in webhook_events %}
+                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                                <i class="ti ti-check text-green-500"></i>
+                                <code class="text-sm text-gray-700">{{ event }}</code>
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
 
@@ -173,7 +187,7 @@
                         <div class="ml-3">
                             <h4 class="text-sm font-medium text-gray-900">Go to your Stripe Dashboard</h4>
                             <p class="text-sm text-gray-500">
-                                Navigate to <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener" class="text-[#635bff] hover:underline">Developers &rarr; Webhooks</a> in your Stripe Dashboard
+                                Navigate to <a href="https://dashboard.stripe.com/webhooks/create" target="_blank" rel="noopener" class="text-[#635bff] hover:underline">Developers &rarr; Webhooks</a> and click "Add destination"
                             </p>
                         </div>
                     </div>
@@ -185,9 +199,9 @@
                             </div>
                         </div>
                         <div class="ml-3">
-                            <h4 class="text-sm font-medium text-gray-900">Add a new endpoint</h4>
+                            <h4 class="text-sm font-medium text-gray-900">Select events</h4>
                             <p class="text-sm text-gray-500">
-                                Click "Add endpoint" and paste the webhook URL from above
+                                Under "Events from", select <strong>"Your account"</strong>. For "API version", select <strong>"2025-12-15.clover"</strong> (Latest version). Then search for and select the events listed below. Click "Continue".
                             </p>
                         </div>
                     </div>
@@ -199,9 +213,9 @@
                             </div>
                         </div>
                         <div class="ml-3">
-                            <h4 class="text-sm font-medium text-gray-900">Select events</h4>
+                            <h4 class="text-sm font-medium text-gray-900">Choose destination type</h4>
                             <p class="text-sm text-gray-500">
-                                Choose the events listed above, or select "receive all events" if you prefer
+                                Select <strong>"Webhook endpoint"</strong> as the destination type. Click "Continue".
                             </p>
                         </div>
                     </div>
@@ -210,6 +224,20 @@
                         <div class="flex-shrink-0">
                             <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
                                 4
+                            </div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-sm font-medium text-gray-900">Configure the endpoint</h4>
+                            <p class="text-sm text-gray-500">
+                                Paste the webhook URL from above into the "Endpoint URL" field. Click "Create destination".
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
+                                5
                             </div>
                         </div>
                         <div class="ml-3">
@@ -223,7 +251,7 @@
                     <div class="flex items-start">
                         <div class="flex-shrink-0">
                             <div class="flex items-center justify-center h-8 w-8 rounded-full bg-[#635bff]/10 text-[#635bff] font-medium text-sm">
-                                5
+                                6
                             </div>
                         </div>
                         <div class="ml-3">

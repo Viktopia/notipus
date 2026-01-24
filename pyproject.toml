@@ -18,6 +18,7 @@ dependencies = [
     "redis>=5.2.0,<6.0.0",
     "whitenoise>=6.11.0",
     "sentry-sdk[django]>=2.50.0",
+    "disposable-email-domains>=0.0.156",
 ]
 
 [dependency-groups]

@@ -48,7 +48,7 @@
             <!-- Plan Comparison Cards -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 mb-8">
                 {% for plan in plans %}
-                    <div class="group relative bg-white rounded-2xl shadow-lg border {% if plan.recommended %}border-primary-500 ring-2 ring-primary-500 ring-opacity-50 shadow-primary-500/25{% else %}border-gray-200 hover:border-gray-300 hover:shadow-xl{% endif %} overflow-hidden transition-all duration-300 transform hover:scale-105">
+                    <div class="group relative bg-white rounded-2xl shadow-lg border {% if plan.recommended %}border-primary-500 ring-2 ring-primary-500 ring-opacity-50 shadow-primary-500/25{% else %}border-gray-200 hover:border-gray-300 hover:shadow-xl{% endif %} transition-all duration-300 transform hover:scale-105">
                         {% if plan.recommended %}
                             <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
                                 <span class="inline-flex px-4 py-1.5 rounded-full text-xs font-bold tracking-wide uppercase bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg border-2 border-white">

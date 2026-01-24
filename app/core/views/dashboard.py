@@ -36,8 +36,10 @@ def dashboard(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
         return redirect("core:create_workspace")
 
     # Flatten the data for template compatibility
+    workspace = dashboard_data["workspace"]
     context: dict[str, Any] = {
-        "workspace": dashboard_data["workspace"],
+        "workspace": workspace,
+        "organization": workspace,  # Alias for template compatibility
         "user_profile": dashboard_data["user_profile"],
         "member": dashboard_data.get("member"),
         **dashboard_data["integrations"],  # has_slack, has_shopify, etc.

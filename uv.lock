@@ -361,6 +361,15 @@ wheels = [
 ]
 
 [[package]]
+name = "disposable-email-domains"
+version = "0.0.156"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/74/7822507b1f0692a324d78fca10519c7b0ce23471ac1c45bcf86dbdd3e4fd/disposable_email_domains-0.0.156.tar.gz", hash = "sha256:628648de737c05e47ffb33e7b89b8779672859e1d7d661031ab86116fa63dbfb", size = 63142, upload-time = "2026-01-14T08:54:26.233Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/e1/fa4c56e6b801513ffcaee71ff6777bd3c5d0732e4e2b4df4a830fd32231e/disposable_email_domains-0.0.156-py2.py3-none-any.whl", hash = "sha256:a795add696b6658f10f9b80ec5056666fd074e72dd95b0104bca128357499048", size = 32248, upload-time = "2026-01-14T08:54:24.819Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -677,6 +686,7 @@ name = "notipus"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "disposable-email-domains" },
     { name = "django" },
     { name = "django-allauth" },
     { name = "psycopg2" },
@@ -708,6 +718,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "disposable-email-domains", specifier = ">=0.0.156" },
     { name = "django", specifier = ">=5.1.5,<6.0.0" },
     { name = "django-allauth", specifier = ">=65.10.0,<66.0.0" },
     { name = "psycopg2", specifier = ">=2.9.10,<3.0.0" },

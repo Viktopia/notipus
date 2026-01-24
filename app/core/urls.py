@@ -1,10 +1,13 @@
 from django.urls import path
 
 from . import views
+from .views.logos import CompanyLogoView
 
 app_name = "core"
 
 urlpatterns = [
+    # Company logos (served from database)
+    path("logos/<str:domain>/", CompanyLogoView.as_view(), name="company-logo"),
     # Landing and dashboard
     path("", views.landing, name="landing"),
     path("dashboard/", views.dashboard, name="dashboard"),

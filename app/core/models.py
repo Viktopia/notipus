@@ -458,18 +458,39 @@ class Company(models.Model):
     Attributes:
         name: Company display name.
         domain: Unique domain identifier.
-        logo_url: URL to company logo.
+        logo_url: Original external URL to company logo (for reference).
+        logo_data: Binary logo data stored in database.
+        logo_content_type: MIME type of the stored logo.
         brand_info: JSON blob with additional brand data.
+        created_at: When the record was created.
+        updated_at: When the record was last updated.
     """
 
     name = models.CharField(max_length=255, blank=True, default="")
     domain = models.CharField(max_length=255, unique=True, validators=[validate_domain])
     logo_url = models.URLField(max_length=500, blank=True, default="")
+    logo_data = models.BinaryField(blank=True, null=True)
+    logo_content_type = models.CharField(max_length=50, blank=True, default="")
     brand_info = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         app_label = "core"
         verbose_name_plural = "Companies"
+        indexes = [
+            # Index on name for search queries
+            models.Index(fields=["name"], name="company_name_idx"),
+            # Index on created_at for date filtering and date_hierarchy in admin
+            models.Index(fields=["created_at"], name="company_created_at_idx"),
+            # Index on updated_at for sorting by recent updates
+            models.Index(fields=["-updated_at"], name="company_updated_at_idx"),
+            # Composite index for common query pattern: has logo + recent
+            models.Index(
+                fields=["logo_content_type", "-updated_at"],
+                name="company_logo_updated_idx",
+            ),
+        ]
 
     def __str__(self) -> str:
         """Return string representation of the company.
@@ -498,6 +519,40 @@ class Company(models.Model):
         # Clean and validate domain
         if self.domain:
             self.domain = validate_domain(self.domain)
+
+    @property
+    def has_logo(self) -> bool:
+        """Check if company has a stored logo."""
+        return bool(self.logo_data)
+
+    def get_logo_url(self, request=None, absolute: bool = True) -> str:
+        """Get URL to serve the logo.
+
+        Args:
+            request: Optional request object for building absolute URL.
+            absolute: If True, returns absolute URL using BASE_URL setting.
+                     Required for Slack to fetch logos externally.
+
+        Returns:
+            URL to the logo endpoint, or empty string if no logo.
+        """
+        if not self.logo_data:
+            return ""
+        from django.conf import settings
+        from django.urls import reverse
+
+        url = reverse("company-logo", kwargs={"domain": self.domain})
+
+        if request:
+            return request.build_absolute_uri(url)
+
+        if absolute:
+            # Use BASE_URL setting for absolute URLs (needed for Slack)
+            base_url = getattr(settings, "BASE_URL", "").rstrip("/")
+            if base_url:
+                return f"{base_url}{url}"
+
+        return url
 
 
 class UsageLimit(models.Model):

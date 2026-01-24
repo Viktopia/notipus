@@ -208,10 +208,22 @@ SOCIALACCOUNT_PROVIDERS = {
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-if "DATABASE_URL" in os.environ:
+_database_url = os.environ.get("DATABASE_URL", "")
+
+if _database_url.startswith("sqlite"):
+    # SQLite for local development/testing
+    # Format: sqlite:///path/to/db.sqlite3
+    db_path = _database_url.replace("sqlite:///", "")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / db_path if db_path else BASE_DIR / "db.sqlite3",
+        }
+    }
+elif _database_url:
     # Parse DATABASE_URL (used by Fly.io and other PaaS providers)
     # Format: postgres://user:password@host:port/database?sslmode=disable
-    db_url = urlparse(os.environ["DATABASE_URL"])
+    db_url = urlparse(_database_url)
     db_options: dict[str, str] = {}
 
     # Parse query string for options like sslmode
@@ -488,11 +500,44 @@ SHOPIFY_SCOPES = "read_orders,read_customers,write_webhooks"
 # Base URL for webhook endpoints (used in OAuth callbacks)
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
 
-# Brandfetch configuration
-BRANDFETCH_API_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
-BRANDFETCH_BASE_URL = os.environ.get(
-    "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
-)
+# ============================================================================
+# Enrichment Plugin Configuration
+# ============================================================================
+# Each plugin can be enabled/disabled and configured independently.
+# Plugins are auto-discovered from core.providers package.
+
+ENRICHMENT_PLUGINS: dict = {
+    "brandfetch": {
+        "enabled": True,
+        "priority": 100,  # Higher priority = preferred for data blending
+        "config": {
+            "api_key": os.environ.get("BRANDFETCH_API_KEY", ""),
+            "base_url": os.environ.get(
+                "BRANDFETCH_BASE_URL", "https://api.brandfetch.io/v2"
+            ),
+            "timeout": 10,  # Request timeout in seconds
+        },
+    },
+    # Future plugins can be added here:
+    # "openai": {
+    #     "enabled": True,
+    #     "priority": 50,
+    #     "config": {
+    #         "api_key": os.environ.get("OPENAI_API_KEY", ""),
+    #         "model": "gpt-4",
+    #     },
+    # },
+    # "clearbit": {
+    #     "enabled": False,
+    #     "priority": 80,
+    #     "config": {
+    #         "api_key": os.environ.get("CLEARBIT_API_KEY", ""),
+    #     },
+    # },
+}
+
+# Auto-discover plugins in core.providers package
+ENRICHMENT_PLUGIN_AUTODISCOVER = True
 
 
 # Note: Provider factories removed - now handled per-tenant

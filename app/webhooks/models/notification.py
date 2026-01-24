@@ -17,10 +17,12 @@ class Section:
 
     Attributes:
         title: Section header text.
+        accessory: Optional accessory (e.g., image) for the section.
     """
 
     title: str
     _fields: list[tuple[str, str]] = field(default_factory=list, init=False)
+    accessory: dict[str, Any] | None = field(default=None, init=False)
 
     def __init__(self, title: str, fields: dict[str, str] | None = None) -> None:
         """Initialize a section with a title and optional fields.
@@ -31,6 +33,7 @@ class Section:
         """
         self.title = title
         self._fields: list[tuple[str, str]] = []
+        self.accessory = None
         if fields:
             for key, value in fields.items():
                 self._fields.append((key, value))
@@ -50,7 +53,7 @@ class Section:
         Returns:
             Dictionary representing a Slack block kit section.
         """
-        return {
+        block: dict[str, Any] = {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
@@ -58,6 +61,12 @@ class Section:
                 + "\n".join(f"*{k}*: {v}" for k, v in self._fields),
             },
         }
+
+        # Add accessory (e.g., company logo) if present
+        if self.accessory:
+            block["accessory"] = self.accessory
+
+        return block
 
     def to_slack_fields(self) -> list[dict[str, str | bool]]:
         """Convert fields to Slack attachment format.

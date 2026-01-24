@@ -139,6 +139,57 @@ class ShopifyProvider(PaymentProvider):
         except (KeyError, ValueError) as e:
             raise InvalidDataError("Missing required fields") from e
 
+    def _extract_line_items(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Extract line items from Shopify order data.
+
+        Args:
+            data: Raw webhook data.
+
+        Returns:
+            List of line item dictionaries.
+        """
+        line_items = []
+        for item in data.get("line_items", []):
+            line_items.append(
+                {
+                    "name": item.get("name", item.get("title", "Unknown Product")),
+                    "sku": item.get("sku", ""),
+                    "quantity": item.get("quantity", 1),
+                    "price": float(item.get("price", 0)),
+                    "variant_title": item.get("variant_title", ""),
+                }
+            )
+        return line_items
+
+    def _extract_payment_method(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Extract payment method info from Shopify order data.
+
+        Args:
+            data: Raw webhook data.
+
+        Returns:
+            Payment method info dictionary.
+        """
+        payment_info: dict[str, Any] = {}
+
+        # Gateway names (e.g., "shopify_payments", "paypal")
+        gateways = data.get("payment_gateway_names", [])
+        if gateways:
+            payment_info["payment_gateway"] = gateways[0]
+
+        # Payment details for credit cards
+        payment_details = data.get("payment_details", {})
+        if payment_details:
+            payment_info["credit_card_company"] = payment_details.get(
+                "credit_card_company"
+            )
+            # Last 4 digits from masked number
+            cc_num = payment_details.get("credit_card_number", "")
+            if cc_num:
+                payment_info["card_last4"] = cc_num[-4:]
+
+        return payment_info
+
     def _build_shopify_event_data(
         self,
         event_type: str,
@@ -160,6 +211,12 @@ class ShopifyProvider(PaymentProvider):
         Raises:
             InvalidDataError: If required fields have invalid formats.
         """
+        # Extract payment method info
+        payment_info = self._extract_payment_method(data)
+
+        # Check for subscription contract (recurring order)
+        is_recurring = bool(data.get("subscription_contract_id"))
+
         event_data: dict[str, Any] = {
             "type": event_type,
             "customer_id": customer_id,
@@ -173,6 +230,10 @@ class ShopifyProvider(PaymentProvider):
                 ),
                 "financial_status": data.get("financial_status"),
                 "fulfillment_status": data.get("fulfillment_status"),
+                "line_items": self._extract_line_items(data),
+                "is_recurring": is_recurring,
+                "subscription_contract_id": data.get("subscription_contract_id"),
+                **payment_info,
             },
         }
 
