@@ -50,4 +50,4 @@ RUN uv run --no-dev python manage.py collectstatic --noinput
 EXPOSE 8080
 
 # Command to start the server
-CMD ["uv", "run", "--no-dev", "uvicorn", "--host", "0.0.0.0", "--port", "8080", "django_notipus.asgi:application"]
+CMD ["uv", "run", "--no-dev", "uvicorn", "--host", "0.0.0.0", "--port", "8080", "--lifespan", "off", "django_notipus.asgi:application"]

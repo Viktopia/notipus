@@ -114,7 +114,7 @@ services:
   django:
     <<: *django-service
     container_name: notipus_django
-    command: ["uv", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8080", "--workers", "3", "django_notipus.asgi:application"]
+    command: ["uv", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8080", "--workers", "3", "--lifespan", "off", "django_notipus.asgi:application"]
     ports:
       - "80:8080"
       - "8080:8080"
