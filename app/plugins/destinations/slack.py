@@ -187,6 +187,10 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
         # Company section with logo (if enriched)
         if n.company:
             blocks.append(self._format_company_section(n.company))
+            # Add website & LinkedIn links below company section
+            links_block = self._format_company_links(n.company)
+            if links_block:
+                blocks.append(links_block)
 
         # Customer footer (optional for system events)
         if n.customer:
@@ -497,6 +501,35 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             }
 
         return block
+
+    def _format_company_links(self, company: CompanyInfo) -> dict[str, Any] | None:
+        """Format company website and LinkedIn as context block.
+
+        Args:
+            company: CompanyInfo object.
+
+        Returns:
+            Slack context block dict, or None if no links available.
+        """
+        elements: list[str] = []
+
+        # Website link
+        if company.domain:
+            elements.append(
+                f":globe_with_meridians: <https://{company.domain}|Website>"
+            )
+
+        # LinkedIn link (most valuable for sales)
+        if company.linkedin_url:
+            elements.append(f":briefcase: <{company.linkedin_url}|LinkedIn>")
+
+        if not elements:
+            return None
+
+        return {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": " • ".join(elements)}],
+        }
 
     def _format_customer_footer(self, customer: CustomerInfo) -> dict[str, Any]:
         """Format customer info footer.

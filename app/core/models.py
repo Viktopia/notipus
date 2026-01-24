@@ -78,7 +78,7 @@ class Workspace(models.Model):
         max_length=20, choices=STRIPE_PLANS, default="free"
     )
     subscription_status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="trial"
+        max_length=20, choices=STATUS_CHOICES, default="active"
     )
     trial_end_date = models.DateTimeField(default=get_trial_end_date)
     billing_cycle_anchor = models.IntegerField(null=True, blank=True)
@@ -107,6 +107,19 @@ class Workspace(models.Model):
         if not self.slug:
             self._generate_unique_slug()
         super().save(*args, **kwargs)
+
+    def clean(self) -> None:
+        """Validate subscription state combinations.
+
+        Raises:
+            ValidationError: If free plan has trial status.
+        """
+        super().clean()
+        if self.subscription_plan == "free" and self.subscription_status == "trial":
+            raise ValidationError(
+                "Free plan cannot have trial status. "
+                "Use 'active' status for free plans."
+            )
 
     def _generate_unique_slug(self) -> None:
         """Generate a unique slug in a race-condition-safe manner.

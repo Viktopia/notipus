@@ -148,6 +148,7 @@ class CompanyInfo:
         employee_count: Employee count range (e.g., "51-200").
         description: Brief company description.
         logo_url: URL to company logo image.
+        linkedin_url: LinkedIn company page URL.
     """
 
     name: str
@@ -157,6 +158,7 @@ class CompanyInfo:
     employee_count: str | None = None
     description: str | None = None
     logo_url: str | None = None
+    linkedin_url: str | None = None
 
 
 @dataclass

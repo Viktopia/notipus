@@ -79,6 +79,7 @@ def notification_with_company(basic_notification: RichNotification) -> RichNotif
         employee_count="51-200",
         description="Acme builds tools for developers to build better software.",
         logo_url="https://example.com/logo.png",
+        linkedin_url="https://linkedin.com/company/acme-corp",
     )
     return basic_notification
 
@@ -377,6 +378,118 @@ class TestSlackDestinationPluginCompanySection:
                 if "Technology" in text:
                     return
         pytest.fail("Industry not found in company section")
+
+
+class TestSlackDestinationPluginCompanyLinks:
+    """Test company links formatting."""
+
+    def test_company_links_block_present(
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_company: RichNotification,
+    ) -> None:
+        """Test company links block is present when company has domain and LinkedIn."""
+        result = formatter.format(notification_with_company)
+
+        # Find context block with website/LinkedIn links
+        links_blocks = [
+            b
+            for b in result["blocks"]
+            if b["type"] == "context"
+            and any("Website" in str(e.get("text", "")) for e in b.get("elements", []))
+        ]
+        assert len(links_blocks) == 1
+
+    def test_company_links_contains_website(
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_company: RichNotification,
+    ) -> None:
+        """Test company links contains website link."""
+        result = formatter.format(notification_with_company)
+
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "Website" in text:
+                    assert "https://acme.com" in text
+                    assert ":globe_with_meridians:" in text
+                    return
+        pytest.fail("Website link not found in company links")
+
+    def test_company_links_contains_linkedin(
+        self,
+        formatter: SlackDestinationPlugin,
+        notification_with_company: RichNotification,
+    ) -> None:
+        """Test company links contains LinkedIn link."""
+        result = formatter.format(notification_with_company)
+
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "LinkedIn" in text:
+                    assert "https://linkedin.com/company/acme-corp" in text
+                    assert ":briefcase:" in text
+                    return
+        pytest.fail("LinkedIn link not found in company links")
+
+    def test_company_links_website_only(
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
+    ) -> None:
+        """Test company links shows website only when no LinkedIn."""
+        basic_notification.company = CompanyInfo(
+            name="Test Corp",
+            domain="test.com",
+            linkedin_url=None,
+        )
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "Website" in text:
+                    assert "https://test.com" in text
+                    assert "LinkedIn" not in text
+                    return
+        pytest.fail("Website-only links block not found")
+
+    def test_company_links_linkedin_only(
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
+    ) -> None:
+        """Test company links shows LinkedIn only when no domain."""
+        basic_notification.company = CompanyInfo(
+            name="Test Corp",
+            domain="",  # Empty domain
+            linkedin_url="https://linkedin.com/company/test",
+        )
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "LinkedIn" in text:
+                    assert "Website" not in text
+                    return
+        pytest.fail("LinkedIn-only links block not found")
+
+    def test_no_company_links_without_data(
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
+    ) -> None:
+        """Test no company links block when no domain and no LinkedIn."""
+        basic_notification.company = CompanyInfo(
+            name="Test Corp",
+            domain="",
+            linkedin_url=None,
+        )
+        result = formatter.format(basic_notification)
+
+        # Should not have a links context block (only provider badge + customer footer)
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        for block in context_blocks:
+            text = str(block.get("elements", [{}])[0].get("text", ""))
+            assert "Website" not in text
+            assert "LinkedIn" not in text
 
 
 class TestSlackDestinationPluginCustomerFooter:

@@ -325,6 +325,13 @@ class NotificationBuilder:
         elif brand_info.get("logo_url"):
             logo_url = brand_info["logo_url"]
 
+        # Extract LinkedIn URL from links array
+        linkedin_url = None
+        for link in brand_info.get("links", []):
+            if link.get("name") == "linkedin":
+                linkedin_url = link.get("url")
+                break
+
         return CompanyInfo(
             name=brand_info.get("name") or company.name or company.domain,
             domain=company.domain,
@@ -333,6 +340,7 @@ class NotificationBuilder:
             employee_count=brand_info.get("employee_count"),
             description=brand_info.get("description"),
             logo_url=logo_url,
+            linkedin_url=linkedin_url,
         )
 
     def _build_headline(  # noqa: C901

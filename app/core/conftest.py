@@ -73,19 +73,21 @@ def free_plan(db) -> Plan:
 
 @pytest.fixture
 def workspace(db, pro_plan) -> Workspace:
-    """Create a test workspace with Pro plan."""
+    """Create a test workspace with Pro plan on trial."""
     return Workspace.objects.create(
         name="Test Workspace",
         subscription_plan="pro",
+        subscription_status="trial",
     )
 
 
 @pytest.fixture
 def starter_workspace(db, starter_plan) -> Workspace:
-    """Create a test workspace with Starter plan (limited users)."""
+    """Create a test workspace with Starter plan (limited users) on trial."""
     return Workspace.objects.create(
         name="Starter Workspace",
         subscription_plan="starter",
+        subscription_status="trial",
     )
 
 

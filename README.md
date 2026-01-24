@@ -191,8 +191,11 @@ uv run pre-commit run --all-files
 # Create a superuser
 uv run python app/manage.py createsuperuser
 
-# Make migrations
+# Make migrations (requires PostgreSQL running)
 uv run python app/manage.py makemigrations
+
+# Make migrations using SQLite (no PostgreSQL needed)
+PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py makemigrations core --name your_migration_name
 
 # Run migrations
 uv run python app/manage.py migrate
@@ -371,6 +374,48 @@ To enable customers to connect their Stripe accounts with one click (automatic w
 |-------|---------|
 | `read_write` | Create webhook endpoints on connected accounts |
 
+### Shopify App Configuration
+
+To enable Shopify OAuth integration, you need to create a Shopify app in the [Shopify Partner Dashboard](https://partners.shopify.com/):
+
+1. **Create a new app** in the Partner Dashboard
+2. **Configure App URLs**:
+   - App URL: `https://your-domain.com`
+   - Allowed redirection URLs: `https://your-domain.com/api/connect/shopify/callback/`
+3. **Copy credentials** from the app's API credentials page
+
+**Required environment variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `SHOPIFY_CLIENT_ID` | Client ID from Shopify Partner Dashboard |
+| `SHOPIFY_CLIENT_SECRET` | Client secret from Shopify Partner Dashboard |
+| `SHOPIFY_REDIRECT_URI` | OAuth callback URL (e.g., `https://your-domain.com/api/connect/shopify/callback/`) |
+
+**Shopify CLI Configuration:**
+
+The app uses `shopify.app.toml` for Shopify CLI configuration. Copy the example file and configure it:
+
+```bash
+cp shopify.app.toml.example shopify.app.toml
+# Edit shopify.app.toml with your client_id and URLs
+```
+
+Then deploy your app configuration to sync with Shopify:
+
+```bash
+shopify app deploy
+```
+
+**OAuth Scopes:**
+
+| Scope | Purpose |
+|-------|---------|
+| `read_orders` | Subscribe to order webhooks (`orders/create`, `orders/paid`, etc.) |
+| `read_customers` | Subscribe to customer webhooks (`customers/create`, `customers/update`, etc.) |
+
+> **Note:** There is no `write_webhooks` scope in Shopify. Webhook creation permissions are controlled by having the appropriate read scope for the resource you want to subscribe to.
+
 ### Domain Enrichment (Brandfetch)
 
 The Brandfetch integration enriches company domains with brand information:
@@ -465,7 +510,7 @@ Customer webhook integrations are configured per-tenant through the web interfac
 
 - **Stripe**: One-click OAuth connection (automatic webhook setup)
 - **Slack**: One-click OAuth connection for notifications
-- **Shopify**: Manual webhook URL configuration
+- **Shopify**: OAuth connection with automatic webhook subscription setup
 - **Chargify**: Webhook secret configuration
 
 ### Webhook Endpoints
@@ -495,9 +540,10 @@ Customer webhook integrations are configured per-tenant through the web interfac
 
 **Stripe**:
 
-- `customer.subscription.created/updated/deleted` - Subscription lifecycle
+- `customer.subscription.created` - New subscription created
 - `customer.subscription.trial_will_end` - Trial ending notification (3 days before)
-- `invoice.payment_succeeded/failed` - Invoice payment outcomes
+- `invoice.payment_succeeded` - Invoice payment successful
+- `invoice.payment_failed` - Invoice payment failed
 - `invoice.paid` - Invoice paid confirmation
 - `invoice.payment_action_required` - Payment requires customer action (3DS)
 - `checkout.session.completed` - Checkout completion

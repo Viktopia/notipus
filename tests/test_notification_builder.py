@@ -114,6 +114,10 @@ def mock_company() -> MagicMock:
         "employee_count": "51-200",
         "description": "Acme Corporation builds tools for developers.",
         "logo_url": "https://example.com/logo.png",
+        "links": [
+            {"name": "linkedin", "url": "https://linkedin.com/company/acme-corp"},
+            {"name": "twitter", "url": "https://twitter.com/acme"},
+        ],
     }
     return company
 
@@ -412,6 +416,62 @@ class TestCompanyEnrichment:
         result = builder.build(payment_success_event, customer_data)
 
         assert result.company is None
+
+    def test_linkedin_url_extracted_from_brand_info(
+        self,
+        builder: NotificationBuilder,
+        payment_success_event: dict,
+        customer_data: dict,
+        mock_company: MagicMock,
+    ) -> None:
+        """Test LinkedIn URL is extracted from brand_info links array."""
+        result = builder.build(payment_success_event, customer_data, mock_company)
+
+        assert result.company is not None
+        assert result.company.linkedin_url == "https://linkedin.com/company/acme-corp"
+
+    def test_linkedin_url_none_when_not_in_links(
+        self,
+        builder: NotificationBuilder,
+        payment_success_event: dict,
+        customer_data: dict,
+    ) -> None:
+        """Test LinkedIn URL is None when not in brand_info links."""
+        company = MagicMock()
+        company.domain = "test.com"
+        company.name = "Test Corp"
+        company.has_logo = False
+        company.brand_info = {
+            "name": "Test Corp",
+            "links": [
+                {"name": "twitter", "url": "https://twitter.com/test"},
+            ],
+        }
+
+        result = builder.build(payment_success_event, customer_data, company)
+
+        assert result.company is not None
+        assert result.company.linkedin_url is None
+
+    def test_linkedin_url_none_when_no_links(
+        self,
+        builder: NotificationBuilder,
+        payment_success_event: dict,
+        customer_data: dict,
+    ) -> None:
+        """Test LinkedIn URL is None when no links in brand_info."""
+        company = MagicMock()
+        company.domain = "test.com"
+        company.name = "Test Corp"
+        company.has_logo = False
+        company.brand_info = {
+            "name": "Test Corp",
+        }
+
+        result = builder.build(payment_success_event, customer_data, company)
+
+        assert result.company is not None
+        assert result.company.linkedin_url is None
 
 
 class TestActionButtons:

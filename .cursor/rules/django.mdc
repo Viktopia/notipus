@@ -14,7 +14,32 @@ alwaysApply: true
 - Use Django’s built-in user model and authentication framework for user management.
 - Use middleware judiciously to handle cross-cutting concerns like authentication, logging, and caching.
 - Assume all migrations have been run. Never edit an existing migration file.
-- Django templates should end with `.html.j2` rather than just `.html` to clarify they ar Jinja2/Django templates.
+- Django templates should end with `.html.j2` rather than just `.html` to clarify they are Jinja2/Django templates.
+
+## Django Migrations
+
+When generating migrations, use test settings with SQLite in-memory to avoid needing PostgreSQL:
+
+**From project root:**
+```bash
+PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py makemigrations core --name your_migration_name
+```
+
+**From `app/` directory:**
+```bash
+cd app && DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python manage.py makemigrations core --name your_migration_name
+```
+
+**Other migration commands:**
+```bash
+# Show migration status
+PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py showmigrations
+
+# Apply migrations (test database)
+PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py migrate
+```
+
+**Note:** Migration commands are in `_build_commands` in settings.py, so they bypass the production secret key check.
 
 ## Django Error Handling and Validation
 - Implement error handling at the view level and use Django's built-in error handling mechanisms.

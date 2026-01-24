@@ -40,8 +40,18 @@ SECRET_KEY = os.environ.get("SECRET_DJANGO_KEY", _default_secret_key)
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 # Security validation: Ensure secret key is secure in production
-# Allow build-time commands (collectstatic, etc.) that don't need a secure key
-_build_commands = {"collectstatic", "compress", "compilemessages"}
+# Allow build-time commands that don't need a secure key
+_build_commands = {
+    "collectstatic",
+    "compress",
+    "compilemessages",
+    "makemigrations",
+    "migrate",
+    "showmigrations",
+    "sqlmigrate",
+    "squashmigrations",
+    "check",
+}
 _is_build_command = len(sys.argv) > 1 and sys.argv[1] in _build_commands
 
 if not DEBUG and SECRET_KEY == _default_secret_key and not _is_build_command:

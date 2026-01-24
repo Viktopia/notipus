@@ -22,10 +22,11 @@ INTEGRATION_TYPE = "stripe_customer"
 DISPLAY_NAME = "Stripe"
 
 # Stripe webhook events to subscribe to (shown to user for manual configuration)
+# Note: customer.subscription.updated and customer.subscription.deleted are not
+# available in Stripe's webhook UI, but the code still handles them if they arrive
+# via programmatic webhook creation.
 STRIPE_WEBHOOK_EVENTS = [
     "customer.subscription.created",
-    "customer.subscription.updated",
-    "customer.subscription.deleted",
     "customer.subscription.trial_will_end",
     "invoice.payment_succeeded",
     "invoice.payment_failed",

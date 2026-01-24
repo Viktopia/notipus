@@ -72,8 +72,8 @@ line-ending = "auto"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "django_notipus.test_settings"
 pythonpath = ["app"]
-# Set DEBUG=True for tests to pass the security check in settings.py
-# (which defaults to DEBUG=False for production safety)
+# DEBUG=True needed because pytest imports settings.py before test_settings.py
+# can override SECRET_KEY, triggering the production security check
 env = ["DEBUG=True"]
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 python_classes = ["Test*", "*Test", "*TestCase"]
