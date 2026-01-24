@@ -53,6 +53,11 @@ select = [
     "DJ",  # flake8-django
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Django settings use star imports by convention
+"**/settings.py" = ["F401"]  # Allow "imported but unused" for conditional imports
+"**/test_settings.py" = ["F403", "F405"]  # Allow star imports in test settings
+
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 known-third-party = ["django"]

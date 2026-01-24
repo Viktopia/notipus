@@ -91,7 +91,7 @@ class BaseEnrichmentPlugin(ABC):
         """
         return True
 
-    def configure(self, config: dict[str, Any]) -> None:  # noqa: B027
+    def configure(self, config: dict[str, Any]) -> None:
         """Configure plugin with settings.
 
         Called after instantiation with configuration from Django settings.
@@ -103,6 +103,9 @@ class BaseEnrichmentPlugin(ABC):
         Args:
             config: Configuration dictionary from ENRICHMENT_PLUGINS settings.
         """
+        # Default implementation stores config for potential future use
+        # Subclasses should override to extract specific configuration
+        _ = config  # Acknowledge parameter, no-op by default
 
     @abstractmethod
     def enrich_domain(self, domain: str) -> dict[str, Any]:

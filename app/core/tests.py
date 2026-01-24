@@ -1,3 +1,6 @@
+import uuid
+
+from core.models import Company, NotificationSettings, Workspace, validate_domain
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
@@ -8,8 +11,6 @@ class ValidateDomainTest(TestCase):
 
     def test_valid_domains(self):
         """Test valid domain formats"""
-        from core.models import validate_domain  # noqa: E402
-
         valid_domains = [
             "example.com",
             "sub.example.com",
@@ -25,8 +26,6 @@ class ValidateDomainTest(TestCase):
 
     def test_domain_cleaning(self):
         """Test that protocols and www are removed"""
-        from core.models import validate_domain  # noqa: E402
-
         test_cases = [
             ("https://example.com", "example.com"),
             ("http://www.example.com", "example.com"),
@@ -41,8 +40,6 @@ class ValidateDomainTest(TestCase):
 
     def test_invalid_domains(self):
         """Test invalid domain formats"""
-        from core.models import validate_domain  # noqa: E402
-
         invalid_domains = [
             "invalid",
             "http://",
@@ -64,8 +61,6 @@ class CompanyTest(TestCase):
 
     def test_company_creation(self):
         """Test creating a company with valid domain"""
-        from core.models import Company  # noqa: E402
-
         company = Company.objects.create(
             domain="creation-test.com", name="Example Company"
         )
@@ -74,25 +69,17 @@ class CompanyTest(TestCase):
 
     def test_company_str_representation(self):
         """Test string representation of company"""
-        from core.models import Company  # noqa: E402
-
         company = Company.objects.create(domain="str-test.com", name="Example Company")
         expected = "Example Company (str-test.com)"
         self.assertEqual(str(company), expected)
 
     def test_company_domain_validation(self):
         """Test domain validation on company creation"""
-        from core.models import Company  # noqa: E402
-
         with self.assertRaises(ValidationError):
             Company.objects.create(domain="invalid-domain")
 
     def test_company_unique_constraint(self):
         """Test unique constraint on domain"""
-        import uuid
-
-        from core.models import Company  # noqa: E402
-
         # Use a unique domain for this test
         unique_domain = f"test-{uuid.uuid4().hex[:8]}.com"
 
@@ -105,8 +92,6 @@ class CompanyTest(TestCase):
 
     def test_company_domain_cleaning(self):
         """Test domain cleaning on save"""
-        from core.models import Company  # noqa: E402
-
         company = Company.objects.create(
             domain="https://www.CLEANING-TEST.COM", name="Example"
         )
@@ -118,8 +103,6 @@ class WorkspaceTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        from core.models import Workspace  # noqa: E402
-
         self.workspace = Workspace.objects.create(
             name="Test Org", shop_domain="test.myshopify.com"
         )
@@ -135,32 +118,24 @@ class NotificationSettingsTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        from core.models import Workspace  # noqa: E402
-
         self.workspace = Workspace.objects.create(
             name="Test Org", shop_domain="test.myshopify.com"
         )
 
     def test_notification_settings_creation(self):
         """Test creating notification settings"""
-        from core.models import NotificationSettings  # noqa: E402
-
         settings = NotificationSettings.objects.create(workspace=self.workspace)
         self.assertEqual(settings.workspace, self.workspace)
         self.assertTrue(settings.notify_payment_success)  # Default value
 
     def test_notification_settings_str_representation(self):
         """Test string representation"""
-        from core.models import NotificationSettings  # noqa: E402
-
         settings = NotificationSettings.objects.create(workspace=self.workspace)
         expected = f"Notification Settings for {self.workspace.name}"
         self.assertEqual(str(settings), expected)
 
     def test_notification_settings_defaults(self):
         """Test default values"""
-        from core.models import NotificationSettings  # noqa: E402
-
         settings = NotificationSettings.objects.create(workspace=self.workspace)
         # Test some key defaults
         self.assertTrue(settings.notify_payment_success)
@@ -169,10 +144,8 @@ class NotificationSettingsTest(TestCase):
 
     def test_notification_settings_one_per_workspace(self):
         """Test one settings instance per workspace"""
-        from core.models import NotificationSettings  # noqa: E402
-
         NotificationSettings.objects.create(workspace=self.workspace)
 
         # Test unique constraint
-        with self.assertRaises(IntegrityError):  # Fixed: specific exception
+        with self.assertRaises(IntegrityError):
             NotificationSettings.objects.create(workspace=self.workspace)

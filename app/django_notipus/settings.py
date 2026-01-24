@@ -92,12 +92,10 @@ INSTALLED_APPS = [
 
 # Add django-extensions in development (dev dependency only)
 if DEBUG:
-    try:
-        import django_extensions  # noqa: F401
+    import importlib.util
 
+    if importlib.util.find_spec("django_extensions") is not None:
         INSTALLED_APPS.append("django_extensions")
-    except ImportError:
-        pass
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

@@ -1,5 +1,4 @@
-from .settings import *  # noqa: F403
-from .settings import MIDDLEWARE  # noqa: F401
+from .settings import *
 
 # Override database to use SQLite for tests
 DATABASES = {
