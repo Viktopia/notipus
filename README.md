@@ -246,43 +246,96 @@ The service is built with a modular, multi-tenant architecture that separates co
 
 ```
 app/
-├── core/              # Core application (users, organizations, billing)
-│   ├── models.py          # Organization, Integration, Company, UserProfile, etc.
+├── core/              # Core application (users, workspaces, billing)
+│   ├── models.py          # Workspace, Integration, Company, WorkspaceMember, Plan, etc.
 │   ├── services/
 │   │   ├── stripe.py      # Stripe billing API client
 │   │   ├── shopify.py     # Shopify Admin API client
-│   │   ├── enrichment.py  # Domain enrichment service
+│   │   ├── enrichment.py  # Domain enrichment orchestration
 │   │   ├── dashboard.py   # Dashboard data aggregation
 │   │   └── webauthn.py    # Passwordless authentication
-│   └── providers/
-│       ├── base.py        # BaseEnrichmentProvider
-│       └── brandfetch.py  # Domain/brand enrichment
-├── webhooks/
-│   ├── providers/     # Payment gateway integrations
-│   │   ├── base.py        # PaymentProvider abstract class
-│   │   ├── chargify.py    # Chargify/Maxio webhook processor
-│   │   ├── shopify.py     # Shopify webhook processor
-│   │   └── stripe.py      # Stripe webhook processor
+│   └── views/
+│       └── integrations/  # OAuth integration handlers (Slack, Stripe, Shopify)
+├── plugins/           # Unified plugin architecture (see ADR-001)
+│   ├── base.py            # BasePlugin, PluginMetadata, PluginType
+│   ├── registry.py        # PluginRegistry singleton with auto-discovery
+│   ├── enrichment/        # Data enrichment plugins
+│   │   ├── base.py            # BaseEnrichmentPlugin
+│   │   └── brandfetch.py      # Domain/brand enrichment via Brandfetch API
+│   ├── sources/           # Webhook source plugins (payment providers)
+│   │   ├── base.py            # BaseSourcePlugin
+│   │   ├── stripe.py          # Stripe webhook processor
+│   │   ├── shopify.py         # Shopify webhook processor
+│   │   └── chargify.py        # Chargify/Maxio webhook processor
+│   └── destinations/      # Notification destination plugins
+│       ├── base.py            # BaseDestinationPlugin
+│       └── slack.py           # Slack Block Kit formatter
+├── webhooks/          # Webhook routing and processing
+│   ├── webhook_router.py      # Multi-tenant webhook routing
 │   ├── services/
-│   │   ├── event_processor.py  # Event processing and notification formatting
-│   │   ├── slack_client.py     # Slack incoming webhooks client
-│   │   ├── billing.py          # Notipus subscription billing handler
-│   │   ├── rate_limiter.py     # Rate limiting with circuit breaker
-│   │   └── database_lookup.py  # Recent activity storage (Redis)
-│   ├── models/
-│   │   └── notification.py
-│   └── webhook_router.py  # Multi-tenant webhook routing
+│   │   ├── event_processor.py     # Event processing orchestration
+│   │   ├── notification_builder.py # RichNotification construction
+│   │   ├── insight_detector.py    # Business insight detection
+│   │   ├── slack_client.py        # Slack API client
+│   │   ├── billing.py             # Notipus subscription billing handler
+│   │   ├── rate_limiter.py        # Rate limiting with circuit breaker
+│   │   └── database_lookup.py     # Cross-reference lookups (Redis)
+│   └── models/
+│       ├── notification.py        # Legacy Notification model
+│       └── rich_notification.py   # RichNotification with sections/insights
 └── django_notipus/    # Django project settings
 ```
 
 ### Multi-Tenant Architecture
 
-Notipus is designed as a multi-tenant SaaS platform where each organization manages their own integrations:
+Notipus is designed as a multi-tenant SaaS platform where each workspace manages their own integrations:
 
-- **Organizations**: Each tenant (organization) has their own webhook endpoints, integrations, and Slack configurations
-- **Webhook Endpoints**: Organization-specific webhooks at `/webhooks/customer/{org_uuid}/{provider}/`
-- **Integration Storage**: Credentials and settings stored per-organization in the `Integration` model
-- **Isolation**: Each organization's data is isolated and rate-limited independently
+- **Workspaces**: Each tenant (workspace) has their own webhook endpoints, integrations, and Slack configurations
+- **Webhook Endpoints**: Workspace-specific webhooks at `/webhooks/customer/{org_uuid}/{provider}/`
+- **Integration Storage**: Credentials and settings stored per-workspace in the `Integration` model
+- **Isolation**: Each workspace's data is isolated and rate-limited independently
+
+### Plugin Architecture
+
+Notipus uses a unified plugin system (documented in [ADR-001](docs/adr/001-unified-plugin-architecture.md)) that provides a consistent pattern for extending the platform:
+
+**Plugin Types:**
+
+| Type | Purpose | Examples |
+|------|---------|----------|
+| **Sources** | Receive and validate webhooks from payment providers | Stripe, Shopify, Chargify |
+| **Destinations** | Format and deliver notifications | Slack (with Block Kit) |
+| **Enrichment** | Enhance data with external information | Brandfetch (company logos/branding) |
+
+**Key Features:**
+
+- **Auto-Discovery**: Plugins are automatically discovered from `app/plugins/` subdirectories
+- **Unified Registry**: Single `PluginRegistry` singleton manages all plugin types
+- **Consistent Configuration**: All plugins configured via the `PLUGINS` Django setting
+- **Type Safety**: Base classes with abstract methods ensure consistent plugin contracts
+
+**Plugin Configuration Example:**
+
+```python
+# In settings.py
+PLUGINS = {
+    "enrichment": {
+        "brandfetch": {
+            "enabled": True,
+            "priority": 100,
+            "config": {"api_key": "...", "timeout": 10}
+        }
+    },
+    "sources": {
+        "stripe": {"enabled": True},
+        "shopify": {"enabled": True},
+        "chargify": {"enabled": True},
+    },
+    "destinations": {
+        "slack": {"enabled": True},
+    },
+}
+```
 
 ### Authentication
 
@@ -428,7 +481,7 @@ The Brandfetch integration enriches company domains with brand information:
 
 The webhook system includes robust rate limiting:
 
-- **Per-Organization Limits**: Configurable limits based on subscription plan
+- **Per-Workspace Limits**: Configurable limits based on subscription plan
 - **Redis-Backed**: Uses Redis for distributed rate limit tracking
 - **Circuit Breaker**: Automatically disables failing integrations to prevent cascading failures
 - **Graceful Degradation**: Falls back to in-memory counting if Redis is unavailable
@@ -437,7 +490,7 @@ The webhook system includes robust rate limiting:
 
 Redis is used for multiple purposes:
 
-- **Rate Limit Tracking**: Per-organization request counts with TTL
+- **Rate Limit Tracking**: Per-workspace request counts with TTL
 - **Recent Activity**: Last 7 days of webhook activity for dashboard display
 - **Session Cache**: Django session storage (configurable)
 - **Circuit Breaker State**: Tracks integration health status
@@ -506,7 +559,7 @@ This creates Stripe Products/Prices for your plans and updates the database with
 
 ### Per-Tenant Configuration
 
-Customer webhook integrations are configured per-tenant through the web interface. Each organization manages their own:
+Customer webhook integrations are configured per-tenant through the web interface. Each workspace manages their own:
 
 - **Stripe**: One-click OAuth connection (automatic webhook setup)
 - **Slack**: One-click OAuth connection for notifications
@@ -515,7 +568,7 @@ Customer webhook integrations are configured per-tenant through the web interfac
 
 ### Webhook Endpoints
 
-**Customer Webhooks** (per-organization):
+**Customer Webhooks** (per-workspace):
 
 - `POST /webhooks/customer/{org_uuid}/shopify/` - Shopify order and customer events
 - `POST /webhooks/customer/{org_uuid}/chargify/` - Chargify/Maxio subscription events

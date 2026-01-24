@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 
 from core.models import Integration, Workspace
 from django.test import TestCase
-
-from .providers.stripe import StripeProvider
+from plugins.sources.base import InvalidDataError
+from plugins.sources.stripe import StripeSourcePlugin
 
 
 class ChargifyWebhookTest(TestCase):
@@ -43,7 +43,7 @@ class ChargifyWebhookTest(TestCase):
 
     @patch("django.conf.settings.EVENT_PROCESSOR")
     @patch("django.conf.settings.SLACK_CLIENT")
-    @patch("webhooks.providers.chargify.ChargifyProvider")
+    @patch("plugins.sources.chargify.ChargifySourcePlugin")
     def test_valid_webhook(self, mock_provider_class, mock_slack, mock_processor):
         # Mock the provider instance
         mock_provider = mock_provider_class.return_value
@@ -74,7 +74,7 @@ class ChargifyWebhookTest(TestCase):
             webhook_secret="test-webhook-secret"
         )
 
-    @patch("webhooks.providers.chargify.ChargifyProvider")
+    @patch("plugins.sources.chargify.ChargifySourcePlugin")
     def test_invalid_signature(self, mock_provider_class):
         # Mock the provider instance with invalid signature
         mock_provider = mock_provider_class.return_value
@@ -100,12 +100,12 @@ class ChargifyWebhookTest(TestCase):
 
 
 class StripeProviderTest(TestCase):
-    """Test StripeProvider webhook handling"""
+    """Test StripeSourcePlugin webhook handling."""
 
     def setUp(self):
-        """Set up test data"""
+        """Set up test data."""
         self.webhook_secret = "test_webhook_secret"
-        self.provider = StripeProvider(self.webhook_secret)
+        self.provider = StripeSourcePlugin(self.webhook_secret)
 
     def test_get_customer_data(self):
         """Test getting customer data"""
@@ -164,9 +164,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(amount, "0")
 
     def test_extract_stripe_event_info_unsupported_event(self):
-        """Test extracting info for unsupported event type"""
-        from .providers.base import InvalidDataError
-
+        """Test extracting info for unsupported event type."""
         mock_event = Mock()
         mock_event.type = "unsupported.event.type"
 
@@ -174,9 +172,7 @@ class StripeProviderTest(TestCase):
             self.provider._extract_stripe_event_info(mock_event)
 
     def test_extract_stripe_event_info_missing_event_type(self):
-        """Test extracting info with missing event type"""
-        from .providers.base import InvalidDataError
-
+        """Test extracting info with missing event type."""
         mock_event = Mock()
         mock_event.type = None
 

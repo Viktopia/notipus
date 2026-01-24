@@ -1,8 +1,8 @@
-"""
-Tests for Stripe webhook provider.
+"""Tests for Stripe webhook provider.
 
-This module contains comprehensive tests for the StripeProvider class, which handles
-incoming webhook requests from Stripe using the official Stripe SDK. The tests cover:
+This module contains comprehensive tests for the StripeSourcePlugin class,
+which handles incoming webhook requests from Stripe using the official Stripe SDK.
+The tests cover:
 
 - Webhook signature validation using Stripe's built-in verification
 - Event data extraction and parsing from Stripe webhook payloads
@@ -11,30 +11,28 @@ incoming webhook requests from Stripe using the official Stripe SDK. The tests c
 - Event data transformation and normalization
 - Edge cases and security validation
 
-The StripeProvider is responsible for validating webhook authenticity,
+The StripeSourcePlugin is responsible for validating webhook authenticity,
 parsing event data, and triggering appropriate billing service handlers
 for subscription management and payment processing.
 """
 
-from typing import Optional
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
-
-from .providers.base import InvalidDataError
-from .providers.stripe import StripeProvider
+from plugins.sources.base import InvalidDataError
+from plugins.sources.stripe import StripeSourcePlugin
 
 
 class StripeProviderTest(TestCase):
-    """Test StripeProvider webhook handling"""
+    """Test StripeSourcePlugin webhook handling."""
 
     def setUp(self) -> None:
-        """Set up test data"""
+        """Set up test data."""
         self.webhook_secret = "test_webhook_secret"
-        self.provider = StripeProvider(self.webhook_secret)
+        self.provider = StripeSourcePlugin(self.webhook_secret)
 
-    def _create_mock_request(self, body: str, signature: Optional[str] = None) -> Mock:
-        """Create a mock HTTP request for testing"""
+    def _create_mock_request(self, body: str, signature: str | None = None) -> Mock:
+        """Create a mock HTTP request for testing."""
         request = Mock()
         request.body = body.encode() if isinstance(body, str) else body
         request.headers = {}
@@ -43,7 +41,7 @@ class StripeProviderTest(TestCase):
         return request
 
     def test_get_customer_data(self) -> None:
-        """Test getting customer data"""
+        """Test getting customer data."""
         result = self.provider.get_customer_data("cus_123")
 
         expected = {
@@ -56,7 +54,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(result, expected)
 
     def test_build_stripe_event_data(self) -> None:
-        """Test building Stripe event data structure"""
+        """Test building Stripe event data structure."""
         data = {"status": "succeeded", "created": 1234567890, "currency": "usd"}
 
         result = self.provider._build_stripe_event_data(
@@ -75,7 +73,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(result, expected)
 
     def test_build_stripe_event_data_default_currency(self) -> None:
-        """Test building event data with missing currency"""
+        """Test building event data with missing currency."""
         data = {"status": "succeeded", "created": 1234567890}
 
         result = self.provider._build_stripe_event_data(
@@ -85,7 +83,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(result["currency"], "USD")
 
     def test_handle_stripe_billing_unknown_event(self) -> None:
-        """Test handling unknown billing event"""
+        """Test handling unknown billing event."""
         data = {"amount_due": 1500}
 
         amount = self.provider._handle_stripe_billing("unknown_event", data)
@@ -93,7 +91,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(amount, "0")
 
     def test_handle_stripe_billing_missing_amount_due(self) -> None:
-        """Test handling payment events with missing amount_due"""
+        """Test handling payment events with missing amount_due."""
         data = {}  # Missing amount_due
 
         amount = self.provider._handle_stripe_billing("payment_success", data)
@@ -101,7 +99,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(amount, "0")
 
     def test_handle_stripe_billing_missing_plan_amount(self) -> None:
-        """Test handling subscription created with missing plan amount"""
+        """Test handling subscription created with missing plan amount."""
         data = {"plan": {}}  # Missing amount
 
         amount = self.provider._handle_stripe_billing("subscription_created", data)
@@ -109,7 +107,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(amount, "0")
 
     def test_extract_stripe_event_info_subscription_created(self) -> None:
-        """Test extracting event info for subscription created"""
+        """Test extracting event info for subscription created."""
         mock_event = Mock()
         mock_event.type = "customer.subscription.created"
         mock_event.data.object = {"id": "sub_123", "customer": "cus_123"}
@@ -120,7 +118,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(data["id"], "sub_123")
 
     def test_extract_stripe_event_info_payment_success(self) -> None:
-        """Test extracting event info for payment success"""
+        """Test extracting event info for payment success."""
         mock_event = Mock()
         mock_event.type = "invoice.payment_succeeded"
         mock_event.data.object = {
@@ -135,7 +133,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(data["amount_due"], 2000)
 
     def test_extract_stripe_event_info_payment_failure(self) -> None:
-        """Test extracting event info for payment failure"""
+        """Test extracting event info for payment failure."""
         mock_event = Mock()
         mock_event.type = "invoice.payment_failed"
         mock_event.data.object = {
@@ -149,7 +147,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(event_type, "payment_failure")
 
     def test_extract_stripe_event_info_unsupported_event(self) -> None:
-        """Test extracting info for unsupported event type"""
+        """Test extracting info for unsupported event type."""
         mock_event = Mock()
         mock_event.type = "unsupported.event.type"
 
@@ -157,7 +155,7 @@ class StripeProviderTest(TestCase):
             self.provider._extract_stripe_event_info(mock_event)
 
     def test_extract_stripe_event_info_missing_event_type(self) -> None:
-        """Test extracting info with missing event type"""
+        """Test extracting info with missing event type."""
         mock_event = Mock()
         mock_event.type = None
 
@@ -165,7 +163,7 @@ class StripeProviderTest(TestCase):
             self.provider._extract_stripe_event_info(mock_event)
 
     def test_extract_stripe_event_info_missing_data(self) -> None:
-        """Test extracting info with missing data"""
+        """Test extracting info with missing data."""
         mock_event = Mock()
         mock_event.type = "invoice.payment_succeeded"
         mock_event.data.object = None
@@ -173,9 +171,9 @@ class StripeProviderTest(TestCase):
         with self.assertRaises(InvalidDataError):
             self.provider._extract_stripe_event_info(mock_event)
 
-    @patch("webhooks.providers.stripe.settings.DISABLE_BILLING", True)
+    @patch("plugins.sources.stripe.settings.DISABLE_BILLING", True)
     def test_validate_webhook_billing_disabled(self) -> None:
-        """Test webhook validation when billing is disabled"""
+        """Test webhook validation when billing is disabled."""
         request = self._create_mock_request(
             '{"type": "invoice.payment_succeeded"}', "t=123456789,v1=test_signature"
         )
@@ -184,9 +182,9 @@ class StripeProviderTest(TestCase):
 
         self.assertFalse(result)
 
-    @patch("webhooks.providers.stripe.stripe.Webhook.construct_event")
-    def test_validate_webhook_success(self, mock_construct_event) -> None:
-        """Test successful webhook validation"""
+    @patch("plugins.sources.stripe.stripe.Webhook.construct_event")
+    def test_validate_webhook_success(self, mock_construct_event: Mock) -> None:
+        """Test successful webhook validation."""
         # Mock successful validation
         mock_construct_event.return_value = Mock()
 
@@ -195,7 +193,7 @@ class StripeProviderTest(TestCase):
         )
 
         # Mock the billing settings to be enabled
-        with patch("webhooks.providers.stripe.settings.DISABLE_BILLING", False):
+        with patch("plugins.sources.stripe.settings.DISABLE_BILLING", False):
             result = self.provider.validate_webhook(request)
 
         self.assertTrue(result)
@@ -203,9 +201,11 @@ class StripeProviderTest(TestCase):
             request.body, "t=123456789,v1=test_signature", self.webhook_secret
         )
 
-    @patch("webhooks.providers.stripe.stripe.Webhook.construct_event")
-    def test_validate_webhook_invalid_signature(self, mock_construct_event) -> None:
-        """Test webhook validation with invalid signature"""
+    @patch("plugins.sources.stripe.stripe.Webhook.construct_event")
+    def test_validate_webhook_invalid_signature(
+        self, mock_construct_event: Mock
+    ) -> None:
+        """Test webhook validation with invalid signature."""
         import stripe.error
 
         # Mock signature verification error
@@ -222,16 +222,16 @@ class StripeProviderTest(TestCase):
         self.assertFalse(result)
 
     def test_validate_webhook_missing_signature(self) -> None:
-        """Test webhook validation with missing signature"""
+        """Test webhook validation with missing signature."""
         request = self._create_mock_request('{"type": "invoice.payment_succeeded"}')
 
         result = self.provider.validate_webhook(request)
 
         self.assertFalse(result)
 
-    @patch("webhooks.providers.stripe.stripe.Webhook.construct_event")
-    def test_parse_webhook_success(self, mock_construct_event) -> None:
-        """Test successful webhook parsing"""
+    @patch("plugins.sources.stripe.stripe.Webhook.construct_event")
+    def test_parse_webhook_success(self, mock_construct_event: Mock) -> None:
+        """Test successful webhook parsing."""
         # Mock Stripe event
         mock_event = Mock()
         mock_event.type = "invoice.payment_succeeded"
@@ -264,7 +264,7 @@ class StripeProviderTest(TestCase):
         self.assertEqual(result, expected)
 
     def test_parse_webhook_missing_signature(self) -> None:
-        """Test parsing webhook without signature"""
+        """Test parsing webhook without signature."""
         request = self._create_mock_request('{"type": "invoice.payment_succeeded"}')
 
         with self.assertRaises(InvalidDataError) as context:
@@ -272,9 +272,9 @@ class StripeProviderTest(TestCase):
 
         self.assertIn("Missing Stripe signature", str(context.exception))
 
-    @patch("webhooks.providers.stripe.stripe.Webhook.construct_event")
-    def test_parse_webhook_invalid_signature(self, mock_construct_event) -> None:
-        """Test parsing webhook with invalid signature"""
+    @patch("plugins.sources.stripe.stripe.Webhook.construct_event")
+    def test_parse_webhook_invalid_signature(self, mock_construct_event: Mock) -> None:
+        """Test parsing webhook with invalid signature."""
         import stripe.error
 
         mock_construct_event.side_effect = stripe.error.SignatureVerificationError(
