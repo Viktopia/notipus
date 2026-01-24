@@ -51,7 +51,6 @@ class Workspace(models.Model):
 
     STRIPE_PLANS: ClassVar[tuple[tuple[str, str], ...]] = (
         ("free", "Free Plan"),
-        ("trial", "14-Day Trial"),
         ("basic", "Basic Plan - $29/month"),
         ("pro", "Pro Plan - $99/month"),
         ("enterprise", "Enterprise Plan - $299/month"),
@@ -76,7 +75,7 @@ class Workspace(models.Model):
 
     # Billing and subscription
     subscription_plan = models.CharField(
-        max_length=20, choices=STRIPE_PLANS, default="trial"
+        max_length=20, choices=STRIPE_PLANS, default="free"
     )
     subscription_status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="trial"

@@ -1,4 +1,5 @@
 {% extends "core/base.html.j2" %}
+{% load static %}
 
 {% block title %}
     Join {{ workspace.name }} - Invitation
@@ -8,7 +9,7 @@
     <div class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div class="sm:mx-auto sm:w-full sm:max-w-md">
             <div class="flex justify-center">
-                <img src="/static/img/notipus-logo.png" alt="Notipus" class="h-12 w-auto">
+                <img src="{% static 'img/notipus-logo.png' %}" alt="Notipus" class="h-12 w-auto" width="48" height="48">
             </div>
             <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
                 You're invited!

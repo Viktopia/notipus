@@ -150,7 +150,6 @@ class RateLimiter:
 
     PLAN_LIMITS: ClassVar[dict[str, int]] = {
         "free": 20,
-        "trial": 1000,
         "basic": 10000,
         "pro": 100000,
         "enterprise": 1000000,  # 1 million events/month

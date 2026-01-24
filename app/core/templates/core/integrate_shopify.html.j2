@@ -101,7 +101,7 @@
                             <form method="post" action="{% url 'core:update_shopify_events' %}" id="update-events-form">
                                 {% csrf_token %}
                                 <div class="space-y-3 mb-4">
-                                    {% for key, category in event_categories.items() %}
+                                    {% for key, category in event_categories.items %}
                                     <label class="flex items-start p-3 bg-gray-50 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
                                         <input type="checkbox"
                                                name="event_categories"
@@ -190,7 +190,7 @@
                                 </p>
                                 <p class="mt-1 text-sm text-gray-500">
                                     <strong>Using a custom domain?</strong> You need your myshopify.com domain.
-                                    Find it in <span class="font-medium">Shopify Admin &rarr; Settings &rarr; Domains</span>.
+                                    Find it in <span class="font-medium">Shopify Admin → Settings → Domains</span>.
                                 </p>
                             </div>
 
@@ -201,7 +201,7 @@
                                 </label>
                                 <p class="text-sm text-gray-500 mb-3">Select which events to receive notifications for:</p>
                                 <div class="space-y-3">
-                                    {% for key, category in event_categories.items() %}
+                                    {% for key, category in event_categories.items %}
                                     <label class="flex items-start p-3 bg-gray-50 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
                                         <input type="checkbox"
                                                name="event_categories"
@@ -283,7 +283,7 @@
                     </div>
                     <div class="px-6 py-6">
                         <div class="space-y-4">
-                            {% for key, category in event_categories.items() %}
+                            {% for key, category in event_categories.items %}
                             <div class="flex items-start">
                                 <svg class="w-5 h-5 text-green-500 mr-3 mt-0.5"
                                      fill="currentColor"

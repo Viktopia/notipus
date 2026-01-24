@@ -122,6 +122,69 @@ class TestStripeAPICheckout:
 
         assert result is None
 
+    @patch("core.services.stripe.stripe.checkout.Session.create")
+    def test_create_checkout_session_with_trial_period(
+        self, mock_create: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test checkout session creation with trial period.
+
+        Verifies that trial_period_days is passed to Stripe subscription_data.
+
+        Args:
+            mock_create: Mock for Stripe checkout session create.
+            stripe_api: StripeAPI fixture.
+        """
+        mock_session = Mock()
+        mock_session.id = "cs_test123"
+        mock_session.url = "https://checkout.stripe.com/pay/cs_test123"
+        mock_session.customer = "cus_test123"
+        mock_session.status = "open"
+        mock_create.return_value = mock_session
+
+        result = stripe_api.create_checkout_session(
+            customer_id="cus_test123",
+            price_id="price_test123",
+            trial_period_days=14,
+        )
+
+        assert result is not None
+        call_kwargs = mock_create.call_args[1]
+        assert "subscription_data" in call_kwargs
+        assert call_kwargs["subscription_data"]["trial_period_days"] == 14
+
+    @patch("core.services.stripe.stripe.checkout.Session.create")
+    def test_create_checkout_session_with_trial_and_metadata(
+        self, mock_create: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test checkout session with both trial period and metadata.
+
+        Verifies that subscription_data contains both trial_period_days and metadata.
+
+        Args:
+            mock_create: Mock for Stripe checkout session create.
+            stripe_api: StripeAPI fixture.
+        """
+        mock_session = Mock()
+        mock_session.id = "cs_test123"
+        mock_session.url = "https://checkout.stripe.com/pay/cs_test123"
+        mock_session.customer = "cus_test123"
+        mock_session.status = "open"
+        mock_create.return_value = mock_session
+
+        metadata = {"workspace_id": "123"}
+        result = stripe_api.create_checkout_session(
+            customer_id="cus_test123",
+            price_id="price_test123",
+            metadata=metadata,
+            trial_period_days=14,
+        )
+
+        assert result is not None
+        call_kwargs = mock_create.call_args[1]
+        assert call_kwargs["subscription_data"]["trial_period_days"] == 14
+        assert call_kwargs["subscription_data"]["metadata"] == metadata
+        assert call_kwargs["metadata"] == metadata
+
 
 class TestStripeAPIPortal:
     """Tests for Stripe Customer Portal functionality."""
@@ -577,5 +640,137 @@ class TestStripeAPISubscriptions:
         mock_list.side_effect = StripeError("Test error")
 
         result = stripe_api.get_customer_subscriptions("cus_test123")
+
+        assert result == []
+
+
+class TestStripeAPIArchive:
+    """Tests for Stripe product and price archiving functionality."""
+
+    @pytest.fixture
+    def stripe_api(self) -> StripeAPI:
+        """Create a StripeAPI instance for testing.
+
+        Returns:
+            Configured StripeAPI instance.
+        """
+        return StripeAPI()
+
+    @patch("core.services.stripe.stripe.Product.modify")
+    def test_archive_product_success(
+        self, mock_modify: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test successful product archiving.
+
+        Args:
+            mock_modify: Mock for Stripe product modify.
+            stripe_api: StripeAPI fixture.
+        """
+        mock_modify.return_value = Mock()
+
+        result = stripe_api.archive_product("prod_test123")
+
+        assert result is True
+        mock_modify.assert_called_once_with("prod_test123", active=False)
+
+    @patch("core.services.stripe.stripe.Product.modify")
+    def test_archive_product_stripe_error(
+        self, mock_modify: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test product archiving with Stripe error.
+
+        Args:
+            mock_modify: Mock for Stripe product modify.
+            stripe_api: StripeAPI fixture.
+        """
+        from stripe import StripeError
+
+        mock_modify.side_effect = StripeError("Test error")
+
+        result = stripe_api.archive_product("prod_test123")
+
+        assert result is False
+
+    @patch("core.services.stripe.stripe.Price.modify")
+    def test_archive_price_success(
+        self, mock_modify: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test successful price archiving.
+
+        Args:
+            mock_modify: Mock for Stripe price modify.
+            stripe_api: StripeAPI fixture.
+        """
+        mock_modify.return_value = Mock()
+
+        result = stripe_api.archive_price("price_test123")
+
+        assert result is True
+        mock_modify.assert_called_once_with("price_test123", active=False)
+
+    @patch("core.services.stripe.stripe.Price.modify")
+    def test_archive_price_stripe_error(
+        self, mock_modify: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test price archiving with Stripe error.
+
+        Args:
+            mock_modify: Mock for Stripe price modify.
+            stripe_api: StripeAPI fixture.
+        """
+        from stripe import StripeError
+
+        mock_modify.side_effect = StripeError("Test error")
+
+        result = stripe_api.archive_price("price_test123")
+
+        assert result is False
+
+    @patch("core.services.stripe.stripe.Price.list")
+    def test_list_prices_for_product_success(
+        self, mock_list: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test successful price listing for a product.
+
+        Args:
+            mock_list: Mock for Stripe price list.
+            stripe_api: StripeAPI fixture.
+        """
+        mock_price = Mock()
+        mock_price.id = "price_test123"
+        mock_price.product = "prod_test123"
+        mock_price.unit_amount = 2900
+        mock_price.currency = "usd"
+        mock_price.lookup_key = "basic_monthly"
+        mock_price.active = True
+        mock_price.recurring = Mock(interval="month", interval_count=1)
+
+        mock_list.return_value = Mock(data=[mock_price])
+
+        result = stripe_api.list_prices_for_product("prod_test123")
+
+        assert len(result) == 1
+        assert result[0]["id"] == "price_test123"
+        assert result[0]["unit_amount"] == 2900
+        assert result[0]["recurring"]["interval"] == "month"
+        mock_list.assert_called_once_with(
+            product="prod_test123", limit=100, active=True
+        )
+
+    @patch("core.services.stripe.stripe.Price.list")
+    def test_list_prices_for_product_stripe_error(
+        self, mock_list: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test price listing with Stripe error.
+
+        Args:
+            mock_list: Mock for Stripe price list.
+            stripe_api: StripeAPI fixture.
+        """
+        from stripe import StripeError
+
+        mock_list.side_effect = StripeError("Test error")
+
+        result = stripe_api.list_prices_for_product("prod_test123")
 
         assert result == []

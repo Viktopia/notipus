@@ -283,8 +283,8 @@ class BillingService:
                 if plan_name == current_plan:
                     continue
 
-                # Skip trial and free plans (free is added from database if needed)
-                if plan_name == "trial" or price.get("unit_amount", 0) == 0:
+                # Skip free plans (free is added from database if needed)
+                if price.get("unit_amount", 0) == 0:
                     continue
 
                 price_amount = (price.get("unit_amount", 0) or 0) / 100
@@ -353,7 +353,7 @@ class BillingService:
         """
         try:
             # Build exclusion list
-            exclude_plans = [current_plan, "trial"]
+            exclude_plans = [current_plan]
             if not include_free:
                 exclude_plans.append("free")
 

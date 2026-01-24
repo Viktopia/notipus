@@ -45,10 +45,8 @@
                                         class="{% if plan.name == 'pro' %}bg-primary-500 hover:bg-primary-600 text-white border-transparent{% else %}bg-white text-primary-500 border-primary-500 hover:bg-primary-50{% endif %} block w-full border rounded-md py-2 text-sm font-semibold text-center">
                                     {% if plan.name == 'free' %}
                                         Get Started Free
-                                    {% elif plan.name == 'trial' %}
-                                        Start Free Trial
                                     {% else %}
-                                        Choose {{ plan.display_name }}
+                                        Start 14-Day Free Trial
                                     {% endif %}
                                 </button>
                             </form>
@@ -88,9 +86,9 @@
                         </div>
 
                         <div class="bg-white rounded-lg shadow p-6">
-                            <h4 class="text-lg font-medium text-gray-900 mb-2">What's the difference between Free and Trial?</h4>
+                            <h4 class="text-lg font-medium text-gray-900 mb-2">How does the free trial work?</h4>
                             <p class="text-gray-600">
-                                The Free plan gives you 20 events/month forever with no credit card required. Trials let you test paid plan features for 14 days before committing.
+                                All paid plans include a 14-day free trial. You'll need to enter your card details, but you won't be charged until the trial ends. The Free plan has no trial - it's free forever with 20 events/month.
                             </p>
                         </div>
 

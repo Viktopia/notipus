@@ -132,7 +132,7 @@
                             </div>
                             <!-- Quick Actions -->
                             <div class="flex items-center space-x-3">
-                                {% if organization.subscription_plan == "trial" or organization.subscription_plan == "free" %}
+                                {% if organization.subscription_plan == "free" or organization.subscription_status == "trial" %}
                                     <a href="{% url 'core:upgrade_plan' %}"
                                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 transition-all duration-200">
                                         <svg class="mr-2 h-4 w-4"

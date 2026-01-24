@@ -32,7 +32,11 @@ def dashboard(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     dashboard_data = dashboard_service.get_dashboard_data(request.user)
 
     if not dashboard_data:
-        # User doesn't have a workspace yet - redirect to workspace creation
+        # User doesn't have a workspace yet
+        # First, ensure they've selected a plan
+        if "selected_plan" not in request.session:
+            return redirect("core:select_plan")
+        # Then redirect to workspace creation
         return redirect("core:create_workspace")
 
     # Flatten the data for template compatibility
@@ -51,6 +55,55 @@ def dashboard(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     return render(request, "core/dashboard.html.j2", context)
 
 
+def _create_stripe_checkout_for_plan(
+    workspace: Workspace, selected_plan: str
+) -> str | None:
+    """Create a Stripe checkout session for a paid plan with trial.
+
+    Args:
+        workspace: The newly created workspace.
+        selected_plan: The selected plan name.
+
+    Returns:
+        Checkout URL if successful, None otherwise.
+    """
+    # Imports are inside function to avoid circular imports with models/services
+    from core.models import Plan
+    from core.services.stripe import StripeAPI
+    from django.conf import settings
+
+    try:
+        plan = Plan.objects.get(name=selected_plan, is_active=True)
+        if not plan.stripe_price_id_monthly:
+            logger.warning(f"Plan '{selected_plan}' has no Stripe price ID")
+            return None
+
+        stripe_api = StripeAPI()
+        customer = stripe_api.get_or_create_customer(workspace)
+        if not customer:
+            logger.error(
+                f"Failed to get/create Stripe customer for workspace {workspace.id}"
+            )
+            return None
+
+        # TRIAL_PERIOD_DAYS: Number of days for paid plan trials (default: 14)
+        trial_days = getattr(settings, "TRIAL_PERIOD_DAYS", 14)
+        checkout = stripe_api.create_checkout_session(
+            customer_id=customer["id"],
+            price_id=plan.stripe_price_id_monthly,
+            trial_period_days=trial_days,
+            metadata={"workspace_id": str(workspace.id)},
+        )
+        return checkout.get("url") if checkout else None
+
+    except Plan.DoesNotExist:
+        logger.warning(f"Plan '{selected_plan}' not found in database")
+        return None
+    except Exception as e:
+        logger.error(f"Error creating Stripe checkout: {e}")
+        return None
+
+
 @login_required
 def create_workspace(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Workspace creation page.
@@ -64,16 +117,18 @@ def create_workspace(request: HttpRequest) -> HttpResponse | HttpResponseRedirec
     if request.method == "POST":
         name = request.POST.get("name")
         shop_domain = request.POST.get("shop_domain")
-        selected_plan = request.session.get("selected_plan", "trial")
+        selected_plan = request.session.get("selected_plan", "free")
 
         if name:
-            # Create workspace
+            # Create workspace with selected plan
             # Use None for empty shop_domain to allow multiple orgs without domains
             # (PostgreSQL unique constraint allows multiple NULLs but not empty strings)
             workspace = Workspace.objects.create(
                 name=name,
                 shop_domain=shop_domain or None,
                 subscription_plan=selected_plan,
+                # If paid plan with trial, set status to trial
+                subscription_status="trial" if selected_plan != "free" else "active",
             )
 
             # Create workspace member with owner role
@@ -93,6 +148,24 @@ def create_workspace(request: HttpRequest) -> HttpResponse | HttpResponseRedirec
                 # Update existing profile's workspace
                 user_profile.workspace = workspace
                 user_profile.save()
+
+            # Clear the selected plan from session
+            if "selected_plan" in request.session:
+                del request.session["selected_plan"]
+
+            # For paid plans, redirect to Stripe checkout with trial period
+            if selected_plan != "free":
+                checkout_url = _create_stripe_checkout_for_plan(
+                    workspace, selected_plan
+                )
+                if checkout_url:
+                    return redirect(checkout_url)
+                # Checkout creation failed - workspace is in trial status so user can
+                # still use the app; they can set up billing later from billing page
+                logger.warning(
+                    f"Stripe checkout creation failed for workspace {workspace.id}, "
+                    f"plan '{selected_plan}'. User will need to set up billing later."
+                )
 
             messages.success(request, f"Workspace '{name}' created successfully!")
             return redirect("core:dashboard")

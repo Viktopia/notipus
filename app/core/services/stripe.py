@@ -199,6 +199,7 @@ class StripeAPI:
         success_url: str | None = None,
         cancel_url: str | None = None,
         metadata: dict[str, str] | None = None,
+        trial_period_days: int | None = None,
     ) -> dict[str, Any] | None:
         """Create a Stripe Checkout Session for subscription.
 
@@ -208,6 +209,8 @@ class StripeAPI:
             success_url: URL to redirect on successful checkout.
             cancel_url: URL to redirect on cancelled checkout.
             metadata: Additional metadata to attach to the session.
+            trial_period_days: Number of days for trial period. If set,
+                the subscription will start with a trial period.
 
         Returns:
             Checkout session data with 'url' for redirect, or None on failure.
@@ -231,9 +234,15 @@ class StripeAPI:
                 "billing_address_collection": "auto",
             }
 
+            # Build subscription_data with metadata and/or trial period
+            subscription_data: dict[str, Any] = {}
             if metadata:
                 session_params["metadata"] = metadata
-                session_params["subscription_data"] = {"metadata": metadata}
+                subscription_data["metadata"] = metadata
+            if trial_period_days is not None:
+                subscription_data["trial_period_days"] = trial_period_days
+            if subscription_data:
+                session_params["subscription_data"] = subscription_data
 
             session = stripe.checkout.Session.create(**session_params)
 
@@ -806,3 +815,106 @@ class StripeAPI:
         except Exception as e:
             logger.error(f"Unexpected error updating product: {e!s}")
             return None
+
+    def archive_product(self, product_id: str) -> bool:
+        """Archive a Stripe product by setting active=False.
+
+        Archived products cannot be used for new subscriptions but
+        existing subscriptions remain active.
+
+        Args:
+            product_id: The Stripe Product ID to archive.
+
+        Returns:
+            True if successfully archived, False otherwise.
+        """
+        try:
+            stripe.api_key = self.api_key
+            stripe.Product.modify(product_id, active=False)
+            logger.info(f"Archived Stripe product: {product_id}")
+            return True
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to archive product {product_id}: {e!s}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error archiving product {product_id}: {e!s}")
+            return False
+
+    def archive_price(self, price_id: str) -> bool:
+        """Archive a Stripe price by setting active=False.
+
+        Archived prices cannot be used for new subscriptions but
+        existing subscriptions with this price remain active.
+
+        Args:
+            price_id: The Stripe Price ID to archive.
+
+        Returns:
+            True if successfully archived, False otherwise.
+        """
+        try:
+            stripe.api_key = self.api_key
+            stripe.Price.modify(price_id, active=False)
+            logger.info(f"Archived Stripe price: {price_id}")
+            return True
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to archive price {price_id}: {e!s}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error archiving price {price_id}: {e!s}")
+            return False
+
+    def list_prices_for_product(
+        self,
+        product_id: str,
+        active_only: bool = True,
+    ) -> list[dict[str, Any]]:
+        """List all prices for a specific product.
+
+        Args:
+            product_id: The Stripe Product ID to list prices for.
+            active_only: Only return active prices (default True).
+
+        Returns:
+            List of price dictionaries.
+        """
+        try:
+            stripe.api_key = self.api_key
+
+            params: dict[str, Any] = {
+                "product": product_id,
+                "limit": 100,
+            }
+            if active_only:
+                params["active"] = True
+
+            prices = stripe.Price.list(**params)
+
+            result = []
+            for price in prices.data:
+                result.append(
+                    {
+                        "id": price.id,
+                        "product": price.product,
+                        "unit_amount": price.unit_amount,
+                        "currency": price.currency,
+                        "lookup_key": price.lookup_key,
+                        "active": price.active,
+                        "recurring": {
+                            "interval": price.recurring.interval,
+                            "interval_count": price.recurring.interval_count,
+                        }
+                        if price.recurring
+                        else None,
+                    }
+                )
+
+            logger.info(f"Retrieved {len(result)} prices for product {product_id}")
+            return result
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to list prices for {product_id}: {e!s}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error listing prices for {product_id}: {e!s}")
+            return []

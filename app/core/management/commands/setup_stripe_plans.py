@@ -26,6 +26,7 @@ class Command(BaseCommand):
         python manage.py setup_stripe_plans --dry-run
         python manage.py setup_stripe_plans --plan basic
         python manage.py setup_stripe_plans --force
+        python manage.py setup_stripe_plans --archive-plan trial
     """
 
     help = "Set up Stripe Products and Prices for subscription plans"
@@ -51,17 +52,23 @@ class Command(BaseCommand):
             type=str,
             help="Only sync a specific plan by name (e.g., basic, pro, enterprise)",
         )
+        parser.add_argument(
+            "--archive-plan",
+            type=str,
+            help="Archive a plan in Stripe (deactivates product and prices)",
+        )
 
     def handle(self, *args, **options):
         """Execute the command.
 
         Args:
             *args: Positional arguments.
-            **options: Command options including dry_run, force, and plan.
+            **options: Command options including dry_run, force, plan, archive_plan.
         """
         dry_run = options["dry_run"]
         force = options["force"]
         plan_name = options.get("plan")
+        archive_plan_name = options.get("archive_plan")
 
         if dry_run:
             self.stdout.write(
@@ -83,6 +90,11 @@ class Command(BaseCommand):
             f"Connected to Stripe account: {account_info.get('id', 'unknown')}"
         )
         self.stdout.write("")
+
+        # Handle archive operation if requested
+        if archive_plan_name:
+            self._archive_plan(archive_plan_name, stripe_api, dry_run)
+            return
 
         # Get plans to process
         plans = self._get_plans_to_process(plan_name)
@@ -386,3 +398,96 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"  Errors: {results['errors']}"))
 
         self.stdout.write("=" * 50)
+
+    def _format_price_info(self, price: dict) -> str:
+        """Format price information for display.
+
+        Args:
+            price: Price dictionary from Stripe.
+
+        Returns:
+            Formatted price info string.
+        """
+        price_info = f"{price['id']}"
+        if price.get("lookup_key"):
+            price_info += f" ({price['lookup_key']})"
+        if price.get("recurring"):
+            interval = price["recurring"].get("interval", "unknown")
+            price_info += f" - {interval}ly"
+        return price_info
+
+    def _archive_prices(
+        self, prices: list[dict], stripe_api: StripeAPI, dry_run: bool
+    ) -> None:
+        """Archive all prices in the list.
+
+        Args:
+            prices: List of price dictionaries to archive.
+            stripe_api: The StripeAPI client.
+            dry_run: If True, don't make actual changes.
+        """
+        for price in prices:
+            price_info = self._format_price_info(price)
+            if dry_run:
+                self.stdout.write(f"  Would archive price: {price_info}")
+            elif stripe_api.archive_price(price["id"]):
+                self.stdout.write(self.style.SUCCESS(f"  Archived price: {price_info}"))
+            else:
+                self.stdout.write(
+                    self.style.ERROR(f"  Failed to archive price: {price_info}")
+                )
+
+    def _archive_plan(
+        self, plan_name: str, stripe_api: StripeAPI, dry_run: bool
+    ) -> None:
+        """Archive a plan's product and prices in Stripe.
+
+        Archives (deactivates) the Stripe product and all associated prices
+        for the specified plan. Archived products/prices cannot be used for
+        new subscriptions but existing subscriptions remain active.
+
+        Args:
+            plan_name: The plan name to archive (e.g., 'trial').
+            stripe_api: The StripeAPI client.
+            dry_run: If True, don't make actual changes.
+        """
+        self.stdout.write(f"Archiving plan: {plan_name}")
+        self.stdout.write("-" * 40)
+
+        # Find product by metadata
+        product = stripe_api.get_product_by_metadata("plan_name", plan_name)
+        if not product:
+            self.stdout.write(
+                self.style.WARNING(f"No Stripe product found for plan '{plan_name}'")
+            )
+            self.stdout.write("  The plan may not have been synced to Stripe yet.")
+            return
+
+        self.stdout.write(f"Found product: {product['id']} ({product['name']})")
+
+        # Archive all prices for this product
+        prices = stripe_api.list_prices_for_product(product["id"])
+        if prices:
+            self.stdout.write(f"Found {len(prices)} price(s) to archive:")
+            self._archive_prices(prices, stripe_api, dry_run)
+        else:
+            self.stdout.write("  No active prices found for this product.")
+
+        # Archive the product
+        if dry_run:
+            self.stdout.write(f"Would archive product: {product['id']}")
+        elif stripe_api.archive_product(product["id"]):
+            self.stdout.write(self.style.SUCCESS(f"Archived product: {product['id']}"))
+        else:
+            self.stdout.write(
+                self.style.ERROR(f"Failed to archive product: {product['id']}")
+            )
+
+        self.stdout.write("")
+        if dry_run:
+            self.stdout.write(
+                self.style.WARNING("DRY RUN - No changes were made to Stripe")
+            )
+        else:
+            msg = f"Successfully archived plan '{plan_name}' in Stripe"
+            self.stdout.write(self.style.SUCCESS(msg))
