@@ -1,0 +1,827 @@
+"""Tests for the SlackFormatter.
+
+This module tests the SlackFormatter class that converts
+RichNotification objects to Slack Block Kit JSON.
+"""
+
+import pytest
+from webhooks.formatters.base import FormatterRegistry
+from webhooks.formatters.slack import SlackFormatter
+from webhooks.models.rich_notification import (
+    ActionButton,
+    CompanyInfo,
+    CustomerInfo,
+    InsightInfo,
+    NotificationSeverity,
+    NotificationType,
+    PaymentInfo,
+    RichNotification,
+)
+
+
+@pytest.fixture
+def formatter() -> SlackFormatter:
+    """Create a SlackFormatter instance."""
+    return SlackFormatter()
+
+
+@pytest.fixture
+def basic_notification() -> RichNotification:
+    """Create a basic RichNotification for testing."""
+    return RichNotification(
+        type=NotificationType.PAYMENT_SUCCESS,
+        severity=NotificationSeverity.SUCCESS,
+        headline="$299.00 from Acme Inc",
+        headline_icon="money",
+        provider="stripe",
+        provider_display="Stripe",
+        customer=CustomerInfo(
+            email="alice@acme.com",
+            name="Alice Smith",
+            company_name="Acme Inc",
+            tenure_display="Since Mar 2024",
+            ltv_display="$1.5k",
+            orders_count=5,
+            total_spent=1500.00,
+        ),
+        payment=PaymentInfo(
+            amount=299.00,
+            currency="USD",
+            interval="monthly",
+            plan_name="Enterprise",
+            subscription_id="sub_123",
+            payment_method="visa",
+            card_last4="4242",
+        ),
+        is_recurring=True,
+        billing_interval="monthly",
+    )
+
+
+@pytest.fixture
+def notification_with_insight(basic_notification: RichNotification) -> RichNotification:
+    """Create a notification with an insight."""
+    basic_notification.insight = InsightInfo(
+        icon="celebration",
+        text="Crossed $5,000 lifetime!",
+    )
+    return basic_notification
+
+
+@pytest.fixture
+def notification_with_company(basic_notification: RichNotification) -> RichNotification:
+    """Create a notification with company enrichment."""
+    basic_notification.company = CompanyInfo(
+        name="Acme Corporation",
+        domain="acme.com",
+        industry="Technology",
+        year_founded=2015,
+        employee_count="51-200",
+        description="Acme builds tools for developers to build better software.",
+        logo_url="https://example.com/logo.png",
+    )
+    return basic_notification
+
+
+@pytest.fixture
+def notification_with_actions(basic_notification: RichNotification) -> RichNotification:
+    """Create a notification with action buttons."""
+    basic_notification.actions = [
+        ActionButton(text="View in Stripe", url="https://stripe.com", style="primary"),
+        ActionButton(text="Website", url="https://acme.com", style="default"),
+    ]
+    return basic_notification
+
+
+class TestSlackFormatterRegistration:
+    """Test SlackFormatter registration."""
+
+    def test_formatter_registered(self) -> None:
+        """Test SlackFormatter is registered with the registry."""
+        assert FormatterRegistry.is_registered("slack")
+
+    def test_get_formatter_from_registry(self) -> None:
+        """Test getting SlackFormatter from registry."""
+        formatter = FormatterRegistry.get("slack")
+        assert isinstance(formatter, SlackFormatter)
+
+    def test_target_name(self) -> None:
+        """Test SlackFormatter target name."""
+        assert SlackFormatter.get_target_name() == "slack"
+
+
+class TestSlackFormatterBasicOutput:
+    """Test basic formatter output structure."""
+
+    def test_format_returns_dict(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test that format returns a dictionary."""
+        result = formatter.format(basic_notification)
+        assert isinstance(result, dict)
+
+    def test_format_has_blocks(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test that format output has blocks."""
+        result = formatter.format(basic_notification)
+        assert "blocks" in result
+        assert isinstance(result["blocks"], list)
+        assert len(result["blocks"]) > 0
+
+    def test_format_has_color(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test that format output has color."""
+        result = formatter.format(basic_notification)
+        assert "color" in result
+        assert result["color"].startswith("#")
+
+    def test_success_color(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test success severity uses green color."""
+        result = formatter.format(basic_notification)
+        assert result["color"] == "#28a745"
+
+    def test_error_color(self, formatter: SlackFormatter) -> None:
+        """Test error severity uses red color."""
+        notification = RichNotification(
+            type=NotificationType.PAYMENT_FAILURE,
+            severity=NotificationSeverity.ERROR,
+            headline="Payment failed",
+            headline_icon="error",
+            provider="stripe",
+            provider_display="Stripe",
+            customer=CustomerInfo(email="test@example.com"),
+        )
+        result = formatter.format(notification)
+        assert result["color"] == "#dc3545"
+
+
+class TestSlackFormatterHeader:
+    """Test header block formatting."""
+
+    def test_header_block_present(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test header block is present."""
+        result = formatter.format(basic_notification)
+        header_block = result["blocks"][0]
+
+        assert header_block["type"] == "header"
+
+    def test_header_contains_headline(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test header contains headline text."""
+        result = formatter.format(basic_notification)
+        header_block = result["blocks"][0]
+
+        assert "$299.00 from Acme Inc" in header_block["text"]["text"]
+
+    def test_header_contains_emoji(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test header contains emoji."""
+        result = formatter.format(basic_notification)
+        header_block = result["blocks"][0]
+
+        assert ":moneybag:" in header_block["text"]["text"]
+
+
+class TestSlackFormatterInsight:
+    """Test insight block formatting."""
+
+    def test_insight_block_present(
+        self, formatter: SlackFormatter, notification_with_insight: RichNotification
+    ) -> None:
+        """Test insight block is present when notification has insight."""
+        result = formatter.format(notification_with_insight)
+
+        # Find context block with insight
+        insight_blocks = [
+            b
+            for b in result["blocks"]
+            if b["type"] == "context"
+            and any("lifetime" in str(e.get("text", "")) for e in b.get("elements", []))
+        ]
+        assert len(insight_blocks) == 1
+
+    def test_insight_contains_text(
+        self, formatter: SlackFormatter, notification_with_insight: RichNotification
+    ) -> None:
+        """Test insight contains the milestone text."""
+        result = formatter.format(notification_with_insight)
+
+        # Find the insight block
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                for element in block.get("elements", []):
+                    if "lifetime" in str(element.get("text", "")):
+                        assert "$5,000" in element["text"]
+                        return
+        pytest.fail("Insight text not found")
+
+    def test_no_insight_block_without_insight(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test no insight block when notification has no insight."""
+        basic_notification.insight = None
+        result = formatter.format(basic_notification)
+
+        # Count context blocks - should only have provider badge and customer footer
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        assert len(context_blocks) == 2  # Provider badge + customer footer
+
+
+class TestSlackFormatterProviderBadge:
+    """Test provider badge formatting."""
+
+    def test_provider_badge_present(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test provider badge is present."""
+        result = formatter.format(basic_notification)
+
+        # Provider badge is a context block
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        assert len(context_blocks) >= 1
+
+    def test_provider_badge_contains_provider(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test provider badge contains provider name."""
+        result = formatter.format(basic_notification)
+
+        # Find the provider badge (first context block after header)
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "Stripe" in text:
+                    assert "Stripe" in text
+                    return
+        pytest.fail("Provider not found in badge")
+
+    def test_provider_badge_contains_payment_type(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test provider badge contains payment type."""
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "Recurring" in text:
+                    assert "Monthly" in text
+                    return
+        pytest.fail("Payment type not found in badge")
+
+
+class TestSlackFormatterPaymentDetails:
+    """Test payment details section formatting."""
+
+    def test_payment_details_present(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test payment details section is present."""
+        result = formatter.format(basic_notification)
+
+        # Find section with payment details
+        section_blocks = [b for b in result["blocks"] if b["type"] == "section"]
+        assert len(section_blocks) >= 1
+
+    def test_payment_details_contains_amount(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test payment details contains amount."""
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "section":
+                text = str(block.get("text", {}).get("text", ""))
+                if "299" in text or "Amount" in text:
+                    assert "299" in text
+                    return
+        pytest.fail("Amount not found in payment details")
+
+    def test_payment_details_contains_arr(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test payment details contains ARR for monthly subscriptions."""
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "section":
+                text = str(block.get("text", {}).get("text", ""))
+                if "ARR" in text:
+                    return
+        pytest.fail("ARR not found in payment details")
+
+
+class TestSlackFormatterCompanySection:
+    """Test company section formatting."""
+
+    def test_company_section_present(
+        self, formatter: SlackFormatter, notification_with_company: RichNotification
+    ) -> None:
+        """Test company section is present when notification has company."""
+        result = formatter.format(notification_with_company)
+
+        # Find section with company info
+        company_sections = [
+            b
+            for b in result["blocks"]
+            if b["type"] == "section" and "Acme Corporation" in str(b.get("text", {}))
+        ]
+        assert len(company_sections) == 1
+
+    def test_company_section_has_logo(
+        self, formatter: SlackFormatter, notification_with_company: RichNotification
+    ) -> None:
+        """Test company section has logo accessory."""
+        result = formatter.format(notification_with_company)
+
+        for block in result["blocks"]:
+            if block["type"] == "section" and "Acme Corporation" in str(
+                block.get("text", {})
+            ):
+                assert "accessory" in block
+                assert block["accessory"]["type"] == "image"
+                assert block["accessory"]["image_url"] == "https://example.com/logo.png"
+                return
+        pytest.fail("Company section with logo not found")
+
+    def test_company_section_contains_industry(
+        self, formatter: SlackFormatter, notification_with_company: RichNotification
+    ) -> None:
+        """Test company section contains industry."""
+        result = formatter.format(notification_with_company)
+
+        for block in result["blocks"]:
+            if block["type"] == "section":
+                text = str(block.get("text", {}).get("text", ""))
+                if "Technology" in text:
+                    return
+        pytest.fail("Industry not found in company section")
+
+
+class TestSlackFormatterCustomerFooter:
+    """Test customer footer formatting."""
+
+    def test_customer_footer_present(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test customer footer is present."""
+        result = formatter.format(basic_notification)
+
+        # Customer footer is the last context block
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        assert len(context_blocks) >= 1
+
+    def test_customer_footer_contains_email(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test customer footer contains email."""
+        result = formatter.format(basic_notification)
+
+        # Check last context block
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        last_context = context_blocks[-1]
+        text = str(last_context.get("elements", [{}])[0].get("text", ""))
+
+        assert "alice@acme.com" in text
+
+    def test_customer_footer_contains_tenure(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test customer footer contains tenure."""
+        result = formatter.format(basic_notification)
+
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        last_context = context_blocks[-1]
+        text = str(last_context.get("elements", [{}])[0].get("text", ""))
+
+        assert "Since Mar 2024" in text
+
+    def test_customer_footer_shows_risk_flag(self, formatter: SlackFormatter) -> None:
+        """Test customer footer shows risk flag."""
+        notification = RichNotification(
+            type=NotificationType.PAYMENT_FAILURE,
+            severity=NotificationSeverity.ERROR,
+            headline="Payment failed",
+            headline_icon="error",
+            provider="stripe",
+            provider_display="Stripe",
+            customer=CustomerInfo(
+                email="test@example.com",
+                status_flags=["at_risk"],
+            ),
+        )
+        result = formatter.format(notification)
+
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        last_context = context_blocks[-1]
+        text = str(last_context.get("elements", [{}])[0].get("text", ""))
+
+        assert "At Risk" in text
+
+
+class TestSlackFormatterActions:
+    """Test action buttons formatting."""
+
+    def test_actions_block_present(
+        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+    ) -> None:
+        """Test actions block is present when notification has actions."""
+        result = formatter.format(notification_with_actions)
+
+        actions_blocks = [b for b in result["blocks"] if b["type"] == "actions"]
+        assert len(actions_blocks) == 1
+
+    def test_actions_contain_buttons(
+        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+    ) -> None:
+        """Test actions block contains buttons."""
+        result = formatter.format(notification_with_actions)
+
+        actions_block = [b for b in result["blocks"] if b["type"] == "actions"][0]
+        assert len(actions_block["elements"]) == 2
+
+    def test_button_has_correct_text(
+        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+    ) -> None:
+        """Test buttons have correct text."""
+        result = formatter.format(notification_with_actions)
+
+        actions_block = [b for b in result["blocks"] if b["type"] == "actions"][0]
+        button_texts = [e["text"]["text"] for e in actions_block["elements"]]
+
+        assert "View in Stripe" in button_texts
+        assert "Website" in button_texts
+
+    def test_button_has_style(
+        self, formatter: SlackFormatter, notification_with_actions: RichNotification
+    ) -> None:
+        """Test primary button has style."""
+        result = formatter.format(notification_with_actions)
+
+        actions_block = [b for b in result["blocks"] if b["type"] == "actions"][0]
+        primary_button = [
+            e
+            for e in actions_block["elements"]
+            if e["text"]["text"] == "View in Stripe"
+        ][0]
+
+        assert primary_button.get("style") == "primary"
+
+    def test_no_actions_block_without_actions(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test no actions block when notification has no actions."""
+        basic_notification.actions = []
+        result = formatter.format(basic_notification)
+
+        actions_blocks = [b for b in result["blocks"] if b["type"] == "actions"]
+        assert len(actions_blocks) == 0
+
+
+class TestSlackFormatterDivider:
+    """Test divider block."""
+
+    def test_divider_present(
+        self, formatter: SlackFormatter, basic_notification: RichNotification
+    ) -> None:
+        """Test divider block is present."""
+        result = formatter.format(basic_notification)
+
+        divider_blocks = [b for b in result["blocks"] if b["type"] == "divider"]
+        assert len(divider_blocks) >= 1
+
+
+class TestSlackFormatterEcommerceDetails:
+    """Test e-commerce order details formatting."""
+
+    def test_ecommerce_order_details(self, formatter: SlackFormatter) -> None:
+        """Test e-commerce order details formatting."""
+        notification = RichNotification(
+            type=NotificationType.PAYMENT_SUCCESS,
+            severity=NotificationSeverity.SUCCESS,
+            headline="$150.00 from Customer",
+            headline_icon="money",
+            provider="shopify",
+            provider_display="Shopify",
+            customer=CustomerInfo(email="test@example.com"),
+            payment=PaymentInfo(
+                amount=150.00,
+                currency="USD",
+                order_number="1001",
+                line_items=[
+                    {"name": "Widget", "quantity": 2, "price": 50.00},
+                    {"name": "Gadget", "quantity": 1, "price": 50.00},
+                ],
+            ),
+            is_recurring=False,
+        )
+        result = formatter.format(notification)
+
+        # Find order details section
+        for block in result["blocks"]:
+            if block["type"] == "section":
+                text = str(block.get("text", {}).get("text", ""))
+                if "Order #1001" in text:
+                    assert "Widget" in text
+                    assert "Gadget" in text
+                    return
+        pytest.fail("Order details not found")
+
+
+class TestSlackFormatterDetailSections:
+    """Test generic detail section formatting for non-payment events."""
+
+    def test_detail_section_rendered(self, formatter: SlackFormatter) -> None:
+        """Test detail sections are rendered for non-payment events."""
+        from webhooks.models.rich_notification import DetailSection
+
+        notification = RichNotification(
+            type=NotificationType.FEEDBACK_RECEIVED,
+            severity=NotificationSeverity.INFO,
+            headline="NPS Response: 9",
+            headline_icon="feedback",
+            provider="intercom",
+            provider_display="Intercom",
+            customer=CustomerInfo(email="happy@example.com", name="Happy User"),
+        )
+        section = DetailSection(
+            title="Feedback Details",
+            icon="feedback",
+            text="Great product! Love using it.",
+        )
+        section.add_field("Score", "9/10", icon="star")
+        section.add_field("Category", "Product Feedback")
+        notification.detail_sections.append(section)
+
+        result = formatter.format(notification)
+
+        # Find the detail section
+        found_section = False
+        for block in result["blocks"]:
+            if block["type"] == "section":
+                text = str(block.get("text", {}).get("text", ""))
+                if "Feedback Details" in text:
+                    found_section = True
+                    assert "Score" in text
+                    assert "9/10" in text
+                    assert "Great product" in text
+                    break
+
+        assert found_section, "Detail section not found"
+
+    def test_detail_section_with_accessory(self, formatter: SlackFormatter) -> None:
+        """Test detail section with accessory image."""
+        from webhooks.models.rich_notification import DetailSection
+
+        notification = RichNotification(
+            type=NotificationType.FEATURE_ADOPTED,
+            severity=NotificationSeverity.SUCCESS,
+            headline="Feature Adopted - Dashboard",
+            headline_icon="feature",
+            provider="segment",
+            provider_display="Segment",
+            customer=CustomerInfo(email="user@example.com"),
+        )
+        section = DetailSection(
+            title="Feature Usage",
+            icon="feature",
+            accessory_url="https://example.com/feature-icon.png",
+        )
+        section.add_field("Feature", "Advanced Dashboard")
+        section.add_field("First Used", "Today")
+        notification.detail_sections.append(section)
+
+        result = formatter.format(notification)
+
+        # Find section with accessory
+        for block in result["blocks"]:
+            if block["type"] == "section" and "Feature Usage" in str(
+                block.get("text", {})
+            ):
+                assert "accessory" in block
+                assert block["accessory"]["type"] == "image"
+                assert (
+                    block["accessory"]["image_url"]
+                    == "https://example.com/feature-icon.png"
+                )
+                return
+
+        pytest.fail("Detail section with accessory not found")
+
+    def test_multiple_detail_sections(self, formatter: SlackFormatter) -> None:
+        """Test multiple detail sections are rendered."""
+        notification = RichNotification(
+            type=NotificationType.SUPPORT_TICKET,
+            severity=NotificationSeverity.INFO,
+            headline="Support Ticket - Priority High",
+            headline_icon="support",
+            provider="zendesk",
+            provider_display="Zendesk",
+            customer=CustomerInfo(email="support@example.com"),
+        )
+        notification.add_detail_section(
+            title="Ticket Info",
+            icon="support",
+            fields=[("Ticket ID", "#12345"), ("Priority", "High")],
+        )
+        notification.add_detail_section(
+            title="Customer Context",
+            icon="user",
+            fields=[("Plan", "Enterprise"), ("Account Age", "2 years")],
+        )
+
+        result = formatter.format(notification)
+
+        # Count detail sections (should have 2)
+        section_texts = [
+            b.get("text", {}).get("text", "")
+            for b in result["blocks"]
+            if b["type"] == "section"
+        ]
+        ticket_found = any("Ticket Info" in t for t in section_texts)
+        context_found = any("Customer Context" in t for t in section_texts)
+
+        assert ticket_found, "Ticket Info section not found"
+        assert context_found, "Customer Context section not found"
+
+
+class TestSlackFormatterNonPaymentEvents:
+    """Test formatting for non-payment event types."""
+
+    def test_usage_event_category_badge(self, formatter: SlackFormatter) -> None:
+        """Test usage event shows category badge instead of payment type."""
+        notification = RichNotification(
+            type=NotificationType.QUOTA_WARNING,
+            severity=NotificationSeverity.WARNING,
+            headline="Quota Warning - API Calls",
+            headline_icon="quota",
+            provider="segment",
+            provider_display="Segment",
+            customer=CustomerInfo(email="dev@example.com"),
+            is_recurring=False,
+        )
+
+        result = formatter.format(notification)
+
+        # Find provider badge context block
+        for block in result["blocks"]:
+            if block["type"] == "context":
+                text = str(block.get("elements", [{}])[0].get("text", ""))
+                if "Segment" in text:
+                    # Should show Usage category, not payment type
+                    assert "Usage" in text
+                    assert "Recurring" not in text
+                    assert "One-Time" not in text
+                    return
+
+        pytest.fail("Provider badge with category not found")
+
+    def test_system_event_without_customer(self, formatter: SlackFormatter) -> None:
+        """Test system event can render without customer info."""
+        notification = RichNotification(
+            type=NotificationType.INTEGRATION_CONNECTED,
+            severity=NotificationSeverity.SUCCESS,
+            headline="Integration Connected - Stripe",
+            headline_icon="check",
+            provider="system",
+            provider_display="System",
+            customer=None,  # No customer for system events
+        )
+
+        result = formatter.format(notification)
+
+        # Should render without error
+        assert "blocks" in result
+        assert len(result["blocks"]) > 0
+
+        # Should not have customer footer
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        for block in context_blocks:
+            text = str(block.get("elements", [{}])[0].get("text", ""))
+            assert "@" not in text  # No email in footer
+
+    def test_customer_event_formatting(self, formatter: SlackFormatter) -> None:
+        """Test customer event type formatting."""
+        notification = RichNotification(
+            type=NotificationType.CUSTOMER_CHURNED,
+            severity=NotificationSeverity.ERROR,
+            headline="Customer Churned - Acme Inc",
+            headline_icon="warning",
+            provider="stripe",
+            provider_display="Stripe",
+            customer=CustomerInfo(
+                email="lost@acme.com",
+                name="Lost Customer",
+                ltv_display="$5.2k",
+                status_flags=["at_risk"],
+            ),
+        )
+
+        result = formatter.format(notification)
+
+        # Should have error color
+        assert result["color"] == "#dc3545"
+
+        # Customer footer should show at_risk flag
+        context_blocks = [b for b in result["blocks"] if b["type"] == "context"]
+        customer_footer = context_blocks[-1]
+        text = str(customer_footer.get("elements", [{}])[0].get("text", ""))
+        assert "At Risk" in text
+
+
+class TestSlackFormatterMetadata:
+    """Test metadata field handling."""
+
+    def test_metadata_available_on_notification(self) -> None:
+        """Test metadata field can be set and accessed."""
+        notification = RichNotification(
+            type=NotificationType.WEBHOOK_RECEIVED,
+            severity=NotificationSeverity.INFO,
+            headline="Webhook Received",
+            headline_icon="integration",
+            provider="api",
+            provider_display="API",
+            metadata={
+                "webhook_id": "wh_123",
+                "source_ip": "192.168.1.1",
+                "payload_size": 1024,
+            },
+        )
+
+        assert notification.metadata["webhook_id"] == "wh_123"
+        assert notification.metadata["source_ip"] == "192.168.1.1"
+        assert notification.metadata["payload_size"] == 1024
+
+    def test_notification_category_property(self) -> None:
+        """Test category property returns correct EventCategory."""
+        from webhooks.models.rich_notification import EventCategory
+
+        payment_notification = RichNotification(
+            type=NotificationType.PAYMENT_SUCCESS,
+            severity=NotificationSeverity.SUCCESS,
+            headline="Payment",
+            headline_icon="money",
+            provider="stripe",
+            provider_display="Stripe",
+        )
+        assert payment_notification.category == EventCategory.PAYMENT
+
+        usage_notification = RichNotification(
+            type=NotificationType.QUOTA_EXCEEDED,
+            severity=NotificationSeverity.ERROR,
+            headline="Quota",
+            headline_icon="error",
+            provider="segment",
+            provider_display="Segment",
+        )
+        assert usage_notification.category == EventCategory.USAGE
+
+        support_notification = RichNotification(
+            type=NotificationType.SUPPORT_TICKET,
+            severity=NotificationSeverity.INFO,
+            headline="Ticket",
+            headline_icon="support",
+            provider="zendesk",
+            provider_display="Zendesk",
+        )
+        assert support_notification.category == EventCategory.SUPPORT
+
+    def test_is_payment_event_property(self) -> None:
+        """Test is_payment_event property."""
+        payment_notification = RichNotification(
+            type=NotificationType.PAYMENT_SUCCESS,
+            severity=NotificationSeverity.SUCCESS,
+            headline="Payment",
+            headline_icon="money",
+            provider="stripe",
+            provider_display="Stripe",
+        )
+        assert payment_notification.is_payment_event is True
+
+        subscription_notification = RichNotification(
+            type=NotificationType.SUBSCRIPTION_CREATED,
+            severity=NotificationSeverity.SUCCESS,
+            headline="Subscription",
+            headline_icon="celebration",
+            provider="stripe",
+            provider_display="Stripe",
+        )
+        assert subscription_notification.is_payment_event is True
+
+        usage_notification = RichNotification(
+            type=NotificationType.FEATURE_ADOPTED,
+            severity=NotificationSeverity.SUCCESS,
+            headline="Feature",
+            headline_icon="feature",
+            provider="segment",
+            provider_display="Segment",
+        )
+        assert usage_notification.is_payment_event is False

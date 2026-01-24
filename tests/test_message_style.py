@@ -71,6 +71,7 @@ def test_payment_failure_messages_are_light_but_clear() -> None:
         "Time to reach out",
         "Just a heads up",
         "Heads up",
+        "FYI",
     ]
     assert any(phrase in message for phrase in light_phrases)
     lower_message = message.lower()

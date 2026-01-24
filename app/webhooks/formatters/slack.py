@@ -1,0 +1,503 @@
+"""Slack formatter for RichNotification objects.
+
+This module converts RichNotification objects into Slack Block Kit JSON
+format for delivery via the Slack API.
+"""
+
+from typing import Any
+
+from webhooks.models.rich_notification import (
+    ActionButton,
+    CompanyInfo,
+    CustomerInfo,
+    DetailSection,
+    InsightInfo,
+    NotificationSeverity,
+    PaymentInfo,
+    RichNotification,
+)
+
+from .base import BaseFormatter, FormatterRegistry
+
+# Semantic icon to Slack emoji mapping
+SLACK_ICONS: dict[str, str] = {
+    # Headline icons
+    "money": "moneybag",
+    "error": "x",
+    "celebration": "tada",
+    "warning": "warning",
+    "info": "information_source",
+    # Insight icons
+    "new": "new",
+    "chart": "chart_with_upwards_trend",
+    "trophy": "trophy",
+    # Non-payment event icons
+    "user": "bust_in_silhouette",
+    "users": "busts_in_silhouette",
+    "feedback": "speech_balloon",
+    "support": "ticket",
+    "feature": "sparkles",
+    "usage": "bar_chart",
+    "quota": "hourglass",
+    "integration": "link",
+    "system": "gear",
+    "bell": "bell",
+    "star": "star",
+    "fire": "fire",
+    "rocket": "rocket",
+    "check": "white_check_mark",
+    "calendar": "calendar",
+    "clock": "clock",
+    "email": "email",
+    "phone": "phone",
+    "globe": "globe_with_meridians",
+}
+
+# Provider display icons
+PROVIDER_ICONS: dict[str, str] = {
+    # Payment providers
+    "shopify": "shopping_bags",
+    "chargify": "dollar",
+    "stripe": "credit_card",
+    "stripe_customer": "credit_card",
+    # Other providers
+    "intercom": "speech_balloon",
+    "zendesk": "ticket",
+    "segment": "bar_chart",
+    "mixpanel": "chart_with_upwards_trend",
+    "amplitude": "chart_with_upwards_trend",
+    "slack": "slack",
+    "github": "octocat",
+    "webhook": "link",
+    "api": "gear",
+    "system": "gear",
+    "unknown": "globe_with_meridians",
+}
+
+# Default icon for unknown providers (must be a valid Slack emoji)
+DEFAULT_PROVIDER_ICON = "globe_with_meridians"
+
+# Payment method icons
+PAYMENT_METHOD_ICONS: dict[str, str] = {
+    # Card brands
+    "visa": "credit_card",
+    "mastercard": "credit_card",
+    "amex": "credit_card",
+    "discover": "credit_card",
+    # Bank/ACH
+    "bank_account": "bank",
+    "us_bank_account": "bank",
+    "ach": "bank",
+    "sepa_debit": "bank",
+    # Digital wallets
+    "paypal": "paypal",
+    "apple_pay": "apple",
+    "google_pay": "iphone",
+    "shop_pay": "shopping_bags",
+}
+
+# Severity to color mapping
+SEVERITY_COLORS: dict[NotificationSeverity, str] = {
+    NotificationSeverity.SUCCESS: "#28a745",  # Green
+    NotificationSeverity.WARNING: "#ffc107",  # Yellow
+    NotificationSeverity.ERROR: "#dc3545",  # Red
+    NotificationSeverity.INFO: "#17a2b8",  # Blue
+}
+
+
+@FormatterRegistry.register
+class SlackFormatter(BaseFormatter):
+    """Format RichNotification as Slack Block Kit JSON.
+
+    This formatter converts target-agnostic RichNotification objects
+    into Slack's Block Kit format for rich message display.
+    """
+
+    @classmethod
+    def get_target_name(cls) -> str:
+        """Return 'slack' as the target identifier."""
+        return "slack"
+
+    def format(self, n: RichNotification) -> dict[str, Any]:
+        """Format notification as Slack Block Kit message.
+
+        Args:
+            n: RichNotification to format.
+
+        Returns:
+            Dict with 'blocks' and 'color' for Slack API.
+        """
+        blocks: list[dict[str, Any]] = []
+
+        # Header with headline
+        blocks.append(self._format_header(n))
+
+        # Insight line (if present)
+        if n.insight:
+            blocks.append(self._format_insight(n.insight))
+
+        # Provider badge (adapts based on event type)
+        blocks.append(self._format_provider_badge(n))
+
+        # Payment/order details (for payment events)
+        if n.payment:
+            blocks.append(self._format_payment_details(n))
+
+        # Generic detail sections (for non-payment events or extras)
+        for section in n.detail_sections:
+            blocks.append(self._format_detail_section(section))
+
+        # Divider before company/customer section
+        blocks.append({"type": "divider"})
+
+        # Company section with logo (if enriched)
+        if n.company:
+            blocks.append(self._format_company_section(n.company))
+
+        # Customer footer (optional for system events)
+        if n.customer:
+            blocks.append(self._format_customer_footer(n.customer))
+
+        # Action buttons (if present)
+        if n.actions:
+            blocks.append(self._format_actions(n.actions))
+
+        return {
+            "blocks": blocks,
+            "color": SEVERITY_COLORS.get(n.severity, "#17a2b8"),
+        }
+
+    def _format_header(self, n: RichNotification) -> dict[str, Any]:
+        """Format the notification header block.
+
+        Args:
+            n: RichNotification.
+
+        Returns:
+            Slack header block dict.
+        """
+        emoji_name = SLACK_ICONS.get(n.headline_icon, "bell")
+        return {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f":{emoji_name}: {n.headline}",
+                "emoji": True,
+            },
+        }
+
+    def _format_insight(self, insight: InsightInfo) -> dict[str, Any]:
+        """Format the insight/milestone line.
+
+        Args:
+            insight: InsightInfo object.
+
+        Returns:
+            Slack context block dict.
+        """
+        emoji_name = SLACK_ICONS.get(insight.icon, "star")
+        return {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f":{emoji_name}: *{insight.text}*",
+                }
+            ],
+        }
+
+    def _format_provider_badge(self, n: RichNotification) -> dict[str, Any]:
+        """Format the provider/source badge.
+
+        Adapts based on whether this is a payment event or not.
+
+        Args:
+            n: RichNotification.
+
+        Returns:
+            Slack context block dict.
+        """
+        provider_emoji = PROVIDER_ICONS.get(n.provider, DEFAULT_PROVIDER_ICON)
+        elements = [f":{provider_emoji}: {n.provider_display}"]
+
+        # Only add payment-specific badges for payment events
+        if n.is_payment_event:
+            # Add payment type (recurring/one-time)
+            if n.is_recurring:
+                if n.billing_interval:
+                    elements.append(
+                        f":repeat: Recurring ({n.billing_interval.title()})"
+                    )
+                else:
+                    elements.append(":repeat: Recurring")
+            elif n.payment:
+                elements.append(":moneybag: One-Time")
+
+            # Add payment method if available
+            if n.payment and n.payment.payment_method:
+                pm_emoji = PAYMENT_METHOD_ICONS.get(
+                    n.payment.payment_method.lower(), "credit_card"
+                )
+                pm_display = n.payment.payment_method.title()
+                if n.payment.card_last4:
+                    pm_display += f" ••••{n.payment.card_last4}"
+                elements.append(f":{pm_emoji}: {pm_display}")
+        else:
+            # For non-payment events, add category badge
+            category = n.category.value.title()
+            category_icons = {
+                "usage": "bar_chart",
+                "support": "ticket",
+                "customer": "bust_in_silhouette",
+                "system": "gear",
+                "custom": "link",
+            }
+            cat_emoji = category_icons.get(n.category.value, "information_source")
+            elements.append(f":{cat_emoji}: {category}")
+
+        return {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": " • ".join(elements)},
+            ],
+        }
+
+    def _format_payment_details(self, n: RichNotification) -> dict[str, Any]:
+        """Format payment/order details section.
+
+        Args:
+            n: RichNotification with payment info.
+
+        Returns:
+            Slack section block dict.
+        """
+        payment = n.payment
+        if not payment:
+            return {"type": "section", "text": {"type": "mrkdwn", "text": ""}}
+
+        # Check if this is e-commerce (has order number or line items)
+        is_ecommerce = payment.order_number or payment.line_items
+
+        if is_ecommerce:
+            return self._format_ecommerce_details(payment)
+        return self._format_subscription_details(payment)
+
+    def _format_subscription_details(self, payment: PaymentInfo) -> dict[str, Any]:
+        """Format SaaS subscription payment details.
+
+        Args:
+            payment: PaymentInfo object.
+
+        Returns:
+            Slack section block dict.
+        """
+        lines = [":bar_chart: *Payment Details*"]
+
+        # Amount with ARR
+        lines.append(f"*Amount:* {payment.format_amount_with_arr()}")
+
+        if payment.plan_name:
+            lines.append(f"*Plan:* {payment.plan_name}")
+        if payment.subscription_id:
+            lines.append(f"*Subscription:* #{payment.subscription_id}")
+        if payment.failure_reason:
+            lines.append(f":x: *Reason:* {payment.failure_reason}")
+
+        return {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+        }
+
+    def _format_ecommerce_details(self, payment: PaymentInfo) -> dict[str, Any]:
+        """Format e-commerce order details with line items.
+
+        Args:
+            payment: PaymentInfo object.
+
+        Returns:
+            Slack section block dict.
+        """
+        order_display = payment.order_number or "N/A"
+        lines = [f":shopping_cart: *Order #{order_display}*"]
+
+        # Amount
+        lines.append(f"*Amount:* {payment.currency} {payment.amount:,.2f}")
+
+        # Line items (max 5)
+        if payment.line_items:
+            for item in payment.line_items[:5]:
+                qty = item.get("quantity", 1)
+                name = item.get("name", "Item")
+                price = item.get("price", 0)
+                lines.append(f"• {qty}x {name} (${price:.2f})")
+
+            if len(payment.line_items) > 5:
+                remaining = len(payment.line_items) - 5
+                lines.append(f"_...and {remaining} more items_")
+
+        return {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+        }
+
+    def _format_detail_section(self, section: DetailSection) -> dict[str, Any]:
+        """Format a generic detail section.
+
+        Args:
+            section: DetailSection object.
+
+        Returns:
+            Slack section block dict.
+        """
+        icon_emoji = SLACK_ICONS.get(section.icon, "information_source")
+        lines = [f":{icon_emoji}: *{section.title}*"]
+
+        # Add fields
+        for detail_field in section.fields:
+            field_icon = ""
+            if detail_field.icon:
+                field_emoji = SLACK_ICONS.get(detail_field.icon, "")
+                if field_emoji:
+                    field_icon = f":{field_emoji}: "
+            lines.append(f"{field_icon}*{detail_field.label}:* {detail_field.value}")
+
+        # Add freeform text
+        if section.text:
+            lines.append(section.text)
+
+        block: dict[str, Any] = {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+        }
+
+        # Add accessory image if present
+        if section.accessory_url:
+            block["accessory"] = {
+                "type": "image",
+                "image_url": section.accessory_url,
+                "alt_text": section.title,
+            }
+
+        return block
+
+    def _format_company_section(self, company: CompanyInfo) -> dict[str, Any]:
+        """Format company enrichment section with logo.
+
+        Args:
+            company: CompanyInfo object.
+
+        Returns:
+            Slack section block dict.
+        """
+        text_parts = [f":office: *{company.name}*"]
+
+        # Company details line
+        details: list[str] = []
+        if company.industry:
+            details.append(company.industry)
+        if company.year_founded:
+            details.append(f"Founded {company.year_founded}")
+        if company.employee_count:
+            details.append(f"{company.employee_count} employees")
+        if details:
+            text_parts.append(f"_{' • '.join(details)}_")
+
+        # Description as blockquote (truncated)
+        if company.description:
+            desc = company.description[:100]
+            if len(company.description) > 100:
+                desc += "..."
+            text_parts.append(f">{desc}")
+
+        block: dict[str, Any] = {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(text_parts)},
+        }
+
+        # Add logo as accessory
+        if company.logo_url:
+            block["accessory"] = {
+                "type": "image",
+                "image_url": company.logo_url,
+                "alt_text": company.name,
+            }
+
+        return block
+
+    def _format_customer_footer(self, customer: CustomerInfo) -> dict[str, Any]:
+        """Format customer info footer.
+
+        Args:
+            customer: CustomerInfo object.
+
+        Returns:
+            Slack context block dict.
+        """
+        elements: list[str] = []
+
+        # Email
+        if customer.email:
+            elements.append(f":bust_in_silhouette: {customer.email}")
+
+        # Name if no email
+        if not customer.email and customer.name:
+            elements.append(f":bust_in_silhouette: {customer.name}")
+
+        # Tenure
+        if customer.tenure_display:
+            elements.append(f":calendar: {customer.tenure_display}")
+
+        # LTV
+        if customer.ltv_display:
+            elements.append(f":moneybag: {customer.ltv_display} LTV")
+
+        # Orders count
+        if customer.orders_count:
+            elements.append(f":package: {customer.orders_count} orders")
+
+        # Status flags
+        for flag in customer.status_flags:
+            if flag == "at_risk":
+                elements.append(":rotating_light: *At Risk*")
+            elif flag == "vip":
+                elements.append(":star: *VIP*")
+
+        if not elements:
+            elements = [":bust_in_silhouette: Customer"]
+
+        return {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": " • ".join(elements)}],
+        }
+
+    def _format_actions(self, actions: list[ActionButton]) -> dict[str, Any]:
+        """Format action buttons.
+
+        Args:
+            actions: List of ActionButton objects.
+
+        Returns:
+            Slack actions block dict.
+        """
+        button_elements: list[dict[str, Any]] = []
+
+        for action in actions[:5]:  # Slack limits to 5 buttons
+            button: dict[str, Any] = {
+                "type": "button",
+                "text": {"type": "plain_text", "text": action.text, "emoji": True},
+                "url": action.url,
+            }
+
+            # Map style to Slack style
+            if action.style == "primary":
+                button["style"] = "primary"
+            elif action.style == "danger":
+                button["style"] = "danger"
+            # "default" has no style attribute in Slack
+
+            button_elements.append(button)
+
+        return {
+            "type": "actions",
+            "elements": button_elements,
+        }

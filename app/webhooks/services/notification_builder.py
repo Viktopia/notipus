@@ -1,0 +1,561 @@
+"""Notification builder for creating target-agnostic RichNotification objects.
+
+This module provides the NotificationBuilder class that transforms raw event
+and customer data into RichNotification objects ready for formatting.
+"""
+
+from datetime import datetime
+from typing import Any
+
+from core.models import Company
+from webhooks.models.rich_notification import (
+    ActionButton,
+    CompanyInfo,
+    CustomerInfo,
+    NotificationSeverity,
+    NotificationType,
+    PaymentInfo,
+    RichNotification,
+)
+
+from .insight_detector import InsightDetector
+
+# Provider display configurations
+PROVIDER_DISPLAY: dict[str, str] = {
+    "shopify": "Shopify",
+    "chargify": "Chargify",
+    "stripe": "Stripe",
+    "stripe_customer": "Stripe",
+}
+
+# Event type to notification type mapping
+EVENT_TYPE_MAP: dict[str, NotificationType] = {
+    # Payment events
+    "payment_success": NotificationType.PAYMENT_SUCCESS,
+    "payment_failure": NotificationType.PAYMENT_FAILURE,
+    "refund_issued": NotificationType.REFUND_ISSUED,
+    # Subscription events
+    "subscription_created": NotificationType.SUBSCRIPTION_CREATED,
+    "subscription_canceled": NotificationType.SUBSCRIPTION_CANCELED,
+    "subscription_deleted": NotificationType.SUBSCRIPTION_CANCELED,
+    "subscription_updated": NotificationType.SUBSCRIPTION_UPDATED,
+    "subscription_renewed": NotificationType.SUBSCRIPTION_RENEWED,
+    "trial_started": NotificationType.TRIAL_STARTED,
+    "trial_ending": NotificationType.TRIAL_ENDING,
+    "trial_converted": NotificationType.TRIAL_CONVERTED,
+    # Customer events
+    "customer_created": NotificationType.CUSTOMER_CREATED,
+    "customer_updated": NotificationType.CUSTOMER_UPDATED,
+    "customer_churned": NotificationType.CUSTOMER_CHURNED,
+    # Usage events
+    "feature_adopted": NotificationType.FEATURE_ADOPTED,
+    "usage_milestone": NotificationType.USAGE_MILESTONE,
+    "quota_warning": NotificationType.QUOTA_WARNING,
+    "quota_exceeded": NotificationType.QUOTA_EXCEEDED,
+    # Support events
+    "feedback_received": NotificationType.FEEDBACK_RECEIVED,
+    "nps_response": NotificationType.NPS_RESPONSE,
+    "support_ticket": NotificationType.SUPPORT_TICKET,
+    # System events
+    "integration_connected": NotificationType.INTEGRATION_CONNECTED,
+    "integration_error": NotificationType.INTEGRATION_ERROR,
+    "webhook_received": NotificationType.WEBHOOK_RECEIVED,
+}
+
+# Event type to severity mapping
+EVENT_SEVERITY_MAP: dict[str, NotificationSeverity] = {
+    # Payment events
+    "payment_success": NotificationSeverity.SUCCESS,
+    "payment_failure": NotificationSeverity.ERROR,
+    "refund_issued": NotificationSeverity.WARNING,
+    # Subscription events
+    "subscription_created": NotificationSeverity.SUCCESS,
+    "subscription_canceled": NotificationSeverity.WARNING,
+    "subscription_deleted": NotificationSeverity.WARNING,
+    "subscription_updated": NotificationSeverity.INFO,
+    "subscription_renewed": NotificationSeverity.SUCCESS,
+    "trial_started": NotificationSeverity.INFO,
+    "trial_ending": NotificationSeverity.WARNING,
+    "trial_converted": NotificationSeverity.SUCCESS,
+    # Customer events
+    "customer_created": NotificationSeverity.SUCCESS,
+    "customer_updated": NotificationSeverity.INFO,
+    "customer_churned": NotificationSeverity.ERROR,
+    # Usage events
+    "feature_adopted": NotificationSeverity.SUCCESS,
+    "usage_milestone": NotificationSeverity.SUCCESS,
+    "quota_warning": NotificationSeverity.WARNING,
+    "quota_exceeded": NotificationSeverity.ERROR,
+    # Support events
+    "feedback_received": NotificationSeverity.INFO,
+    "nps_response": NotificationSeverity.INFO,
+    "support_ticket": NotificationSeverity.INFO,
+    # System events
+    "integration_connected": NotificationSeverity.SUCCESS,
+    "integration_error": NotificationSeverity.ERROR,
+    "webhook_received": NotificationSeverity.INFO,
+}
+
+# Event type to headline icon mapping (semantic names)
+EVENT_ICON_MAP: dict[str, str] = {
+    # Payment events
+    "payment_success": "money",
+    "payment_failure": "error",
+    "refund_issued": "money",
+    # Subscription events
+    "subscription_created": "celebration",
+    "subscription_canceled": "warning",
+    "subscription_deleted": "warning",
+    "subscription_updated": "info",
+    "subscription_renewed": "celebration",
+    "trial_started": "rocket",
+    "trial_ending": "warning",
+    "trial_converted": "celebration",
+    # Customer events
+    "customer_created": "user",
+    "customer_updated": "user",
+    "customer_churned": "warning",
+    # Usage events
+    "feature_adopted": "feature",
+    "usage_milestone": "chart",
+    "quota_warning": "quota",
+    "quota_exceeded": "error",
+    # Support events
+    "feedback_received": "feedback",
+    "nps_response": "star",
+    "support_ticket": "support",
+    # System events
+    "integration_connected": "check",
+    "integration_error": "error",
+    "webhook_received": "integration",
+}
+
+
+class NotificationBuilder:
+    """Builds RichNotification objects from raw event/customer data.
+
+    This class encapsulates the logic for transforming webhook event data
+    and customer data into target-agnostic RichNotification objects.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the notification builder."""
+        self.insight_detector = InsightDetector()
+
+    def build(
+        self,
+        event_data: dict[str, Any],
+        customer_data: dict[str, Any],
+        company: Company | None = None,
+    ) -> RichNotification:
+        """Build a RichNotification from event and customer data.
+
+        Args:
+            event_data: Event data dictionary from provider.
+            customer_data: Customer data dictionary.
+            company: Optional enriched Company model.
+
+        Returns:
+            RichNotification ready for formatting.
+
+        Raises:
+            ValueError: If required data is missing.
+        """
+        if not event_data:
+            raise ValueError("Missing event data")
+        if not customer_data:
+            raise ValueError("Missing customer data")
+
+        event_type = event_data.get("type", "")
+        if not event_type:
+            raise ValueError("Missing event type")
+
+        # Extract common fields
+        provider = event_data.get("provider", "unknown")
+        provider_display = PROVIDER_DISPLAY.get(provider, provider.title())
+
+        # Build sub-models
+        customer_info = self._build_customer_info(customer_data)
+        payment_info = self._build_payment_info(event_data)
+        company_info = self._build_company_info(company) if company else None
+
+        # Detect insights and risk status
+        insight = self.insight_detector.detect(event_data, customer_data)
+        risk_flags = self.insight_detector.detect_risk_status(event_data, customer_data)
+        customer_info.status_flags = risk_flags
+
+        # Build headline
+        headline = self._build_headline(event_data, customer_data, company)
+
+        # Determine notification type and severity
+        notification_type = EVENT_TYPE_MAP.get(
+            event_type, NotificationType.PAYMENT_SUCCESS
+        )
+        severity = EVENT_SEVERITY_MAP.get(event_type, NotificationSeverity.INFO)
+        headline_icon = EVENT_ICON_MAP.get(event_type, "info")
+
+        # Detect recurring status
+        is_recurring, billing_interval = self._detect_recurring(event_data)
+
+        # Build action buttons
+        actions = self._build_actions(event_data, customer_data, company)
+
+        return RichNotification(
+            type=notification_type,
+            severity=severity,
+            headline=headline,
+            headline_icon=headline_icon,
+            provider=provider,
+            provider_display=provider_display,
+            customer=customer_info,
+            insight=insight,
+            payment=payment_info,
+            company=company_info,
+            actions=actions,
+            is_recurring=is_recurring,
+            billing_interval=billing_interval,
+        )
+
+    def _build_customer_info(self, customer_data: dict[str, Any]) -> CustomerInfo:
+        """Build CustomerInfo from customer data.
+
+        Args:
+            customer_data: Customer data dictionary.
+
+        Returns:
+            CustomerInfo dataclass.
+        """
+        email = customer_data.get("email", "")
+        first_name = customer_data.get("first_name", "")
+        last_name = customer_data.get("last_name", "")
+        name = f"{first_name} {last_name}".strip() or None
+
+        company_name = customer_data.get("company_name") or customer_data.get(
+            "company", ""
+        )
+
+        # Calculate tenure display
+        tenure_display = self._format_tenure(customer_data)
+
+        # Calculate LTV display
+        total_spent = customer_data.get("total_spent") or customer_data.get(
+            "lifetime_value", 0
+        )
+        ltv_display = self._format_ltv(total_spent) if total_spent else None
+
+        return CustomerInfo(
+            email=email,
+            name=name,
+            company_name=company_name or None,
+            tenure_display=tenure_display,
+            ltv_display=ltv_display,
+            orders_count=customer_data.get("orders_count"),
+            total_spent=total_spent if total_spent else None,
+            status_flags=[],  # Will be set by insight detector
+        )
+
+    def _build_payment_info(self, event_data: dict[str, Any]) -> PaymentInfo | None:
+        """Build PaymentInfo from event data.
+
+        Args:
+            event_data: Event data dictionary.
+
+        Returns:
+            PaymentInfo or None if no payment data.
+        """
+        amount = event_data.get("amount")
+        if amount is None:
+            return None
+
+        currency = event_data.get("currency", "USD")
+        metadata = event_data.get("metadata", {})
+
+        # Detect billing interval
+        _, interval = self._detect_recurring(event_data)
+
+        # Extract payment method details
+        payment_method, card_last4 = self._extract_payment_method(event_data)
+
+        return PaymentInfo(
+            amount=amount,
+            currency=currency,
+            interval=interval,
+            plan_name=metadata.get("plan_name"),
+            subscription_id=metadata.get("subscription_id"),
+            payment_method=payment_method,
+            card_last4=card_last4,
+            order_number=metadata.get("order_number"),
+            line_items=metadata.get("line_items", []),
+            failure_reason=metadata.get("failure_reason"),
+        )
+
+    def _build_company_info(self, company: Company) -> CompanyInfo:
+        """Build CompanyInfo from enriched Company model.
+
+        Args:
+            company: Enriched Company model.
+
+        Returns:
+            CompanyInfo dataclass.
+        """
+        brand_info = company.brand_info or {}
+
+        # Get logo URL - prefer model method, fallback to brand_info
+        logo_url = None
+        if company.has_logo:
+            logo_url = company.get_logo_url()
+        elif brand_info.get("logo_url"):
+            logo_url = brand_info["logo_url"]
+
+        return CompanyInfo(
+            name=brand_info.get("name") or company.name or company.domain,
+            domain=company.domain,
+            industry=brand_info.get("industry"),
+            year_founded=brand_info.get("year_founded"),
+            employee_count=brand_info.get("employee_count"),
+            description=brand_info.get("description"),
+            logo_url=logo_url,
+        )
+
+    def _build_headline(
+        self,
+        event_data: dict[str, Any],
+        customer_data: dict[str, Any],
+        company: Company | None,
+    ) -> str:
+        """Build the headline text for the notification.
+
+        Args:
+            event_data: Event data dictionary.
+            customer_data: Customer data dictionary.
+            company: Optional enriched Company model.
+
+        Returns:
+            Headline string.
+        """
+        event_type = event_data.get("type", "")
+        amount = event_data.get("amount")
+
+        # Prefer enriched company name, fall back to customer data
+        if company and company.brand_info:
+            company_name = company.brand_info.get("name") or company.name
+        else:
+            company_name = customer_data.get("company_name") or customer_data.get(
+                "company", "Customer"
+            )
+        company_name = company_name or "Customer"
+
+        # Money-first headlines for payment events
+        if event_type == "payment_success":
+            if amount:
+                return f"${amount:,.2f} from {company_name}"
+            return f"Payment from {company_name}"
+
+        elif event_type == "payment_failure":
+            if amount:
+                return f"${amount:,.2f} failed - {company_name}"
+            return f"Payment failed - {company_name}"
+
+        elif event_type == "subscription_created":
+            if amount:
+                return f"New customer! ${amount:,.2f} from {company_name}"
+            return f"New subscription - {company_name}"
+
+        elif event_type in ("subscription_canceled", "subscription_deleted"):
+            return f"Canceled: {company_name}"
+
+        elif event_type == "trial_ending":
+            return f"Trial ending soon - {company_name}"
+
+        else:
+            title = event_type.replace("_", " ").title()
+            return f"{title} - {company_name}"
+
+    def _build_actions(
+        self,
+        event_data: dict[str, Any],
+        customer_data: dict[str, Any],
+        company: Company | None,
+    ) -> list[ActionButton]:
+        """Build action buttons for the notification.
+
+        Args:
+            event_data: Event data dictionary.
+            customer_data: Customer data dictionary.
+            company: Optional enriched Company model.
+
+        Returns:
+            List of ActionButton objects.
+        """
+        event_type = event_data.get("type", "")
+        provider = event_data.get("provider", "")
+        metadata = event_data.get("metadata", {})
+
+        actions: list[ActionButton] = []
+
+        # Provider-specific dashboard link
+        if provider == "stripe":
+            customer_id = metadata.get("stripe_customer_id")
+            if customer_id:
+                actions.append(
+                    ActionButton(
+                        text="View in Stripe",
+                        url=f"https://dashboard.stripe.com/customers/{customer_id}",
+                        style="primary",
+                    )
+                )
+
+        elif provider == "chargify":
+            subscription_id = metadata.get("subscription_id")
+            if subscription_id:
+                actions.append(
+                    ActionButton(
+                        text="View in Chargify",
+                        url=f"https://app.chargify.com/subscriptions/{subscription_id}",
+                        style="primary",
+                    )
+                )
+
+        elif provider == "shopify":
+            order_id = metadata.get("order_id")
+            shop_domain = metadata.get("shop_domain")
+            if order_id and shop_domain:
+                actions.append(
+                    ActionButton(
+                        text="View Order",
+                        url=f"https://{shop_domain}/admin/orders/{order_id}",
+                        style="primary",
+                    )
+                )
+
+        # Add company website link if enriched
+        if company and company.domain:
+            actions.append(
+                ActionButton(
+                    text="Website",
+                    url=f"https://{company.domain}",
+                    style="default",
+                )
+            )
+
+        # Add contact customer link for failures
+        email = customer_data.get("email")
+        if event_type == "payment_failure" and email:
+            actions.append(
+                ActionButton(
+                    text="Contact Customer",
+                    url=f"mailto:{email}",
+                    style="default",
+                )
+            )
+
+        return actions
+
+    def _detect_recurring(self, event_data: dict[str, Any]) -> tuple[bool, str | None]:
+        """Detect if payment is recurring and extract billing interval.
+
+        Args:
+            event_data: Event data dictionary.
+
+        Returns:
+            Tuple of (is_recurring, billing_interval).
+        """
+        event_type = event_data.get("type", "")
+        metadata = event_data.get("metadata", {})
+
+        # Renewal events are always recurring
+        if event_type in ("renewal_success", "renewal_failure"):
+            interval = metadata.get("billing_period", "monthly")
+            return True, interval
+
+        # Check for subscription_id presence
+        if metadata.get("subscription_id"):
+            interval = metadata.get("billing_period")
+            return True, interval
+
+        # Shopify: check for subscription info
+        if metadata.get("subscription_contract_id"):
+            interval = metadata.get("billing_period")
+            return True, interval
+
+        # Check for explicit interval
+        if metadata.get("billing_period"):
+            return True, metadata["billing_period"]
+
+        return False, None
+
+    def _extract_payment_method(
+        self, event_data: dict[str, Any]
+    ) -> tuple[str | None, str | None]:
+        """Extract payment method and card last4 from event data.
+
+        Args:
+            event_data: Event data dictionary.
+
+        Returns:
+            Tuple of (payment_method, card_last4).
+        """
+        metadata = event_data.get("metadata", {})
+        provider = event_data.get("provider", "")
+
+        if provider == "shopify":
+            card_brand = metadata.get("credit_card_company")
+            if card_brand:
+                return card_brand.lower(), metadata.get("card_last4")
+            return metadata.get("payment_gateway"), None
+
+        elif provider == "chargify":
+            card_type = metadata.get("card_type")
+            if card_type:
+                return card_type.lower(), metadata.get("card_last4")
+            return metadata.get("payment_method"), None
+
+        elif provider in ("stripe", "stripe_customer"):
+            card_brand = metadata.get("card_brand")
+            if card_brand:
+                return card_brand.lower(), metadata.get("card_last4")
+            return metadata.get("payment_method_type"), None
+
+        return None, None
+
+    def _format_tenure(self, customer_data: dict[str, Any]) -> str | None:
+        """Format customer tenure for display.
+
+        Args:
+            customer_data: Customer data dictionary.
+
+        Returns:
+            Formatted tenure string like "Since Mar 2024" or None.
+        """
+        created_at = customer_data.get("created_at") or customer_data.get(
+            "subscription_start"
+        )
+        if not created_at:
+            return None
+
+        try:
+            if isinstance(created_at, str):
+                created_at = created_at.replace("Z", "+00:00")
+                created_date = datetime.fromisoformat(created_at)
+            elif isinstance(created_at, datetime):
+                created_date = created_at
+            else:
+                return None
+
+            return f"Since {created_date.strftime('%b %Y')}"
+
+        except (ValueError, TypeError):
+            return None
+
+    def _format_ltv(self, total_spent: float) -> str:
+        """Format lifetime value for display.
+
+        Args:
+            total_spent: Total amount spent.
+
+        Returns:
+            Formatted LTV string like "$7.1k" or "$150".
+        """
+        if total_spent >= 1000:
+            return f"${total_spent / 1000:.1f}k"
+        return f"${total_spent:,.0f}"

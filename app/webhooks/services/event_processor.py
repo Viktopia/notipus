@@ -1,7 +1,9 @@
 """Event processor for webhook notifications.
 
 This module handles processing events from various providers and
-formatting them into Slack notifications with company enrichment.
+formatting them into notifications with company enrichment.
+Supports both legacy Notification format and new multi-target
+RichNotification format.
 """
 
 import logging
@@ -11,8 +13,11 @@ from core.models import Company
 from core.services.enrichment import DomainEnrichmentService
 from core.utils.email_domain import extract_domain, is_enrichable_domain
 
+from ..formatters.base import FormatterRegistry
 from ..models.notification import Notification, Section
+from ..models.rich_notification import RichNotification
 from .database_lookup import DatabaseLookupService
+from .notification_builder import NotificationBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -28,25 +33,48 @@ class EventProcessor:
     """
 
     VALID_EVENT_TYPES: ClassVar[set[str]] = {
+        # Payment events
         "payment_success",
         "payment_failure",
+        "refund_issued",
+        # Subscription events
         "subscription_created",
         "subscription_updated",
         "subscription_canceled",
         "subscription_deleted",
+        "subscription_renewed",
+        "trial_started",
         "trial_ending",
+        "trial_converted",
+        # Customer events
+        "customer_created",
         "customer_updated",
+        "customer_churned",
+        # Usage events
+        "feature_adopted",
+        "usage_milestone",
+        "quota_warning",
+        "quota_exceeded",
+        # Support events
+        "feedback_received",
+        "nps_response",
+        "support_ticket",
+        # System events
+        "integration_connected",
+        "integration_error",
+        "webhook_received",
     }
 
     def __init__(self) -> None:
         """Initialize the event processor with services."""
         self.db_lookup = DatabaseLookupService()
         self.enrichment_service = DomainEnrichmentService()
+        self.notification_builder = NotificationBuilder()
 
     def process_event(
         self, event_data: dict[str, Any], customer_data: dict[str, Any]
     ) -> Notification:
-        """Process an event and return a notification.
+        """Process an event and return a notification (legacy format).
 
         Args:
             event_data: Dictionary containing event type and metadata.
@@ -66,6 +94,88 @@ class EventProcessor:
             raise ValueError(f"Invalid event type: {event_type}")
 
         return self.format_notification(event_data, customer_data)
+
+    def process_event_rich(
+        self,
+        event_data: dict[str, Any],
+        customer_data: dict[str, Any],
+        target: str = "slack",
+    ) -> dict[str, Any]:
+        """Process an event and return formatted output for target platform.
+
+        This method uses the new multi-target notification system with
+        RichNotification and formatters.
+
+        Args:
+            event_data: Dictionary containing event type and metadata.
+            customer_data: Dictionary containing customer information.
+            target: Target platform identifier (default: "slack").
+
+        Returns:
+            Formatted notification dict for the target platform.
+
+        Raises:
+            ValueError: If event_data is missing or has invalid type.
+            KeyError: If no formatter registered for target.
+        """
+        if not event_data or "type" not in event_data:
+            raise ValueError("Missing event type")
+
+        event_type = event_data["type"]
+        if event_type not in self.VALID_EVENT_TYPES:
+            raise ValueError(f"Invalid event type: {event_type}")
+
+        # Enrich with cross-references
+        enriched_event_data = self._enrich_with_cross_references(event_data)
+
+        # Enrich company data
+        company = self._enrich_company(customer_data)
+
+        # Build target-agnostic notification
+        notification = self.notification_builder.build(
+            enriched_event_data, customer_data, company
+        )
+
+        # Format for target platform
+        formatter = FormatterRegistry.get(target)
+        return formatter.format(notification)
+
+    def build_rich_notification(
+        self,
+        event_data: dict[str, Any],
+        customer_data: dict[str, Any],
+    ) -> RichNotification:
+        """Build a RichNotification without formatting.
+
+        Useful when you need the intermediate RichNotification object
+        for custom processing or multiple target formatting.
+
+        Args:
+            event_data: Dictionary containing event type and metadata.
+            customer_data: Dictionary containing customer information.
+
+        Returns:
+            RichNotification object.
+
+        Raises:
+            ValueError: If event_data is missing or has invalid type.
+        """
+        if not event_data or "type" not in event_data:
+            raise ValueError("Missing event type")
+
+        event_type = event_data["type"]
+        if event_type not in self.VALID_EVENT_TYPES:
+            raise ValueError(f"Invalid event type: {event_type}")
+
+        # Enrich with cross-references
+        enriched_event_data = self._enrich_with_cross_references(event_data)
+
+        # Enrich company data
+        company = self._enrich_company(customer_data)
+
+        return self.notification_builder.build(
+            enriched_event_data, customer_data, company
+        )
 
     def format_notification(
         self, event_data: dict[str, Any], customer_data: dict[str, Any]

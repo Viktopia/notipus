@@ -1,0 +1,408 @@
+"""Target-agnostic notification model for multi-target delivery.
+
+This module defines the RichNotification dataclass and supporting types
+that represent a notification in a platform-independent format. Formatters
+then convert this to platform-specific formats (Slack, Email, Discord, etc.).
+"""
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+
+class EventCategory(Enum):
+    """High-level categories of events.
+
+    Used to determine how to render and route notifications.
+    """
+
+    PAYMENT = "payment"  # Payment and billing events
+    SUBSCRIPTION = "subscription"  # Subscription lifecycle events
+    CUSTOMER = "customer"  # Customer profile/activity events
+    USAGE = "usage"  # Feature usage and quota events
+    SUPPORT = "support"  # Support and feedback events
+    SYSTEM = "system"  # System and integration events
+    CUSTOM = "custom"  # Custom/webhook events
+
+
+class NotificationType(Enum):
+    """Types of notification events.
+
+    Extensible enum covering payment, subscription, and other event types.
+    """
+
+    # Payment events
+    PAYMENT_SUCCESS = "payment_success"
+    PAYMENT_FAILURE = "payment_failure"
+    REFUND_ISSUED = "refund_issued"
+
+    # Subscription events
+    SUBSCRIPTION_CREATED = "subscription_created"
+    SUBSCRIPTION_CANCELED = "subscription_canceled"
+    SUBSCRIPTION_UPDATED = "subscription_updated"
+    SUBSCRIPTION_RENEWED = "subscription_renewed"
+    TRIAL_STARTED = "trial_started"
+    TRIAL_ENDING = "trial_ending"
+    TRIAL_CONVERTED = "trial_converted"
+
+    # Customer events
+    CUSTOMER_CREATED = "customer_created"
+    CUSTOMER_UPDATED = "customer_updated"
+    CUSTOMER_CHURNED = "customer_churned"
+
+    # Usage events
+    FEATURE_ADOPTED = "feature_adopted"
+    USAGE_MILESTONE = "usage_milestone"
+    QUOTA_WARNING = "quota_warning"
+    QUOTA_EXCEEDED = "quota_exceeded"
+
+    # Support events
+    FEEDBACK_RECEIVED = "feedback_received"
+    NPS_RESPONSE = "nps_response"
+    SUPPORT_TICKET = "support_ticket"
+
+    # System events
+    INTEGRATION_CONNECTED = "integration_connected"
+    INTEGRATION_ERROR = "integration_error"
+    WEBHOOK_RECEIVED = "webhook_received"
+
+    # Generic
+    CUSTOM = "custom"
+
+
+# Map notification types to categories
+EVENT_CATEGORY_MAP: dict[NotificationType, EventCategory] = {
+    NotificationType.PAYMENT_SUCCESS: EventCategory.PAYMENT,
+    NotificationType.PAYMENT_FAILURE: EventCategory.PAYMENT,
+    NotificationType.REFUND_ISSUED: EventCategory.PAYMENT,
+    NotificationType.SUBSCRIPTION_CREATED: EventCategory.SUBSCRIPTION,
+    NotificationType.SUBSCRIPTION_CANCELED: EventCategory.SUBSCRIPTION,
+    NotificationType.SUBSCRIPTION_UPDATED: EventCategory.SUBSCRIPTION,
+    NotificationType.SUBSCRIPTION_RENEWED: EventCategory.SUBSCRIPTION,
+    NotificationType.TRIAL_STARTED: EventCategory.SUBSCRIPTION,
+    NotificationType.TRIAL_ENDING: EventCategory.SUBSCRIPTION,
+    NotificationType.TRIAL_CONVERTED: EventCategory.SUBSCRIPTION,
+    NotificationType.CUSTOMER_CREATED: EventCategory.CUSTOMER,
+    NotificationType.CUSTOMER_UPDATED: EventCategory.CUSTOMER,
+    NotificationType.CUSTOMER_CHURNED: EventCategory.CUSTOMER,
+    NotificationType.FEATURE_ADOPTED: EventCategory.USAGE,
+    NotificationType.USAGE_MILESTONE: EventCategory.USAGE,
+    NotificationType.QUOTA_WARNING: EventCategory.USAGE,
+    NotificationType.QUOTA_EXCEEDED: EventCategory.USAGE,
+    NotificationType.FEEDBACK_RECEIVED: EventCategory.SUPPORT,
+    NotificationType.NPS_RESPONSE: EventCategory.SUPPORT,
+    NotificationType.SUPPORT_TICKET: EventCategory.SUPPORT,
+    NotificationType.INTEGRATION_CONNECTED: EventCategory.SYSTEM,
+    NotificationType.INTEGRATION_ERROR: EventCategory.SYSTEM,
+    NotificationType.WEBHOOK_RECEIVED: EventCategory.SYSTEM,
+    NotificationType.CUSTOM: EventCategory.CUSTOM,
+}
+
+
+class NotificationSeverity(Enum):
+    """Notification severity levels for visual styling."""
+
+    SUCCESS = "success"  # Green - positive outcomes
+    WARNING = "warning"  # Yellow - attention needed
+    ERROR = "error"  # Red - failures/critical
+    INFO = "info"  # Blue - neutral information
+
+
+@dataclass
+class ActionButton:
+    """An action button for the notification.
+
+    Attributes:
+        text: Button label text.
+        url: URL to open when clicked.
+        style: Visual style (default, primary, danger).
+    """
+
+    text: str
+    url: str
+    style: str = "default"  # default, primary, danger
+
+
+@dataclass
+class CompanyInfo:
+    """Enriched company information from domain enrichment.
+
+    Attributes:
+        name: Company display name.
+        domain: Company domain (e.g., notion.so).
+        industry: Industry classification.
+        year_founded: Year the company was founded.
+        employee_count: Employee count range (e.g., "51-200").
+        description: Brief company description.
+        logo_url: URL to company logo image.
+    """
+
+    name: str
+    domain: str
+    industry: str | None = None
+    year_founded: int | None = None
+    employee_count: str | None = None
+    description: str | None = None
+    logo_url: str | None = None
+
+
+@dataclass
+class PaymentInfo:
+    """Payment/order details.
+
+    Attributes:
+        amount: Payment amount.
+        currency: Currency code (e.g., USD).
+        interval: Billing interval (monthly, annual, one-time).
+        plan_name: Subscription plan name.
+        subscription_id: Subscription identifier.
+        payment_method: Payment method type (visa, mastercard, bank).
+        card_last4: Last 4 digits of card.
+        order_number: Order number for e-commerce.
+        line_items: Order line items for e-commerce.
+        failure_reason: Reason for payment failure.
+    """
+
+    amount: float
+    currency: str
+    interval: str | None = None  # monthly, annual, one-time
+    plan_name: str | None = None
+    subscription_id: str | None = None
+    payment_method: str | None = None  # visa, mastercard, bank
+    card_last4: str | None = None
+    order_number: str | None = None
+    line_items: list[dict] = field(default_factory=list)
+    failure_reason: str | None = None
+
+    def get_arr(self) -> float | None:
+        """Calculate Annual Recurring Revenue if applicable.
+
+        Returns:
+            ARR value or None if not a recurring payment.
+        """
+        if self.interval == "monthly":
+            return self.amount * 12
+        elif self.interval == "annual":
+            return self.amount
+        elif self.interval == "quarterly":
+            return self.amount * 4
+        return None
+
+    def format_amount_with_arr(self) -> str:
+        """Format amount with ARR if applicable.
+
+        Returns:
+            Formatted string like "$299.00/mo = $3,588 ARR".
+        """
+        arr = self.get_arr()
+        if self.interval == "monthly" and arr:
+            return f"{self.currency} {self.amount:,.2f}/mo = ${arr:,.0f} ARR"
+        elif self.interval == "annual" and arr:
+            return f"{self.currency} {self.amount:,.2f}/yr ARR"
+        elif self.interval == "quarterly" and arr:
+            return f"{self.currency} {self.amount:,.2f}/qtr = ${arr:,.0f} ARR"
+        return f"{self.currency} {self.amount:,.2f}"
+
+
+@dataclass
+class CustomerInfo:
+    """Customer information for the notification.
+
+    Attributes:
+        email: Customer email address.
+        name: Customer full name.
+        company_name: Customer's company name (from webhook, not enrichment).
+        tenure_display: Formatted tenure (e.g., "Since Mar 2024").
+        ltv_display: Formatted lifetime value (e.g., "$7.1k").
+        orders_count: Total number of orders.
+        total_spent: Total amount spent.
+        status_flags: Status indicators (at_risk, vip, etc.).
+    """
+
+    email: str
+    name: str | None = None
+    company_name: str | None = None
+    tenure_display: str | None = None  # "Since Mar 2024"
+    ltv_display: str | None = None  # "$7.1k"
+    orders_count: int | None = None
+    total_spent: float | None = None
+    status_flags: list[str] = field(default_factory=list)  # ["at_risk", "vip"]
+
+
+@dataclass
+class InsightInfo:
+    """Milestone or insight information.
+
+    Attributes:
+        icon: Semantic icon name (celebration, warning, trophy, etc.).
+        text: Insight message text.
+    """
+
+    icon: str  # Semantic: "celebration", "warning", "trophy", "new", "chart"
+    text: str  # "Crossed $5,000 lifetime!"
+
+
+@dataclass
+class DetailField:
+    """A key-value field for detail sections.
+
+    Attributes:
+        label: Field label/name.
+        value: Field value (will be converted to string).
+        icon: Optional semantic icon for the field.
+    """
+
+    label: str
+    value: str
+    icon: str | None = None
+
+
+@dataclass
+class DetailSection:
+    """A generic detail section for extensible content.
+
+    Used for non-payment events or additional context that doesn't
+    fit the payment/subscription model.
+
+    Attributes:
+        title: Section title.
+        icon: Semantic icon for the section.
+        fields: List of key-value fields.
+        text: Optional freeform text content.
+        accessory_url: Optional image/icon URL.
+    """
+
+    title: str
+    icon: str = "info"
+    fields: list[DetailField] = field(default_factory=list)
+    text: str | None = None
+    accessory_url: str | None = None
+
+    def add_field(self, label: str, value: str, icon: str | None = None) -> None:
+        """Add a field to the section.
+
+        Args:
+            label: Field label/name.
+            value: Field value.
+            icon: Optional semantic icon.
+        """
+        self.fields.append(DetailField(label=label, value=value, icon=icon))
+
+
+@dataclass
+class RichNotification:
+    """Target-agnostic notification model.
+
+    This is the core model that captures all notification data in a
+    platform-independent format. Formatters convert this to specific
+    output formats (Slack Block Kit, HTML Email, Discord Embeds, etc.).
+
+    Supports both payment events and non-payment events (usage, support,
+    system events) through the generic detail_sections field.
+
+    Attributes:
+        type: Notification type enum.
+        severity: Visual severity level.
+        headline: Main headline text (e.g., "$299.00 from Notion Labs").
+        headline_icon: Semantic icon for headline (money, error, celebration).
+        insight: Optional milestone insight.
+        provider: Provider identifier (chargify, stripe, shopify).
+        provider_display: Human-readable provider name.
+        payment: Payment/order details (for payment events).
+        detail_sections: Generic detail sections (for non-payment events).
+        company: Enriched company information.
+        customer: Customer information.
+        actions: Action buttons.
+        metadata: Extensible metadata for custom fields.
+    """
+
+    type: NotificationType
+    severity: NotificationSeverity
+
+    # Header
+    headline: str  # "$299.00 from Notion Labs" or "NPS Response: 9"
+    headline_icon: str  # Semantic: "money", "error", "celebration", "feedback"
+
+    # Provider/Source badge
+    provider: str  # "chargify", "stripe", "shopify", "intercom", "segment"
+    provider_display: str  # "Chargify", "Intercom"
+
+    # Customer (required for most events, optional for system events)
+    customer: CustomerInfo | None = None
+
+    # Insight (optional)
+    insight: InsightInfo | None = None
+
+    # Payment/Order details (optional - for payment/subscription events)
+    payment: PaymentInfo | None = None
+
+    # Generic detail sections (optional - for non-payment events or extras)
+    detail_sections: list[DetailSection] = field(default_factory=list)
+
+    # Company enrichment (optional)
+    company: CompanyInfo | None = None
+
+    # Actions (optional)
+    actions: list[ActionButton] = field(default_factory=list)
+
+    # Payment-specific badge info (optional)
+    is_recurring: bool = False
+    billing_interval: str | None = None  # monthly, annual, quarterly
+
+    # Extensible metadata for custom fields
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def category(self) -> EventCategory:
+        """Get the event category for this notification.
+
+        Returns:
+            EventCategory enum value.
+        """
+        return EVENT_CATEGORY_MAP.get(self.type, EventCategory.CUSTOM)
+
+    @property
+    def is_payment_event(self) -> bool:
+        """Check if this is a payment-related event.
+
+        Returns:
+            True if this is a payment or subscription event.
+        """
+        return self.category in (EventCategory.PAYMENT, EventCategory.SUBSCRIPTION)
+
+    def get_payment_type_display(self) -> str:
+        """Get formatted payment type display.
+
+        Returns:
+            String like "Recurring (Monthly)" or "One-Time".
+        """
+        if self.is_recurring:
+            if self.billing_interval:
+                return f"Recurring ({self.billing_interval.title()})"
+            return "Recurring"
+        return "One-Time"
+
+    def add_detail_section(
+        self,
+        title: str,
+        icon: str = "info",
+        fields: list[tuple[str, str]] | None = None,
+        text: str | None = None,
+    ) -> DetailSection:
+        """Add a generic detail section to the notification.
+
+        Args:
+            title: Section title.
+            icon: Semantic icon name.
+            fields: Optional list of (label, value) tuples.
+            text: Optional freeform text.
+
+        Returns:
+            The created DetailSection.
+        """
+        section = DetailSection(title=title, icon=icon, text=text)
+        if fields:
+            for label, value in fields:
+                section.add_field(label, value)
+        self.detail_sections.append(section)
+        return section
