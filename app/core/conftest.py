@@ -35,12 +35,17 @@ def pro_plan(db) -> Plan:
 
 @pytest.fixture
 def starter_plan(db) -> Plan:
-    """Get or create a Starter plan with 2 max users."""
+    """Get or create a Basic plan with 2 max users for testing invite limits.
+
+    Note: Named 'starter_plan' for backwards compatibility with existing tests,
+    but creates a Plan with name='basic' to match valid
+    Workspace.subscription_plan choices.
+    """
     plan, _ = Plan.objects.get_or_create(
-        name="starter",
+        name="basic",
         defaults={
-            "display_name": "Starter",
-            "price_monthly": 19.00,
+            "display_name": "Basic",
+            "price_monthly": 29.00,
             "max_users": 2,
             "is_active": True,
         },
@@ -83,10 +88,14 @@ def workspace(db, pro_plan) -> Workspace:
 
 @pytest.fixture
 def starter_workspace(db, starter_plan) -> Workspace:
-    """Create a test workspace with Starter plan (limited users) on trial."""
+    """Create a test workspace with Basic plan (limited users) on trial.
+
+    Note: The starter_plan fixture creates a Plan record for testing,
+    but Workspace.subscription_plan uses the basic tier for validation.
+    """
     return Workspace.objects.create(
         name="Starter Workspace",
-        subscription_plan="starter",
+        subscription_plan="basic",
         subscription_status="trial",
     )
 

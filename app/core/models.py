@@ -103,9 +103,13 @@ class Workspace(models.Model):
         Args:
             *args: Positional arguments for parent save method.
             **kwargs: Keyword arguments for parent save method.
+
+        Raises:
+            ValidationError: If model validation fails.
         """
         if not self.slug:
             self._generate_unique_slug()
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def clean(self) -> None:
