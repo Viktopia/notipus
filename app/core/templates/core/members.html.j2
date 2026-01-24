@@ -42,20 +42,29 @@
                             <div class="flex-shrink-0">
                                 {% if message.tags == 'error' %}
                                     <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd">
+                                        </path>
                                     </svg>
                                 {% elif message.tags == 'warning' %}
-                                    <svg class="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                    <svg class="h-5 w-5 text-amber-400"
+                                         fill="currentColor"
+                                         viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd">
+                                        </path>
                                     </svg>
                                 {% else %}
-                                    <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    <svg class="h-5 w-5 text-green-400"
+                                         fill="currentColor"
+                                         viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd">
+                                        </path>
                                     </svg>
                                 {% endif %}
                             </div>
                             <div class="ml-3">
-                                <p class="text-sm {% if message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-amber-700{% else %}text-green-700{% endif %}">{{ message }}</p>
+                                <p class="text-sm {% if message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-amber-700{% else %}text-green-700{% endif %}">
+                                    {{ message }}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -69,7 +78,9 @@
                         <h2 class="text-lg font-medium text-gray-900">Invite Team Member</h2>
                         <p class="mt-1 text-sm text-gray-500">Send an invitation to add someone to your workspace</p>
                     </div>
-                    <form method="post" action="{% url 'core:invite_member' %}" class="px-6 py-4">
+                    <form method="post"
+                          action="{% url 'core:invite_member' %}"
+                          class="px-6 py-4">
                         {% csrf_token %}
                         <div class="flex flex-col sm:flex-row gap-4">
                             <div class="flex-grow">
@@ -88,9 +99,7 @@
                                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
                                     <option value="user">User</option>
                                     <option value="admin">Admin</option>
-                                    {% if current_member.role == 'owner' %}
-                                        <option value="owner">Owner</option>
-                                    {% endif %}
+                                    {% if current_member.role == 'owner' %}<option value="owner">Owner</option>{% endif %}
                                 </select>
                             </div>
                             <button type="submit"
@@ -104,14 +113,18 @@
                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-8">
                     <div class="flex">
                         <div class="flex-shrink-0">
-                            <svg class="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            <svg class="h-5 w-5 text-amber-400"
+                                 fill="currentColor"
+                                 viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd">
+                                </path>
                             </svg>
                         </div>
                         <div class="ml-3">
                             <p class="text-sm text-amber-700">{{ invite_message }}</p>
                             <p class="mt-2">
-                                <a href="{% url 'core:upgrade_plan' %}" class="text-sm font-medium text-amber-700 hover:text-amber-600">
+                                <a href="{% url 'core:upgrade_plan' %}"
+                                   class="text-sm font-medium text-amber-700 hover:text-amber-600">
                                     Upgrade your plan →
                                 </a>
                             </p>
@@ -133,27 +146,20 @@
                                 <div class="flex items-center min-w-0">
                                     <div class="flex-shrink-0">
                                         <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                                            <span class="text-gray-600 font-medium text-sm">
-                                                {{ member.user.email|first|upper }}
-                                            </span>
+                                            <span class="text-gray-600 font-medium text-sm">{{ member.user.email|first|upper }}</span>
                                         </div>
                                     </div>
                                     <div class="ml-4 min-w-0">
                                         <p class="text-sm font-medium text-gray-900 truncate">
                                             {{ member.user.get_full_name|default:member.user.email }}
-                                            {% if member.id == current_member.id %}
-                                                <span class="text-gray-400">(you)</span>
-                                            {% endif %}
+                                            {% if member.id == current_member.id %}<span class="text-gray-400">(you)</span>{% endif %}
                                         </p>
                                         <p class="text-sm text-gray-500 truncate">{{ member.user.email }}</p>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-4">
                                     <!-- Role Badge -->
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                        {% if member.role == 'owner' %}bg-purple-100 text-purple-800
-                                        {% elif member.role == 'admin' %}bg-blue-100 text-blue-800
-                                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if member.role == 'owner' %}bg-purple-100 text-purple-800 {% elif member.role == 'admin' %}bg-blue-100 text-blue-800 {% else %}bg-gray-100 text-gray-800{% endif %}">
                                         {{ member.role|title }}
                                     </span>
 
@@ -213,9 +219,7 @@
                             </div>
                         </li>
                     {% empty %}
-                        <li class="px-6 py-8 text-center text-gray-500">
-                            No members found.
-                        </li>
+                        <li class="px-6 py-8 text-center text-gray-500">No members found.</li>
                     {% endfor %}
                 </ul>
             </div>
@@ -225,7 +229,9 @@
                 <div class="bg-white shadow rounded-lg">
                     <div class="px-6 py-4 border-b border-gray-200">
                         <h2 class="text-lg font-medium text-gray-900">Pending Invitations</h2>
-                        <p class="mt-1 text-sm text-gray-500">{{ pending_invitations|length }} pending invitation{{ pending_invitations|length|pluralize }}</p>
+                        <p class="mt-1 text-sm text-gray-500">
+                            {{ pending_invitations|length }} pending invitation{{ pending_invitations|length|pluralize }}
+                        </p>
                     </div>
                     <ul class="divide-y divide-gray-200">
                         {% for invitation in pending_invitations %}
@@ -234,8 +240,12 @@
                                     <div class="flex items-center min-w-0">
                                         <div class="flex-shrink-0">
                                             <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                                <svg class="w-5 h-5 text-gray-400"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+                                                    </path>
                                                 </svg>
                                             </div>
                                         </div>

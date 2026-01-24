@@ -191,7 +191,9 @@
                     <div class="flex items-start justify-between">
                         <div>
                             <h3 class="text-lg font-semibold mb-1">Trial in progress</h3>
-                            <p class="text-amber-100 text-sm">You're trialing the {{ workspace.subscription_plan|title }} plan. {{ trial_days_remaining }} days remaining.</p>
+                            <p class="text-amber-100 text-sm">
+                                You're trialing the {{ workspace.subscription_plan|title }} plan. {{ trial_days_remaining }} days remaining.
+                            </p>
                         </div>
                         <div class="p-2 bg-white/20 rounded-xl">
                             <i class="ti ti-clock text-2xl"></i>

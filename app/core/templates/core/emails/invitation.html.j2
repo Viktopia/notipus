@@ -1,117 +1,130 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="You've been invited to join {{ invitation.workspace.name }} on Notipus">
-    <meta name="keywords" content="notipus, invitation, workspace">
-    <title>You're Invited to {{ invitation.workspace.name }}</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: #6366f1;
-        }
-        h1 {
-            color: #1f2937;
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-        p {
-            color: #4b5563;
-            margin-bottom: 16px;
-        }
-        .role-badge {
-            display: inline-block;
-            background-color: #e0e7ff;
-            color: #4338ca;
-            padding: 4px 12px;
-            border-radius: 9999px;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .cta-button {
-            display: inline-block;
-            background-color: #6366f1;
-            color: #ffffff !important;
-            text-decoration: none;
-            padding: 14px 28px;
-            border-radius: 8px;
-            font-weight: 600;
-            margin: 24px 0;
-        }
-        .cta-button:hover {
-            background-color: #4f46e5;
-        }
-        .cta-container {
-            text-align: center;
-            margin: 30px 0;
-        }
-        .footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-        }
-        .url-fallback {
-            word-break: break-all;
-            font-size: 12px;
-            color: #9ca3af;
-            margin-top: 16px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="logo">Notipus</div>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description"
+              content="You've been invited to join {{ invitation.workspace.name }} on Notipus">
+        <meta name="keywords" content="notipus, invitation, workspace">
+        <title>You're Invited to {{ invitation.workspace.name }}</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+
+            .container {
+                background-color: #ffffff;
+                border-radius: 8px;
+                padding: 40px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+
+            .logo {
+                font-size: 24px;
+                font-weight: bold;
+                color: #6366f1;
+            }
+
+            h1 {
+                color: #1f2937;
+                font-size: 24px;
+                margin-bottom: 20px;
+            }
+
+            p {
+                color: #4b5563;
+                margin-bottom: 16px;
+            }
+
+            .role-badge {
+                display: inline-block;
+                background-color: #e0e7ff;
+                color: #4338ca;
+                padding: 4px 12px;
+                border-radius: 9999px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+
+            .cta-button {
+                display: inline-block;
+                background-color: #6366f1;
+                color: #ffffff !important;
+                text-decoration: none;
+                padding: 14px 28px;
+                border-radius: 8px;
+                font-weight: 600;
+                margin: 24px 0;
+            }
+
+            .cta-button:hover {
+                background-color: #4f46e5;
+            }
+
+            .cta-container {
+                text-align: center;
+                margin: 30px 0;
+            }
+
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #e5e7eb;
+                font-size: 14px;
+                color: #6b7280;
+            }
+
+            .url-fallback {
+                word-break: break-all;
+                font-size: 12px;
+                color: #9ca3af;
+                margin-top: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="logo">Notipus</div>
+            </div>
+
+            <h1>You're invited to join {{ invitation.workspace.name }}</h1>
+
+            <p>
+                <strong>{{ inviter_name }}</strong> has invited you to join
+                <strong>{{ invitation.workspace.name }}</strong> on Notipus.
+            </p>
+
+            <p>
+                You've been invited as: <span class="role-badge">{{ invitation.role|title }}</span>
+            </p>
+
+            <div class="cta-container">
+                <a href="{{ invite_url }}" class="cta-button">Accept Invitation</a>
+            </div>
+
+            <p class="url-fallback">
+                Or copy and paste this link into your browser:
+                <br>
+                {{ invite_url }}
+            </p>
+
+            <div class="footer">
+                <p>This invitation will expire in 7 days.</p>
+                <p>If you weren't expecting this invitation, you can safely ignore this email.</p>
+                <p>— The Notipus Team</p>
+            </div>
         </div>
-
-        <h1>You're invited to join {{ invitation.workspace.name }}</h1>
-
-        <p>
-            <strong>{{ inviter_name }}</strong> has invited you to join
-            <strong>{{ invitation.workspace.name }}</strong> on Notipus.
-        </p>
-
-        <p>
-            You've been invited as: <span class="role-badge">{{ invitation.role|title }}</span>
-        </p>
-
-        <div class="cta-container">
-            <a href="{{ invite_url }}" class="cta-button">Accept Invitation</a>
-        </div>
-
-        <p class="url-fallback">
-            Or copy and paste this link into your browser:<br>
-            {{ invite_url }}
-        </p>
-
-        <div class="footer">
-            <p>This invitation will expire in 7 days.</p>
-            <p>If you weren't expecting this invitation, you can safely ignore this email.</p>
-            <p>— The Notipus Team</p>
-        </div>
-    </div>
-</body>
+    </body>
 </html>

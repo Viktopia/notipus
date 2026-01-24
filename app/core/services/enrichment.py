@@ -5,7 +5,7 @@ with brand information from multiple plugin-based providers.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from core.models import Company
@@ -121,8 +121,7 @@ class DomainEnrichmentService:
         plugins: List of enabled plugin instances.
     """
 
-    # How long to cache enrichment data before refreshing
-    CACHE_DAYS = 7
+    # Enrichment data is cached indefinitely - use refresh_enrichment() to force update
 
     def __init__(self) -> None:
         """Initialize the enrichment service with plugin registry."""
@@ -173,9 +172,9 @@ class DomainEnrichmentService:
                 logger.warning("No plugins available for domain enrichment")
                 return company
 
-            # Check if we have recent enrichment data
-            if not created and self._has_recent_enrichment(company):
-                logger.debug(f"Company {domain} has recent enrichment data, skipping")
+            # Check if we already have enrichment data
+            if not created and self._has_enrichment(company):
+                logger.debug(f"Company {domain} already has enrichment data, skipping")
                 return company
 
             # Collect data from all plugins
@@ -198,30 +197,23 @@ class DomainEnrichmentService:
             logger.error(f"Error enriching domain {domain}: {e!s}", exc_info=True)
             return None
 
-    def _has_recent_enrichment(self, company: Company) -> bool:
-        """Check if company has been enriched recently.
+    def _has_enrichment(self, company: Company) -> bool:
+        """Check if company has enrichment data.
+
+        Enrichment data is cached indefinitely. Use refresh_enrichment()
+        to force an update when needed.
 
         Args:
             company: Company model instance.
 
         Returns:
-            True if enriched within CACHE_DAYS.
+            True if company has valid enrichment data.
         """
         if not company.brand_info:
             return False
 
-        blended_at = company.brand_info.get("_blended_at")
-        if not blended_at:
-            # Legacy data without timestamp - consider stale
-            return False
-
-        try:
-            # Parse ISO format timestamp
-            enriched_time = datetime.fromisoformat(blended_at.replace("Z", "+00:00"))
-            cutoff = datetime.now(timezone.utc) - timedelta(days=self.CACHE_DAYS)
-            return enriched_time > cutoff
-        except (ValueError, TypeError):
-            return False
+        # Has valid enrichment if we have a blended_at timestamp
+        return bool(company.brand_info.get("_blended_at"))
 
     def _collect_from_plugins(self, domain: str) -> dict[str, dict[str, Any]]:
         """Collect enrichment data from all available plugins.
