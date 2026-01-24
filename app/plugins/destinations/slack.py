@@ -58,6 +58,10 @@ SLACK_ICONS: dict[str, str] = {
     "email": "email",
     "phone": "phone",
     "globe": "globe_with_meridians",
+    # Logistics icons
+    "cart": "shopping_cart",
+    "package": "package",
+    "truck": "truck",
 }
 
 # Provider display icons

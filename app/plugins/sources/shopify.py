@@ -34,10 +34,24 @@ class ShopifySourcePlugin(BaseSourcePlugin):
     """
 
     EVENT_TYPE_MAPPING: ClassVar[dict[str, str]] = {
+        # Order events
+        "orders/create": "order_created",
         "orders/paid": "payment_success",
         "orders/cancelled": "payment_cancelled",
-        "customers/update": "customers/update",
+        "orders/fulfilled": "order_fulfilled",
+        # Fulfillment events
+        "fulfillments/create": "fulfillment_created",
+        "fulfillments/update": "fulfillment_updated",
+        # Customer events
+        "customers/update": "customer_updated",
+        # Test
         "test": "test",
+    }
+
+    # Topics that are fulfillment-specific (need different parsing)
+    FULFILLMENT_TOPICS: ClassVar[set[str]] = {
+        "fulfillments/create",
+        "fulfillments/update",
     }
 
     @classmethod
@@ -285,6 +299,101 @@ class ShopifySourcePlugin(BaseSourcePlugin):
 
         return event_data
 
+    def _build_fulfillment_event_data(
+        self,
+        event_type: str,
+        customer_id: str,
+        data: dict[str, Any],
+        topic: str,
+    ) -> dict[str, Any]:
+        """Build fulfillment-specific event data structure.
+
+        Fulfillment webhooks have a different structure than order webhooks.
+
+        Args:
+            event_type: The internal event type.
+            customer_id: Customer identifier.
+            data: Raw fulfillment webhook data.
+            topic: The Shopify webhook topic.
+
+        Returns:
+            Standardized event data dictionary.
+        """
+        # Extract fulfillment-specific fields
+        tracking_number = data.get("tracking_number")
+        tracking_company = data.get("tracking_company")
+        tracking_url = data.get("tracking_url")
+        fulfillment_status = data.get("status", data.get("shipment_status"))
+
+        # Get line items from fulfillment
+        line_items = []
+        for item in data.get("line_items", []):
+            line_items.append(
+                {
+                    "name": item.get("name", item.get("title", "Unknown Product")),
+                    "sku": item.get("sku", ""),
+                    "quantity": item.get("quantity", 1),
+                }
+            )
+
+        event_data: dict[str, Any] = {
+            "type": event_type,
+            "customer_id": customer_id,
+            "provider": "shopify",
+            "created_at": data.get("created_at"),
+            "status": "success",
+            "metadata": {
+                "order_id": data.get("order_id"),
+                "order_number": data.get("order_number"),
+                "order_ref": (
+                    str(data.get("order_number")) if data.get("order_number") else None
+                ),
+                "fulfillment_id": data.get("id"),
+                "fulfillment_status": fulfillment_status,
+                "shipment_status": fulfillment_status,
+                "tracking_number": tracking_number,
+                "tracking_company": tracking_company,
+                "tracking_url": tracking_url,
+                "line_items": line_items,
+            },
+        }
+
+        return event_data
+
+    def _extract_customer_id_from_fulfillment(self, data: dict[str, Any]) -> str:
+        """Extract customer ID from fulfillment webhook data.
+
+        Fulfillment webhooks may not include customer data directly.
+
+        Args:
+            data: Parsed fulfillment webhook data.
+
+        Returns:
+            Customer ID string or fallback value.
+        """
+        # Try direct customer field
+        if "customer" in data and data["customer"]:
+            customer_id = data["customer"].get("id")
+            if customer_id:
+                return str(customer_id)
+
+        # Try destination email as fallback identifier
+        destination = data.get("destination", {})
+        if destination and destination.get("email"):
+            return destination["email"]
+
+        # Use order_id as fallback
+        order_id = data.get("order_id")
+        if order_id:
+            return f"order_{order_id}"
+
+        # Last resort: use fulfillment ID
+        fulfillment_id = data.get("id")
+        if fulfillment_id:
+            return f"fulfillment_{fulfillment_id}"
+
+        raise InvalidDataError("Cannot extract customer identifier from fulfillment")
+
     def parse_webhook(
         self, request: HttpRequest, **kwargs: Any
     ) -> dict[str, Any] | None:
@@ -318,7 +427,14 @@ class ShopifySourcePlugin(BaseSourcePlugin):
         if not event_type:
             raise InvalidDataError(f"Unsupported webhook topic: {topic}")
 
-        # Extract customer ID
+        # Handle fulfillment-specific topics differently
+        if topic in self.FULFILLMENT_TOPICS:
+            customer_id = self._extract_customer_id_from_fulfillment(data)
+            return self._build_fulfillment_event_data(
+                event_type, customer_id, data, topic
+            )
+
+        # Extract customer ID for order/customer events
         customer_id = self._extract_shopify_customer_id(data)
 
         # Build and return event data

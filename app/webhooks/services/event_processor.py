@@ -64,6 +64,12 @@ class EventProcessor:
         "integration_connected",
         "integration_error",
         "webhook_received",
+        # Logistics events
+        "order_created",
+        "order_fulfilled",
+        "fulfillment_created",
+        "fulfillment_updated",
+        "shipment_delivered",
     }
 
     def __init__(self) -> None:

@@ -419,7 +419,7 @@ def test_shopify_customer_data_update() -> None:
 
     event = provider.parse_webhook(mock_request)
     assert event is not None
-    assert event["type"] == "customers/update"
+    assert event["type"] == "customer_updated"
     assert event["customer_id"] == "456"
     assert event["customer_data"]["company"] == "Updated Company Name"
 

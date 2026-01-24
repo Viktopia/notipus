@@ -109,6 +109,11 @@ urlpatterns = [
         views.disconnect_shopify,
         name="disconnect_shopify",
     ),
+    path(
+        "api/shopify/update-events/",
+        views.update_shopify_events,
+        name="update_shopify_events",
+    ),
     # WebAuthn endpoints
     path(
         "webauthn/register/begin/",

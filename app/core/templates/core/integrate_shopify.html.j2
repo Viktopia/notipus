@@ -95,18 +95,34 @@
                             </div>
                         </div>
 
-                        <!-- Webhook Info -->
+                        <!-- Event Categories Configuration -->
                         <div class="mt-6 pt-6 border-t border-gray-200">
-                            <h3 class="text-sm font-medium text-gray-900 mb-3">Webhook Configuration</h3>
-                            <div class="bg-gray-50 rounded-md p-4">
-                                <div class="flex items-center text-sm text-gray-600">
-                                    <svg class="w-4 h-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd">
-                                        </path>
-                                    </svg>
-                                    Webhooks automatically configured for order and customer events
+                            <h3 class="text-sm font-medium text-gray-900 mb-3">Event Subscriptions</h3>
+                            <form method="post" action="{% url 'core:update_shopify_events' %}" id="update-events-form">
+                                {% csrf_token %}
+                                <div class="space-y-3 mb-4">
+                                    {% for key, category in event_categories.items() %}
+                                    <label class="flex items-start p-3 bg-gray-50 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
+                                        <input type="checkbox"
+                                               name="event_categories"
+                                               value="{{ key }}"
+                                               {% if key in enabled_categories %}checked{% endif %}
+                                               class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mt-0.5">
+                                        <span class="ml-3">
+                                            <span class="block text-sm font-medium text-gray-900">{{ category.label }}</span>
+                                            <span class="block text-sm text-gray-500">{{ category.description }}</span>
+                                        </span>
+                                    </label>
+                                    {% endfor %}
                                 </div>
-                            </div>
+                                <button type="submit"
+                                        class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                    Update Event Subscriptions
+                                </button>
+                            </form>
                         </div>
 
                         <!-- Disconnect Button -->
@@ -162,25 +178,45 @@
                                 <label for="shop_url" class="block text-sm font-medium text-gray-700 mb-2">
                                     Store URL
                                 </label>
-                                <div class="mt-1 flex rounded-md shadow-sm">
-                                    <input type="text"
-                                           name="shop_url"
-                                           id="shop_url"
-                                           class="flex-1 min-w-0 block w-full px-3 py-3 rounded-l-md border border-gray-300 focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                                           placeholder="mystore"
-                                           required
-                                           pattern="[a-zA-Z0-9][a-zA-Z0-9\-_]*"
-                                           title="Enter your store name (letters, numbers, hyphens, and underscores only)">
-                                    <span class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
-                                        .myshopify.com
-                                    </span>
-                                </div>
+                                <input type="text"
+                                       name="shop_url"
+                                       id="shop_url"
+                                       class="block w-full px-3 py-3 rounded-md border border-gray-300 focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                                       placeholder="mystore or mystore.myshopify.com"
+                                       required>
                                 <p class="mt-2 text-sm text-gray-500">
-                                    Enter your Shopify store name. For example, if your store URL is
-                                    <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mystore.myshopify.com</code>,
-                                    enter <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mystore</code>.
+                                    Enter your Shopify store name (e.g., <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mystore</code>)
+                                    or full URL (e.g., <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mystore.myshopify.com</code>).
+                                </p>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    <strong>Using a custom domain?</strong> You need your myshopify.com domain.
+                                    Find it in <span class="font-medium">Shopify Admin &rarr; Settings &rarr; Domains</span>.
                                 </p>
                             </div>
+
+                            <!-- Event Categories -->
+                            <div class="mb-6">
+                                <label class="block text-sm font-medium text-gray-700 mb-3">
+                                    Event Categories
+                                </label>
+                                <p class="text-sm text-gray-500 mb-3">Select which events to receive notifications for:</p>
+                                <div class="space-y-3">
+                                    {% for key, category in event_categories.items() %}
+                                    <label class="flex items-start p-3 bg-gray-50 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
+                                        <input type="checkbox"
+                                               name="event_categories"
+                                               value="{{ key }}"
+                                               {% if category.default %}checked{% endif %}
+                                               class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mt-0.5">
+                                        <span class="ml-3">
+                                            <span class="block text-sm font-medium text-gray-900">{{ category.label }}</span>
+                                            <span class="block text-sm text-gray-500">{{ category.description }}</span>
+                                        </span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
                             <button type="submit"
                                     class="w-full inline-flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -242,56 +278,25 @@
                 <!-- Events We Track -->
                 <div class="bg-white shadow rounded-lg mb-8">
                     <div class="px-6 py-4 border-b border-gray-200">
-                        <h2 class="text-lg font-medium text-gray-900">Events We Track</h2>
-                        <p class="mt-1 text-sm text-gray-500">Automatically receive notifications for these events</p>
+                        <h2 class="text-lg font-medium text-gray-900">Available Event Categories</h2>
+                        <p class="mt-1 text-sm text-gray-500">You can choose which events to receive during setup</p>
                     </div>
                     <div class="px-6 py-6">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div class="flex items-center">
-                                <svg class="w-5 h-5 text-green-500 mr-3"
+                        <div class="space-y-4">
+                            {% for key, category in event_categories.items() %}
+                            <div class="flex items-start">
+                                <svg class="w-5 h-5 text-green-500 mr-3 mt-0.5"
                                      fill="currentColor"
                                      viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
                                     </path>
                                 </svg>
-                                <span class="text-sm text-gray-700">New orders created</span>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">{{ category.label }}</span>
+                                    <p class="text-sm text-gray-500">{{ category.description }}</p>
+                                </div>
                             </div>
-                            <div class="flex items-center">
-                                <svg class="w-5 h-5 text-green-500 mr-3"
-                                     fill="currentColor"
-                                     viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                    </path>
-                                </svg>
-                                <span class="text-sm text-gray-700">Orders paid</span>
-                            </div>
-                            <div class="flex items-center">
-                                <svg class="w-5 h-5 text-green-500 mr-3"
-                                     fill="currentColor"
-                                     viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                    </path>
-                                </svg>
-                                <span class="text-sm text-gray-700">Orders fulfilled</span>
-                            </div>
-                            <div class="flex items-center">
-                                <svg class="w-5 h-5 text-green-500 mr-3"
-                                     fill="currentColor"
-                                     viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                    </path>
-                                </svg>
-                                <span class="text-sm text-gray-700">Orders cancelled</span>
-                            </div>
-                            <div class="flex items-center">
-                                <svg class="w-5 h-5 text-green-500 mr-3"
-                                     fill="currentColor"
-                                     viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                                    </path>
-                                </svg>
-                                <span class="text-sm text-gray-700">Customer updates</span>
-                            </div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>

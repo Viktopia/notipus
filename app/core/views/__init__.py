@@ -46,6 +46,7 @@ from .integrations import (
     slack_connect,
     slack_connect_callback,
     test_slack,
+    update_shopify_events,
 )
 from .members import (
     accept_invitation,
@@ -93,6 +94,7 @@ __all__ = [
     "disconnect_slack",
     "disconnect_stripe",
     "disconnect_shopify",
+    "update_shopify_events",
     "test_slack",
     "get_slack_channels",
     "configure_slack",

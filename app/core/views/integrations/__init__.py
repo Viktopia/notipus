@@ -33,6 +33,7 @@ from .shopify import (
     integrate_shopify,
     shopify_connect,
     shopify_connect_callback,
+    update_shopify_events,
 )
 from .slack import (
     configure_slack,
@@ -70,6 +71,7 @@ __all__ = [
     "shopify_connect",
     "shopify_connect_callback",
     "disconnect_shopify",
+    "update_shopify_events",
     # Chargify
     "integrate_chargify",
 ]

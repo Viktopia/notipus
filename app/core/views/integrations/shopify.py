@@ -32,14 +32,62 @@ logger = logging.getLogger(__name__)
 INTEGRATION_TYPE = "shopify"
 DISPLAY_NAME = "Shopify"
 
-# Shopify webhook topics to subscribe to
+# Shopify event categories with their webhook topics
+# Used for configurable webhook subscriptions
+SHOPIFY_EVENT_CATEGORIES: dict[str, dict[str, str | list[str] | bool]] = {
+    "orders": {
+        "label": "Orders",
+        "description": "New orders and payment events",
+        "topics": ["orders/create", "orders/paid", "orders/cancelled"],
+        "default": True,
+    },
+    "fulfillment": {
+        "label": "Fulfillment",
+        "description": "Shipping and delivery updates",
+        "topics": ["orders/fulfilled", "fulfillments/create", "fulfillments/update"],
+        "default": True,
+    },
+    "customers": {
+        "label": "Customers",
+        "description": "Customer profile updates",
+        "topics": ["customers/update"],
+        "default": True,
+    },
+}
+
+# All available webhook topics (for backward compatibility)
 SHOPIFY_WEBHOOK_TOPICS = [
-    "orders/create",
-    "orders/paid",
-    "orders/cancelled",
-    "orders/fulfilled",
-    "customers/update",
+    topic
+    for category in SHOPIFY_EVENT_CATEGORIES.values()
+    for topic in category["topics"]
 ]
+
+
+def _get_topics_for_categories(enabled_categories: list[str]) -> list[str]:
+    """Get webhook topics for the given enabled categories.
+
+    Args:
+        enabled_categories: List of category keys to enable.
+
+    Returns:
+        List of webhook topic strings.
+    """
+    topics = []
+    for category_key in enabled_categories:
+        if category_key in SHOPIFY_EVENT_CATEGORIES:
+            topics.extend(SHOPIFY_EVENT_CATEGORIES[category_key]["topics"])
+    return topics
+
+
+def _get_default_categories() -> list[str]:
+    """Get list of category keys that are enabled by default.
+
+    Returns:
+        List of default category keys.
+    """
+    return [
+        key for key, config in SHOPIFY_EVENT_CATEGORIES.items() if config.get("default")
+    ]
 
 
 @login_required
@@ -66,10 +114,19 @@ def integrate_shopify(request: HttpRequest) -> HttpResponse | HttpResponseRedire
         is_active=True,
     ).first()
 
+    # Get enabled categories for connected integrations
+    enabled_categories = []
+    if existing_integration:
+        enabled_categories = existing_integration.integration_settings.get(
+            "enabled_categories", _get_default_categories()
+        )
+
     context = {
         "workspace": workspace,
         "integration": existing_integration,
         "shopify_configured": bool(settings.SHOPIFY_CLIENT_ID),
+        "event_categories": SHOPIFY_EVENT_CATEGORIES,
+        "enabled_categories": enabled_categories,
     }
     return render(request, "core/integrate_shopify.html.j2", context)
 
@@ -104,32 +161,38 @@ def shopify_connect(request: HttpRequest) -> HttpResponseRedirect:
         return redirect("core:integrations")
 
     # Get and validate shop URL from POST data
-    shop_url = request.POST.get("shop_url", "").strip().lower()
+    shop_url = request.POST.get("shop_url", "").strip()
     if not shop_url:
         messages.error(request, "Please enter your Shopify store URL")
         return redirect("core:integrate_shopify")
 
     # Normalize shop URL to myshopify.com domain
-    shop_domain = _normalize_shop_domain(shop_url)
-    if not shop_domain:
-        messages.error(
-            request,
-            "Invalid Shopify store URL. "
-            "Please enter a valid URL like 'mystore' or 'mystore.myshopify.com'",
-        )
+    shop_domain, error_message = _normalize_shop_domain(shop_url)
+    if error_message:
+        messages.error(request, error_message)
         return redirect("core:integrate_shopify")
 
     # Validate the shop domain format (security check)
-    if not _is_valid_shop_domain(shop_domain):
+    if not shop_domain or not _is_valid_shop_domain(shop_domain):
         messages.error(request, "Invalid Shopify store URL format")
         return redirect("core:integrate_shopify")
+
+    # Get selected event categories and validate against known categories
+    raw_categories = request.POST.getlist("event_categories")
+    valid_category_keys = set(SHOPIFY_EVENT_CATEGORIES.keys())
+    selected_categories = [c for c in raw_categories if c in valid_category_keys]
+
+    # Default to all categories if none selected or all were invalid
+    if not selected_categories:
+        selected_categories = _get_default_categories()
 
     # Generate state parameter for CSRF protection
     state = secrets.token_urlsafe(32)
 
-    # Store state and shop in session for callback verification
+    # Store state, shop, and categories in session for callback verification
     request.session["shopify_oauth_state"] = state
     request.session["shopify_shop_domain"] = shop_domain
+    request.session["shopify_event_categories"] = selected_categories
 
     # Build OAuth authorization URL
     # https://shopify.dev/docs/apps/auth/oauth/getting-started
@@ -193,9 +256,15 @@ def shopify_connect_callback(
         messages.error(request, "Shop domain mismatch. Please try again.")
         return redirect("core:integrations")
 
+    # Get enabled categories from session
+    enabled_categories = request.session.get(
+        "shopify_event_categories", _get_default_categories()
+    )
+
     # Clean up session
     request.session.pop("shopify_oauth_state", None)
     request.session.pop("shopify_shop_domain", None)
+    request.session.pop("shopify_event_categories", None)
 
     # Get user's workspace (require admin role for modifications)
     workspace, redirect_response = require_admin_role(request)
@@ -222,9 +291,9 @@ def shopify_connect_callback(
         messages.error(request, "Shopify connection failed: Invalid response")
         return redirect("core:integrations")
 
-    # Create webhook subscriptions
+    # Create webhook subscriptions for enabled categories
     webhook_result = _create_webhook_subscriptions(
-        request, workspace, shop, access_token
+        request, workspace, shop, access_token, enabled_categories
     )
     if webhook_result is None:
         # Still save the integration but warn about webhook issues
@@ -247,6 +316,7 @@ def shopify_connect_callback(
             "integration_settings": {
                 "shop_domain": shop,
                 "webhook_ids": webhook_ids,
+                "enabled_categories": enabled_categories,
             },
             "is_active": True,
         },
@@ -302,37 +372,149 @@ def disconnect_shopify(request: HttpRequest) -> HttpResponseRedirect:
     return redirect("core:integrations")
 
 
-def _normalize_shop_domain(shop_url: str) -> str | None:
+@login_required
+def update_shopify_events(request: HttpRequest) -> HttpResponseRedirect:
+    """Update Shopify webhook event subscriptions.
+
+    Allows users to change which event categories they want to receive.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        Redirect to Shopify integration page.
+    """
+    error_redirect = require_post_method(request)
+    if error_redirect:
+        return error_redirect
+
+    # Require admin role for modifications
+    workspace, redirect_response = require_admin_role(request)
+    if redirect_response:
+        return redirect_response
+
+    # Find the active Shopify integration
+    integration = Integration.objects.filter(
+        workspace=workspace,
+        integration_type=INTEGRATION_TYPE,
+        is_active=True,
+    ).first()
+
+    if not integration:
+        messages.error(request, "No active Shopify integration found")
+        return redirect("core:integrate_shopify")
+
+    # Get new selected categories and validate against known categories
+    raw_categories = request.POST.getlist("event_categories")
+    valid_category_keys = set(SHOPIFY_EVENT_CATEGORIES.keys())
+    new_categories = [c for c in raw_categories if c in valid_category_keys]
+
+    if not new_categories:
+        messages.error(request, "Please select at least one valid event category")
+        return redirect("core:integrate_shopify")
+
+    # Get current settings
+    shop = integration.integration_settings.get("shop_domain")
+    access_token = integration.oauth_credentials.get("access_token")
+    old_categories = integration.integration_settings.get(
+        "enabled_categories", _get_default_categories()
+    )
+
+    if not shop or not access_token:
+        messages.error(request, "Integration is missing required credentials")
+        return redirect("core:integrate_shopify")
+
+    # Update webhooks if categories changed
+    if set(new_categories) != set(old_categories):
+        # Create new webhooks first (before deleting old ones) to minimize downtime
+        # and avoid losing webhooks if creation fails
+        new_webhook_ids = _create_webhook_subscriptions(
+            request, workspace, shop, access_token, new_categories
+        )
+
+        # Only delete old webhooks after new ones are created successfully
+        if new_webhook_ids is not None:
+            _delete_webhook_subscriptions(integration)
+
+            # Update integration settings
+            integration.integration_settings["enabled_categories"] = new_categories
+            integration.integration_settings["webhook_ids"] = new_webhook_ids
+            integration.save()
+
+            logger.info(
+                f"Updated Shopify event categories for workspace {workspace.name}: "
+                f"{old_categories} -> {new_categories}"
+            )
+            messages.success(request, "Event subscriptions updated successfully!")
+        else:
+            # Creation failed - keep existing webhooks
+            logger.error(
+                f"Failed to create new webhooks for workspace {workspace.name}, "
+                "keeping existing configuration"
+            )
+            messages.error(
+                request,
+                "Failed to update event subscriptions. Please try again.",
+            )
+    else:
+        messages.info(request, "No changes to event subscriptions")
+
+    return redirect("core:integrate_shopify")
+
+
+def _normalize_shop_domain(shop_url: str) -> tuple[str | None, str | None]:
     """Normalize shop URL to myshopify.com domain.
 
     Accepts various formats:
-    - mystore
+    - mystore (just the store name)
     - mystore.myshopify.com
     - https://mystore.myshopify.com
     - mystore.myshopify.com/admin
+
+    Rejects custom domains (e.g., shop.mybusiness.com) with an appropriate error.
 
     Args:
         shop_url: User-provided shop URL.
 
     Returns:
-        Normalized shop domain (e.g., 'mystore.myshopify.com') or None if invalid.
+        Tuple of (normalized_domain, error_message).
+        If successful: (domain, None)
+        If failed: (None, error_message)
     """
+    if not shop_url:
+        return None, "Please enter your Shopify store URL"
+
     # Remove protocol and path, lowercase
-    shop = shop_url.lower().replace("https://", "").replace("http://", "")
+    shop = shop_url.lower().strip()
+    shop = shop.replace("https://", "").replace("http://", "")
     shop = shop.split("/")[0]  # Remove any path
 
-    # If it doesn't include myshopify.com, add it
-    if not shop.endswith(".myshopify.com"):
-        # Remove any other domain suffix if present
-        shop = shop.split(".")[0]
-        shop = f"{shop}.myshopify.com"
+    # Check if it's a myshopify.com domain
+    if shop.endswith(".myshopify.com"):
+        # Extract and validate the shop name
+        shop_name = shop.replace(".myshopify.com", "")
+        if not shop_name or not shop_name.replace("-", "").replace("_", "").isalnum():
+            return None, "Invalid store name in URL"
+        return shop, None
 
-    # Validate the shop name part
-    shop_name = shop.replace(".myshopify.com", "")
-    if not shop_name or not shop_name.replace("-", "").replace("_", "").isalnum():
-        return None
+    # Check if it looks like a custom domain (contains a dot)
+    if "." in shop:
+        # This is a custom domain like "shop.mybusiness.com"
+        return None, (
+            "Custom domains are not supported for OAuth. "
+            "Please enter your myshopify.com domain instead. "
+            "You can find it in Shopify Admin > Settings > Domains."
+        )
 
-    return shop
+    # It's just a store name (e.g., "mystore")
+    # Validate the shop name
+    if not shop or not shop.replace("-", "").replace("_", "").isalnum():
+        return None, (
+            "Invalid store name. "
+            "Use only letters, numbers, hyphens, and underscores."
+        )
+
+    return f"{shop}.myshopify.com", None
 
 
 def _is_valid_shop_domain(shop_domain: str) -> bool:
@@ -438,6 +620,7 @@ def _create_webhook_subscriptions(
     workspace: Workspace,
     shop: str,
     access_token: str,
+    enabled_categories: list[str] | None = None,
 ) -> list[int] | None:
     """Create webhook subscriptions on the Shopify store.
 
@@ -446,10 +629,21 @@ def _create_webhook_subscriptions(
         workspace: The user's workspace.
         shop: The shop domain.
         access_token: The Shopify access token.
+        enabled_categories: List of category keys to create webhooks for.
+            If None, uses all default categories.
 
     Returns:
         List of created webhook IDs or None if failed.
     """
+    if enabled_categories is None:
+        enabled_categories = _get_default_categories()
+
+    # Get topics for enabled categories
+    topics = _get_topics_for_categories(enabled_categories)
+    if not topics:
+        logger.warning("No webhook topics to create - no categories enabled")
+        return []
+
     webhook_url = f"{settings.BASE_URL}/webhook/customer/{workspace.uuid}/shopify/"
     api_version = settings.SHOPIFY_API_VERSION
     webhook_ids = []
@@ -459,7 +653,7 @@ def _create_webhook_subscriptions(
         "Content-Type": "application/json",
     }
 
-    for topic in SHOPIFY_WEBHOOK_TOPICS:
+    for topic in topics:
         try:
             response = requests.post(
                 f"https://{shop}/admin/api/{api_version}/webhooks.json",

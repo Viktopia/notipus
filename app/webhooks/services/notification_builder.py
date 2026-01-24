@@ -60,6 +60,12 @@ EVENT_TYPE_MAP: dict[str, NotificationType] = {
     "integration_connected": NotificationType.INTEGRATION_CONNECTED,
     "integration_error": NotificationType.INTEGRATION_ERROR,
     "webhook_received": NotificationType.WEBHOOK_RECEIVED,
+    # Logistics events
+    "order_created": NotificationType.ORDER_CREATED,
+    "order_fulfilled": NotificationType.ORDER_FULFILLED,
+    "fulfillment_created": NotificationType.FULFILLMENT_CREATED,
+    "fulfillment_updated": NotificationType.FULFILLMENT_UPDATED,
+    "shipment_delivered": NotificationType.SHIPMENT_DELIVERED,
 }
 
 # Event type to severity mapping
@@ -94,6 +100,12 @@ EVENT_SEVERITY_MAP: dict[str, NotificationSeverity] = {
     "integration_connected": NotificationSeverity.SUCCESS,
     "integration_error": NotificationSeverity.ERROR,
     "webhook_received": NotificationSeverity.INFO,
+    # Logistics events
+    "order_created": NotificationSeverity.SUCCESS,
+    "order_fulfilled": NotificationSeverity.SUCCESS,
+    "fulfillment_created": NotificationSeverity.INFO,
+    "fulfillment_updated": NotificationSeverity.INFO,
+    "shipment_delivered": NotificationSeverity.SUCCESS,
 }
 
 # Event type to headline icon mapping (semantic names)
@@ -128,6 +140,12 @@ EVENT_ICON_MAP: dict[str, str] = {
     "integration_connected": "check",
     "integration_error": "error",
     "webhook_received": "integration",
+    # Logistics events
+    "order_created": "cart",
+    "order_fulfilled": "package",
+    "fulfillment_created": "truck",
+    "fulfillment_updated": "truck",
+    "shipment_delivered": "package",
 }
 
 
@@ -317,7 +335,7 @@ class NotificationBuilder:
             logo_url=logo_url,
         )
 
-    def _build_headline(
+    def _build_headline(  # noqa: C901
         self,
         event_data: dict[str, Any],
         customer_data: dict[str, Any],
@@ -366,6 +384,54 @@ class NotificationBuilder:
 
         elif event_type == "trial_ending":
             return f"Trial ending soon - {company_name}"
+
+        # Logistics event headlines
+        elif event_type == "order_created":
+            metadata = event_data.get("metadata", {})
+            order_number = metadata.get("order_number") or metadata.get("order_ref")
+            if order_number and amount:
+                return f"New order #{order_number} - ${amount:,.2f} from {company_name}"
+            elif order_number:
+                return f"New order #{order_number} from {company_name}"
+            elif amount:
+                return f"New order - ${amount:,.2f} from {company_name}"
+            return f"New order from {company_name}"
+
+        elif event_type == "order_fulfilled":
+            metadata = event_data.get("metadata", {})
+            order_number = metadata.get("order_number") or metadata.get("order_ref")
+            if order_number:
+                return f"Order #{order_number} fulfilled - {company_name}"
+            return f"Order fulfilled - {company_name}"
+
+        elif event_type == "fulfillment_created":
+            metadata = event_data.get("metadata", {})
+            order_number = metadata.get("order_number") or metadata.get("order_ref")
+            tracking_number = metadata.get("tracking_number")
+            if order_number and tracking_number:
+                return f"Order #{order_number} shipped - {company_name}"
+            elif order_number:
+                return f"Order #{order_number} fulfillment created - {company_name}"
+            return f"Fulfillment created - {company_name}"
+
+        elif event_type == "fulfillment_updated":
+            metadata = event_data.get("metadata", {})
+            order_number = metadata.get("order_number") or metadata.get("order_ref")
+            status = metadata.get("shipment_status") or metadata.get(
+                "fulfillment_status"
+            )
+            if order_number and status:
+                return f"Order #{order_number} - {status.replace('_', ' ').title()}"
+            elif order_number:
+                return f"Order #{order_number} shipment updated - {company_name}"
+            return f"Shipment updated - {company_name}"
+
+        elif event_type == "shipment_delivered":
+            metadata = event_data.get("metadata", {})
+            order_number = metadata.get("order_number") or metadata.get("order_ref")
+            if order_number:
+                return f"Order #{order_number} delivered - {company_name}"
+            return f"Shipment delivered - {company_name}"
 
         else:
             title = event_type.replace("_", " ").title()
