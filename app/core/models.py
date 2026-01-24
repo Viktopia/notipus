@@ -74,8 +74,9 @@ class Workspace(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     # Billing and subscription
+    # max_length=100 to accommodate Stripe price IDs (e.g., price_1NvT4OJADkUcvxXxx)
     subscription_plan = models.CharField(
-        max_length=20, choices=STRIPE_PLANS, default="free"
+        max_length=100, choices=STRIPE_PLANS, default="free"
     )
     subscription_status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="active"
