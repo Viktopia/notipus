@@ -4,6 +4,7 @@ These tests ensure that templates render correctly without errors,
 especially custom error templates (404, 500) and key application pages.
 """
 
+import pytest
 from core.models import Plan, UserProfile, Workspace, WorkspaceMember
 from core.views import custom_404, custom_500
 from django.contrib.auth.models import User
@@ -309,3 +310,116 @@ class AuthenticationTemplateTests(TestCase):
         response = self.client.get("/accounts/signup/")
         assert response.status_code == 200
         assert b"Sign Up" in response.content or b"Register" in response.content
+
+
+class AllTemplatesValidationTests(TestCase):
+    """Comprehensive tests to validate all Django templates can be loaded and parsed.
+
+    These tests catch template syntax errors like invalid operators (e.g., using
+    Python's 'or' instead of Django's |default filter) before deployment.
+    """
+
+    @classmethod
+    def get_all_template_names(cls) -> list[str]:
+        """Discover all template files in the templates directory.
+
+        Returns:
+            List of template names relative to templates directory.
+        """
+        from pathlib import Path
+
+        from django.conf import settings
+
+        template_names: list[str] = []
+
+        # Get template directories from Django settings
+        for template_config in settings.TEMPLATES:
+            for template_dir in template_config.get("DIRS", []):
+                template_path = Path(template_dir)
+                if template_path.exists():
+                    for template_file in template_path.rglob("*.j2"):
+                        # Get relative path from template directory
+                        relative_path = template_file.relative_to(template_path)
+                        template_names.append(str(relative_path))
+
+            # Also check app directories if APP_DIRS is True
+            if template_config.get("APP_DIRS", False):
+                from django.apps import apps
+
+                for app_config in apps.get_app_configs():
+                    app_template_dir = Path(app_config.path) / "templates"
+                    if app_template_dir.exists():
+                        for template_file in app_template_dir.rglob("*.j2"):
+                            relative_path = template_file.relative_to(app_template_dir)
+                            template_names.append(str(relative_path))
+
+        return sorted(set(template_names))
+
+    def test_all_templates_can_be_loaded(self) -> None:
+        """Test that all templates can be loaded without syntax errors.
+
+        This catches Django template syntax errors such as:
+        - Invalid template tags
+        - Invalid filter usage
+        - Using Python operators (like 'or') instead of Django template syntax
+        - Missing endblock/endif/endfor tags
+        - Invalid variable expressions
+        """
+        from django.template import TemplateSyntaxError
+        from django.template.loader import get_template
+
+        template_names = self.get_all_template_names()
+        errors: list[tuple[str, str]] = []
+
+        for template_name in template_names:
+            try:
+                get_template(template_name)
+            except TemplateSyntaxError as e:
+                errors.append((template_name, str(e)))
+            except Exception as e:
+                # Catch other loading errors but don't fail on missing context
+                if "does not exist" not in str(e).lower():
+                    errors.append((template_name, f"Unexpected error: {e}"))
+
+        if errors:
+            error_msg = "Template syntax errors found:\n"
+            for template_name, error in errors:
+                error_msg += f"\n  {template_name}:\n    {error}\n"
+            pytest.fail(error_msg)
+
+    def test_all_templates_discovered(self) -> None:
+        """Verify that template discovery is working and finds expected templates."""
+        template_names = self.get_all_template_names()
+
+        # Should find at least these essential templates
+        expected_templates = [
+            "core/base.html.j2",
+            "core/dashboard.html.j2",
+            "account/login.html.j2",
+            "account/signup.html.j2",
+            "404.html.j2",
+            "500.html.j2",
+        ]
+
+        for expected in expected_templates:
+            assert expected in template_names, f"Expected template {expected} not found"
+
+        # Should have found a reasonable number of templates
+        assert len(template_names) >= 10, (
+            f"Only found {len(template_names)} templates, expected more"
+        )
+
+    def test_standalone_templates_render_with_empty_context(self) -> None:
+        """Test standalone templates render with empty context.
+
+        Standalone templates (not extending others) like error pages should
+        render without any context variables.
+        """
+        standalone_templates = [
+            "404.html.j2",
+            "500.html.j2",
+        ]
+
+        for template_name in standalone_templates:
+            html = render_to_string(template_name, {})
+            assert len(html) > 0, f"Template {template_name} rendered empty"
