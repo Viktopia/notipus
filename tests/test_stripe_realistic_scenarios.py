@@ -607,6 +607,114 @@ class TestDisplayNameInRichNotification:
         assert "Enterprise" in notification.headline
 
 
+class TestWebhookCustomerDataExtraction:
+    """Integration test: Customer data extraction from webhook payload.
+
+    We can't call Stripe API (don't have customer's API key), so customer
+    data must be extracted directly from the webhook payload via get_customer_data().
+    """
+
+    @pytest.fixture
+    def stripe_plugin(self) -> StripeSourcePlugin:
+        """Create a Stripe plugin instance."""
+        return StripeSourcePlugin()
+
+    def test_get_customer_data_extracts_email_from_webhook(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that customer_email is extracted from stored webhook data."""
+        # Simulate webhook data being stored during parse_webhook
+        stripe_plugin._current_webhook_data = {
+            "id": "in_test123",
+            "customer": "cus_test123",
+            "customer_email": "realuser@example.com",
+            "customer_name": None,  # Often null in Stripe
+        }
+
+        customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+        assert customer_data["email"] == "realuser@example.com"
+        assert customer_data["first_name"] == ""
+        assert customer_data["last_name"] == ""
+
+    def test_get_customer_data_extracts_name_from_webhook(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that customer_name is split into first/last from webhook data."""
+        stripe_plugin._current_webhook_data = {
+            "id": "sub_test123",
+            "customer": "cus_test123",
+            "customer_email": "subscriber@company.com",
+            "customer_name": "John Doe",
+        }
+
+        customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+        assert customer_data["email"] == "subscriber@company.com"
+        assert customer_data["first_name"] == "John"
+        assert customer_data["last_name"] == "Doe"
+
+    def test_get_customer_data_handles_single_name(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that single word name is handled correctly."""
+        stripe_plugin._current_webhook_data = {
+            "id": "in_test123",
+            "customer": "cus_test123",
+            "customer_email": "prince@music.com",
+            "customer_name": "Prince",
+        }
+
+        customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+        assert customer_data["first_name"] == "Prince"
+        assert customer_data["last_name"] == ""
+
+    def test_get_customer_data_returns_empty_when_no_webhook_data(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that empty data is returned when no webhook data available."""
+        stripe_plugin._current_webhook_data = None
+
+        customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+        assert customer_data["email"] == ""
+        assert customer_data["first_name"] == ""
+        assert customer_data["last_name"] == ""
+        assert customer_data["company_name"] == ""
+
+    def test_idempotency_key_extracted_correctly(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that idempotency_key is extracted from event request."""
+        mock_event = Mock()
+        mock_event.request = Mock()
+        mock_event.request.idempotency_key = "unique-key-12345"
+
+        result = stripe_plugin._extract_idempotency_key(mock_event)
+        assert result == "unique-key-12345"
+
+    def test_idempotency_key_none_when_no_request(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that idempotency_key is None when request is None."""
+        mock_event = Mock()
+        mock_event.request = None
+
+        result = stripe_plugin._extract_idempotency_key(mock_event)
+        assert result is None
+
+    def test_idempotency_key_handles_dict_request(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that idempotency_key works with dict-style request."""
+        mock_event = Mock()
+        mock_event.request = {"idempotency_key": "dict-key-67890", "id": "req_123"}
+
+        result = stripe_plugin._extract_idempotency_key(mock_event)
+        assert result == "dict-key-67890"
+
+
 class TestPaymentFailureNotFiltered:
     """Integration test: Payment failures are never filtered.
 

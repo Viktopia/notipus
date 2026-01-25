@@ -109,23 +109,44 @@ class StripeProviderTest(TestCase):
         self.webhook_secret = "test_webhook_secret"
         self.provider = StripeSourcePlugin(self.webhook_secret)
 
-    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
-    def test_get_customer_data(self, mock_retrieve):
-        """Test getting customer data from Stripe API."""
-        mock_retrieve.return_value = {
-            "id": "cus_123",
-            "email": "test@acme.com",
-            "name": "Test User",
-            "metadata": {"company": "Acme Corp"},
+    def test_get_customer_data(self):
+        """Test getting customer data from webhook payload.
+
+        We can't call Stripe API (don't have customer's API key),
+        so customer data is extracted from the stored webhook data.
+        """
+        # Simulate webhook data being stored during parse_webhook
+        self.provider._current_webhook_data = {
+            "id": "in_123",
+            "customer": "cus_123",
+            "customer_email": "test@acme.com",
+            "customer_name": "Test User",
         }
 
         result = self.provider.get_customer_data("cus_123")
 
         expected = {
-            "company_name": "Acme Corp",
+            "company_name": "",  # Not available in webhook
             "email": "test@acme.com",
             "first_name": "Test",
             "last_name": "User",
+        }
+
+        self.assertEqual(result, expected)
+
+    def test_get_customer_data_no_webhook_data(self):
+        """Test getting customer data when no webhook data is available."""
+        # No webhook data stored
+        self.provider._current_webhook_data = None
+
+        result = self.provider.get_customer_data("cus_123")
+
+        # Should return empty data
+        expected = {
+            "company_name": "",
+            "email": "",
+            "first_name": "",
+            "last_name": "",
         }
 
         self.assertEqual(result, expected)
@@ -140,7 +161,7 @@ class StripeProviderTest(TestCase):
         }
 
         result = self.provider._build_stripe_event_data(
-            "payment_success", "cus_123", data, 20.00
+            "payment_success", "cus_123", data, 20.00, idempotency_key=None
         )
 
         expected = {
@@ -153,6 +174,7 @@ class StripeProviderTest(TestCase):
             "currency": "USD",
             "amount": 20.00,
             "metadata": {},
+            "idempotency_key": None,
         }
 
         self.assertEqual(result, expected)

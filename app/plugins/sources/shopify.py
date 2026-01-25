@@ -259,6 +259,7 @@ class ShopifySourcePlugin(BaseSourcePlugin):
             "type": event_type,
             "customer_id": customer_id,
             "provider": "shopify",
+            "external_id": str(data.get("id", "")),
             "created_at": data.get("created_at"),
             "status": "success",  # Default status
             "metadata": {

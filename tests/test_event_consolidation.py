@@ -417,6 +417,162 @@ class TestZeroAmountFiltering:
         assert result is True
 
 
+class TestIdempotencyDeduplication:
+    """Test idempotency-based deduplication functionality.
+
+    Stripe sends multiple events for the same action (e.g., subscription creation
+    triggers subscription.created, invoice.paid, invoice.payment_succeeded).
+    All events share the same idempotency_key, which we use to deduplicate.
+    """
+
+    @pytest.fixture
+    def service(self) -> EventConsolidationService:
+        """Create a fresh consolidation service for each test.
+
+        Returns:
+            EventConsolidationService instance.
+        """
+        return EventConsolidationService()
+
+    @pytest.fixture
+    def mock_cache(self):
+        """Mock Django cache for testing.
+
+        Yields:
+            Mock cache with get/set methods.
+        """
+        cache_data: dict = {}
+
+        def mock_get(key: str, default=None):
+            return cache_data.get(key, default)
+
+        def mock_set(key: str, value, timeout=None):
+            cache_data[key] = value
+
+        with patch("webhooks.services.event_consolidation.cache") as mock:
+            mock.get = mock_get
+            mock.set = mock_set
+            yield mock
+
+    def test_first_event_with_idempotency_key_not_duplicate(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that first event with an idempotency key is not a duplicate."""
+        result = service.is_duplicate_by_idempotency(
+            workspace_id="ws_456",
+            idempotency_key="idem_12345",
+        )
+
+        assert result is False
+
+    def test_second_event_with_same_idempotency_key_is_duplicate(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that second event with same idempotency key is duplicate."""
+        # Record the first event
+        service.record_idempotency_key(
+            workspace_id="ws_456",
+            idempotency_key="idem_12345",
+        )
+
+        # Second event should be detected as duplicate
+        result = service.is_duplicate_by_idempotency(
+            workspace_id="ws_456",
+            idempotency_key="idem_12345",
+        )
+
+        assert result is True
+
+    def test_none_idempotency_key_not_duplicate(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that None idempotency_key returns False (not duplicate)."""
+        result = service.is_duplicate_by_idempotency(
+            workspace_id="ws_456",
+            idempotency_key=None,
+        )
+
+        assert result is False
+
+    def test_empty_idempotency_key_not_duplicate(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that empty idempotency_key returns False (not duplicate)."""
+        result = service.is_duplicate_by_idempotency(
+            workspace_id="ws_456",
+            idempotency_key="",
+        )
+
+        assert result is False
+
+    def test_different_workspace_not_duplicate(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that same idempotency key in different workspace is not duplicate."""
+        # Record for workspace 1
+        service.record_idempotency_key(
+            workspace_id="ws_456",
+            idempotency_key="idem_12345",
+        )
+
+        # Different workspace should not be duplicate
+        result = service.is_duplicate_by_idempotency(
+            workspace_id="ws_other",
+            idempotency_key="idem_12345",
+        )
+
+        assert result is False
+
+    def test_record_idempotency_key_with_none_does_nothing(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that recording None idempotency key doesn't cause errors."""
+        # Should not raise
+        service.record_idempotency_key(
+            workspace_id="ws_456",
+            idempotency_key=None,
+        )
+
+        # And subsequent check should return False
+        result = service.is_duplicate_by_idempotency(
+            workspace_id="ws_456",
+            idempotency_key=None,
+        )
+        assert result is False
+
+    def test_realistic_stripe_multi_event_scenario(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test realistic scenario: subscription creation triggers 3 events.
+
+        When a subscription is created, Stripe fires:
+        1. customer.subscription.created
+        2. invoice.paid
+        3. invoice.payment_succeeded
+
+        All share the same idempotency_key. Only the first should process.
+        """
+        idempotency_key = "75fad5af-4d03-4ada-bfaa-f267c84702f9"
+        workspace_id = "ws_test"
+
+        # First event: subscription.created - should NOT be duplicate
+        assert (
+            service.is_duplicate_by_idempotency(workspace_id, idempotency_key) is False
+        )
+        # Record after processing
+        service.record_idempotency_key(workspace_id, idempotency_key)
+
+        # Second event: invoice.paid - should be duplicate
+        assert (
+            service.is_duplicate_by_idempotency(workspace_id, idempotency_key) is True
+        )
+
+        # Third event: invoice.payment_succeeded - should also be duplicate
+        assert (
+            service.is_duplicate_by_idempotency(workspace_id, idempotency_key) is True
+        )
+
+
 class TestEventConsolidationConstants:
     """Test EventConsolidationService constants."""
 
@@ -428,6 +584,15 @@ class TestEventConsolidationConstants:
         """
         assert EventConsolidationService.CONSOLIDATION_WINDOW_SECONDS >= 60
         assert EventConsolidationService.CONSOLIDATION_WINDOW_SECONDS <= 600
+
+    def test_idempotency_window_is_reasonable(self) -> None:
+        """Test that idempotency window is a reasonable value.
+
+        Multiple events from same Stripe action arrive within seconds,
+        but we use 5 minutes to handle any delays.
+        """
+        assert EventConsolidationService.IDEMPOTENCY_WINDOW_SECONDS >= 60
+        assert EventConsolidationService.IDEMPOTENCY_WINDOW_SECONDS <= 600
 
     def test_never_suppress_includes_critical_events(self) -> None:
         """Test that critical events are in NEVER_SUPPRESS."""

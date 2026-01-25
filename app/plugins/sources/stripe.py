@@ -71,8 +71,10 @@ class StripeSourcePlugin(BaseSourcePlugin):
             webhook_secret: Stripe webhook signing secret.
         """
         super().__init__(webhook_secret)
-        # Configure Stripe API key and version
-        stripe.api_key = settings.STRIPE_SECRET_KEY
+        # Store webhook data for customer lookup (we can't call Stripe API
+        # because we don't have the customer's API key - only the webhook)
+        self._current_webhook_data: dict[str, Any] | None = None
+        # Configure Stripe API version for webhook signature verification
         stripe.api_version = settings.STRIPE_API_VERSION
 
     def validate_webhook(self, request: HttpRequest) -> bool:
@@ -154,6 +156,32 @@ class StripeSourcePlugin(BaseSourcePlugin):
                 data["_previous_attributes"] = dict(previous_attributes)
 
         return event_type, data
+
+    def _extract_idempotency_key(self, event: Any) -> str | None:
+        """Extract idempotency key from Stripe event.
+
+        The idempotency key is shared across all events triggered by the same
+        Stripe API request. This allows deduplication across event types
+        (e.g., subscription.created and invoice.paid from same action).
+
+        Args:
+            event: Stripe event object.
+
+        Returns:
+            Idempotency key string, or None if not available.
+        """
+        try:
+            request_info = getattr(event, "request", None)
+            if request_info:
+                # Handle both object attribute and dict access
+                if hasattr(request_info, "idempotency_key"):
+                    return request_info.idempotency_key
+                elif isinstance(request_info, dict):
+                    return request_info.get("idempotency_key")
+            return None
+        except Exception:
+            # Don't fail webhook processing if we can't get idempotency key
+            return None
 
     def _get_previous_plan_amount(self, data: dict[str, Any]) -> int | None:
         """Extract previous plan amount from subscription update data.
@@ -320,6 +348,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
         customer_id: str,
         data: dict[str, Any],
         amount: float,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Build Stripe event data structure.
 
@@ -328,6 +357,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
             customer_id: Customer identifier.
             data: Raw event data.
             amount: Payment amount in dollars.
+            idempotency_key: Stripe request idempotency key for deduplication.
 
         Returns:
             Standardized event data dictionary.
@@ -342,6 +372,9 @@ class StripeSourcePlugin(BaseSourcePlugin):
             "currency": str(data.get("currency", "USD")).upper(),
             "amount": amount,
             "metadata": {},
+            # Idempotency key for cross-event deduplication
+            # (multiple events from same action share this key)
+            "idempotency_key": idempotency_key,
         }
 
         # Add trial conversion flag if detected
@@ -394,6 +427,10 @@ class StripeSourcePlugin(BaseSourcePlugin):
         except Exception as e:
             raise InvalidDataError(f"Webhook parsing error: {e!s}") from e
 
+        # Extract idempotency_key from the event for cross-event deduplication
+        # All events triggered by the same Stripe API request share this key
+        idempotency_key = self._extract_idempotency_key(event)
+
         # Extract event info using Stripe event object
         event_type, data = self._extract_stripe_event_info(event)
 
@@ -425,74 +462,57 @@ class StripeSourcePlugin(BaseSourcePlugin):
             # Handle billing and get amount
             amount = self._handle_stripe_billing(event_type, data_dict)
 
+            # Store webhook data for customer lookup
+            self._current_webhook_data = data_dict
+
             # Build and return event data
             return self._build_stripe_event_data(
-                event_type, customer_id, data_dict, amount
+                event_type, customer_id, data_dict, amount, idempotency_key
             )
 
         except (KeyError, ValueError, AttributeError) as e:
             raise InvalidDataError("Missing required fields") from e
 
     def get_customer_data(self, customer_id: str) -> dict[str, Any]:
-        """Get customer data from Stripe API.
+        """Get customer data from stored webhook payload.
 
-        Fetches customer details including email, name, and company info
-        from the Stripe Customer object.
+        We cannot call Stripe API because we don't have the customer's
+        API key - we only receive webhooks. Customer data must be extracted
+        from the webhook payload itself.
 
         Args:
-            customer_id: The Stripe customer identifier (e.g., "cus_xxx").
+            customer_id: The Stripe customer identifier (unused, kept for interface).
 
         Returns:
             Dictionary with customer data including:
-            - company_name: From metadata or empty string
-            - email: Customer email
-            - first_name: First part of name
-            - last_name: Last part of name
+            - company_name: Empty (not in webhook payload)
+            - email: Customer email from webhook
+            - first_name: First part of customer name
+            - last_name: Last part of customer name
         """
-        if not customer_id:
-            logger.warning("Empty customer_id provided to get_customer_data")
+        if not self._current_webhook_data:
+            logger.warning("No webhook data available for customer lookup")
             return self._empty_customer_data()
 
-        try:
-            customer = stripe.Customer.retrieve(customer_id)
+        data = self._current_webhook_data
 
-            # Handle deleted customers
-            if getattr(customer, "deleted", False):
-                logger.info(f"Customer {customer_id} has been deleted")
-                return self._empty_customer_data()
+        # Extract email - available on invoices, subscriptions, etc.
+        email = data.get("customer_email") or ""
 
-            # Extract email
-            email = customer.get("email", "") or ""
+        # Extract name - often null in Stripe but check anyway
+        name = data.get("customer_name") or ""
+        first_name, last_name = self._split_name(name)
 
-            # Extract name and split into first/last
-            name = customer.get("name", "") or ""
-            first_name, last_name = self._split_name(name)
+        # Company name is not typically in webhook payload
+        # (would need API call to customer.metadata which we can't do)
+        company_name = ""
 
-            # Extract company name from metadata or use empty string
-            metadata = customer.get("metadata", {}) or {}
-            company_name = (
-                metadata.get("company")
-                or metadata.get("company_name")
-                or metadata.get("organization")
-                or ""
-            )
-
-            return {
-                "company_name": company_name,
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-            }
-
-        except stripe.error.InvalidRequestError as e:
-            logger.warning(f"Invalid customer ID {customer_id}: {e}")
-            return self._empty_customer_data()
-        except stripe.error.StripeError as e:
-            logger.error(f"Stripe API error fetching customer {customer_id}: {e}")
-            return self._empty_customer_data()
-        except Exception as e:
-            logger.error(f"Unexpected error fetching customer {customer_id}: {e}")
-            return self._empty_customer_data()
+        return {
+            "company_name": company_name,
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+        }
 
     def _empty_customer_data(self) -> dict[str, Any]:
         """Return empty customer data structure.

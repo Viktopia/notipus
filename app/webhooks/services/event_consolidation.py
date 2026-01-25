@@ -50,6 +50,11 @@ class EventConsolidationService:
     # Multiplier of 6 means 30 minutes for dedup vs 5 minutes for consolidation
     DEDUP_WINDOW_MULTIPLIER: ClassVar[int] = 6
 
+    # Idempotency key deduplication window (in seconds)
+    # Multiple events from same Stripe API request arrive within seconds
+    # Use 5 minutes to handle any network delays
+    IDEMPOTENCY_WINDOW_SECONDS: ClassVar[int] = 300
+
     # Events that suppress other events when processed first
     # Format: {primary_event: {events_to_suppress}}
     PRIMARY_EVENTS: ClassVar[dict[str, set[str]]] = {
@@ -243,6 +248,55 @@ class EventConsolidationService:
 
         dedup_key = f"event_dedup:{workspace_id}:{external_id}"
         return cache.get(dedup_key) is not None
+
+    def is_duplicate_by_idempotency(
+        self,
+        workspace_id: str,
+        idempotency_key: str | None,
+    ) -> bool:
+        """Check if an event with this idempotency key was already processed.
+
+        Stripe's idempotency_key is shared across all events triggered by the
+        same API request. For example, creating a subscription triggers:
+        - customer.subscription.created
+        - invoice.paid
+        - invoice.payment_succeeded
+
+        All three events share the same idempotency_key, so we only process
+        the first one that arrives.
+
+        Args:
+            workspace_id: The workspace UUID.
+            idempotency_key: Stripe request idempotency key.
+
+        Returns:
+            True if an event with this idempotency key was already processed.
+        """
+        if not idempotency_key:
+            return False
+
+        key = f"event_idempotency:{workspace_id}:{idempotency_key}"
+        return cache.get(key) is not None
+
+    def record_idempotency_key(
+        self,
+        workspace_id: str,
+        idempotency_key: str | None,
+    ) -> None:
+        """Record that we processed an event with this idempotency key.
+
+        Args:
+            workspace_id: The workspace UUID.
+            idempotency_key: Stripe request idempotency key.
+        """
+        if not idempotency_key:
+            return
+
+        key = f"event_idempotency:{workspace_id}:{idempotency_key}"
+        cache.set(key, True, timeout=self.IDEMPOTENCY_WINDOW_SECONDS)
+        logger.debug(
+            f"Recorded idempotency key {idempotency_key} for workspace {workspace_id}"
+        )
 
 
 # Global instance for convenience
