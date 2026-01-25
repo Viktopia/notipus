@@ -505,12 +505,17 @@ class StripeAPI:
                         continue
 
                     product = getattr(price, "product", None)
+                    product_name = None
+
                     if isinstance(product, str):
-                        product_name = product
+                        # Product is not expanded, fetch it from Stripe
+                        try:
+                            fetched_product = stripe.Product.retrieve(product)
+                            product_name = fetched_product.name
+                        except stripe.error.StripeError:
+                            product_name = None
                     elif product:
-                        product_name = getattr(product, "name", product)
-                    else:
-                        product_name = None
+                        product_name = getattr(product, "name", None)
 
                     sub_data["items"].append(
                         {
