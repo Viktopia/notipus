@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from .exceptions import WebhookError, WebhookSignatureError
 from .services.event_consolidation import event_consolidation_service
 from .services.rate_limiter import RateLimitException, rate_limiter
+from .services.webhook_storage import webhook_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,10 @@ def _log_webhook_payload(
                 "body": body_str,
             },
         )
+
+        # Store raw webhook in Redis for debugging (7-day retention)
+        webhook_storage_service.store_webhook(request, provider_name, workspace_uuid)
+
     except Exception as e:
         # Don't let logging errors break webhook processing
         logger.warning(f"Failed to log webhook payload: {e}")
