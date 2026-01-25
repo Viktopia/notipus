@@ -43,7 +43,7 @@
                         <!-- Desktop Navigation -->
                         <div class="hidden md:flex md:items-center md:space-x-4">
                             {% if user.is_authenticated %}
-                                <span class="text-sm text-gray-700">Welcome, {{ user.username }}</span>
+                                <span class="text-sm text-gray-700">Welcome, {{ (user.get_short_name or user.username)|title }}</span>
                                 <a href="{% url 'account_logout' %}" class="btn-ghost touch-target">Logout</a>
                             {% else %}
                                 <a href="{% url 'account_login' %}" class="btn-ghost touch-target">Login</a>
@@ -88,7 +88,7 @@
                         {% if user.is_authenticated %}
                             <div class="px-4 py-3 border-b border-gray-100">
                                 <p class="text-sm text-gray-500">Signed in as</p>
-                                <p class="text-sm font-medium text-gray-900 truncate">{{ user.username }}</p>
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ (user.get_short_name or user.username)|title }}</p>
                             </div>
                             <a href="{% url 'core:dashboard' %}" class="mobile-menu-item">
                                 <i class="ti ti-home w-5 mr-3 text-gray-400"></i>
