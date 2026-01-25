@@ -271,10 +271,17 @@ def _process_webhook_data(
 
 def _handle_webhook_exceptions(e: Exception, provider_name: str) -> JsonResponse:
     """Handle different types of webhook exceptions."""
+    from webhooks.services.rate_limiter import RateLimitException
+
     if isinstance(e, WebhookSignatureError):
         logger.warning(f"Invalid signature for {provider_name} webhook")
         error_response = create_error_response(e, 400)
         return JsonResponse(error_response, status=400)
+    elif isinstance(e, RateLimitException):
+        # Rate limiting is expected behavior, not an error
+        logger.info(f"Rate limit exceeded for {provider_name} webhook: {e!s}")
+        error_response = create_error_response(e, 429)
+        return JsonResponse(error_response, status=429)
     elif isinstance(e, WebhookError):
         logger.warning(f"Webhook validation error for {provider_name}: {str(e)}")
         error_response = create_error_response(e, 400)
