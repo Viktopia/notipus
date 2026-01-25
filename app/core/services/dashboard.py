@@ -311,7 +311,8 @@ class BillingService:
                 if free_plan:
                     plans.insert(0, free_plan)  # Put free plan first
 
-            return plans
+            # Sort by price ascending (small to large, left to right)
+            return sorted(plans, key=lambda p: p["price"])
 
         except Exception as e:
             logger.warning(f"Error fetching plans from Stripe: {e!s}")
@@ -374,7 +375,8 @@ class BillingService:
                         "recommended": plan.name == "pro",
                     }
                 )
-            return result
+            # Sort by price ascending (small to large, left to right)
+            return sorted(result, key=lambda p: p["price"])
         except Exception as e:
             logger.error(f"Error getting plans from database: {e!s}")
             return []
