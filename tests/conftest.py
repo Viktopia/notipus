@@ -132,7 +132,7 @@ def mock_shopify_request(request_factory: RequestFactory) -> HttpRequest:
     }
     # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        f"/webhooks/customer/{TEST_ORG_UUID}/shopify/",
+        f"/webhook/customer/{TEST_ORG_UUID}/shopify/",
         data=data,
         content_type="application/json",
         **headers,
@@ -193,7 +193,7 @@ def mock_shopify_customer_request(request_factory: RequestFactory) -> HttpReques
     }
     # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        f"/webhooks/customer/{TEST_ORG_UUID}/shopify/",
+        f"/webhook/customer/{TEST_ORG_UUID}/shopify/",
         data=data,
         content_type="application/json",
         **headers,
@@ -232,7 +232,7 @@ def mock_chargify_request(request_factory: RequestFactory) -> HttpRequest:
     }
     # Use organization-specific webhook endpoint path
     request = request_factory.post(
-        f"/webhooks/customer/{TEST_ORG_UUID}/chargify/",
+        f"/webhook/customer/{TEST_ORG_UUID}/chargify/",
         data=data,
         content_type="application/x-www-form-urlencoded",
         **headers,

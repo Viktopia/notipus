@@ -291,7 +291,7 @@ app/
 Notipus is designed as a multi-tenant SaaS platform where each workspace manages their own integrations:
 
 - **Workspaces**: Each tenant (workspace) has their own webhook endpoints, integrations, and Slack configurations
-- **Webhook Endpoints**: Workspace-specific webhooks at `/webhooks/customer/{org_uuid}/{provider}/`
+- **Webhook Endpoints**: Workspace-specific webhooks at `/webhook/customer/{org_uuid}/{provider}/`
 - **Integration Storage**: Credentials and settings stored per-workspace in the `Integration` model
 - **Isolation**: Each workspace's data is isolated and rate-limited independently
 
@@ -574,9 +574,9 @@ Customer webhook integrations are configured per-tenant through the web interfac
 
 **Customer Webhooks** (per-workspace):
 
-- `POST /webhooks/customer/{org_uuid}/shopify/` - Shopify order and customer events
-- `POST /webhooks/customer/{org_uuid}/chargify/` - Chargify/Maxio subscription events
-- `POST /webhooks/customer/{org_uuid}/stripe/` - Stripe payment events
+- `POST /webhook/customer/{org_uuid}/shopify/` - Shopify order and customer events
+- `POST /webhook/customer/{org_uuid}/chargify/` - Chargify/Maxio subscription events
+- `POST /webhook/customer/{org_uuid}/stripe/` - Stripe payment events
 
 **Global Webhooks** (Notipus billing):
 

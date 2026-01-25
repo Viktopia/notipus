@@ -6,6 +6,7 @@ Handles Chargify webhook configuration for receiving subscription events.
 import logging
 from typing import Any
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
@@ -45,9 +46,7 @@ def integrate_chargify(request: HttpRequest) -> HttpResponse | HttpResponseRedir
         return _handle_chargify_connect(request, workspace, existing_integration)
 
     # Generate webhook URL for this workspace
-    webhook_url = request.build_absolute_uri(
-        f"/webhooks/customer/chargify/{workspace.uuid}/"
-    )
+    webhook_url = f"{settings.BASE_URL}/webhook/customer/{workspace.uuid}/chargify/"
 
     context: dict[str, Any] = {
         "workspace": workspace,
