@@ -452,6 +452,54 @@ class StripeAPI:
             logger.error(f"Unexpected error listing prices: {e!s}")
             return []
 
+    def _extract_subscription_items(self, sub: Any) -> list[dict[str, Any]]:
+        """Extract items from a Stripe subscription object.
+
+        Args:
+            sub: Stripe Subscription object.
+
+        Returns:
+            List of item dictionaries with price and product info.
+        """
+        items = []
+
+        # Must access sub.items.data directly - getattr doesn't work
+        # correctly with Stripe's ListObject which uses __getattr__ magic
+        try:
+            items_data = list(sub.items.data) if sub.items else []
+        except (AttributeError, TypeError):
+            return []
+
+        for item in items_data:
+            price = getattr(item, "price", None)
+            if not price:
+                continue
+
+            product = getattr(price, "product", None)
+            product_name = None
+
+            if isinstance(product, str):
+                # Product is not expanded, fetch it from Stripe
+                try:
+                    fetched_product = stripe.Product.retrieve(product)
+                    product_name = fetched_product.name
+                except stripe.error.StripeError:
+                    product_name = None
+            elif product:
+                product_name = getattr(product, "name", None)
+
+            items.append(
+                {
+                    "price_id": getattr(price, "id", None),
+                    "product_name": product_name,
+                    "unit_amount": getattr(price, "unit_amount", None),
+                    "currency": getattr(price, "currency", None),
+                    "quantity": getattr(item, "quantity", 1),
+                }
+            )
+
+        return items
+
     def get_customer_subscriptions(
         self,
         customer_id: str,
@@ -492,41 +540,8 @@ class StripeAPI:
                     "current_period_end": getattr(sub, "current_period_end", None),
                     "cancel_at_period_end": getattr(sub, "cancel_at_period_end", False),
                     "canceled_at": getattr(sub, "canceled_at", None),
-                    "items": [],
+                    "items": self._extract_subscription_items(sub),
                 }
-
-                # Extract subscription items
-                items = getattr(sub, "items", None)
-                items_data = getattr(items, "data", []) if items else []
-
-                for item in items_data:
-                    price = getattr(item, "price", None)
-                    if not price:
-                        continue
-
-                    product = getattr(price, "product", None)
-                    product_name = None
-
-                    if isinstance(product, str):
-                        # Product is not expanded, fetch it from Stripe
-                        try:
-                            fetched_product = stripe.Product.retrieve(product)
-                            product_name = fetched_product.name
-                        except stripe.error.StripeError:
-                            product_name = None
-                    elif product:
-                        product_name = getattr(product, "name", None)
-
-                    sub_data["items"].append(
-                        {
-                            "price_id": getattr(price, "id", None),
-                            "product_name": product_name,
-                            "unit_amount": getattr(price, "unit_amount", None),
-                            "currency": getattr(price, "currency", None),
-                            "quantity": getattr(item, "quantity", 1),
-                        }
-                    )
-
                 result.append(sub_data)
 
             return result
