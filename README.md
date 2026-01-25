@@ -29,7 +29,7 @@ A webhook-driven notification service that sends enriched payment and subscripti
 1. **Clone the repository**
 
 ```bash
-git clone git@github.com:viktopia/notipus.git
+git clone git@github.com:notipus/notipus.git
 cd notipus
 ```
 

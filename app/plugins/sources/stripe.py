@@ -155,6 +155,56 @@ class StripeSourcePlugin(BaseSourcePlugin):
 
         return event_type, data
 
+    def _get_previous_plan_amount(self, data: dict[str, Any]) -> int | None:
+        """Extract previous plan amount from subscription update data.
+
+        Checks both direct plan changes and multi-item subscription changes.
+
+        Args:
+            data: Event data dictionary with _previous_attributes.
+
+        Returns:
+            Previous amount in cents, or None if not available.
+        """
+        prev_attrs = data.get("_previous_attributes", {})
+        if not prev_attrs:
+            return None
+
+        # Check direct plan change
+        prev_plan = prev_attrs.get("plan", {})
+        if prev_plan and prev_plan.get("amount") is not None:
+            return prev_plan.get("amount")
+
+        # Check items for multi-item subscriptions
+        prev_items = prev_attrs.get("items", {})
+        if isinstance(prev_items, dict) and "data" in prev_items:
+            items_data = prev_items.get("data", [])
+            if items_data:
+                return items_data[0].get("plan", {}).get("amount")
+
+        return None
+
+    def _detect_change_direction(
+        self, current_amount: int, prev_amount: int | None
+    ) -> str | None:
+        """Determine if subscription change is upgrade, downgrade, or other.
+
+        Args:
+            current_amount: Current plan amount in cents.
+            prev_amount: Previous plan amount in cents, or None.
+
+        Returns:
+            "upgrade", "downgrade", "other", or None if undetermined.
+        """
+        if prev_amount is None:
+            return None
+
+        if current_amount > prev_amount:
+            return "upgrade"
+        elif current_amount < prev_amount:
+            return "downgrade"
+        return "other"
+
     def _handle_stripe_billing(self, event_type: str, data: dict[str, Any]) -> float:
         """Handle billing service calls and return amount in dollars.
 
@@ -167,76 +217,102 @@ class StripeSourcePlugin(BaseSourcePlugin):
         Returns:
             Amount in dollars as a float.
         """
+        amount_cents = self._get_amount_and_dispatch_billing(event_type, data)
+        return float(amount_cents) / 100.0
+
+    def _get_amount_and_dispatch_billing(
+        self, event_type: str, data: dict[str, Any]
+    ) -> int:
+        """Get amount in cents and dispatch to appropriate billing handler.
+
+        Args:
+            event_type: The normalized event type.
+            data: Event data dictionary (may be mutated with metadata).
+
+        Returns:
+            Amount in cents.
+        """
         from webhooks.services.billing import BillingService
 
-        amount_cents: int = 0
-
         if event_type == "subscription_created":
-            amount_cents = data.get("plan", {}).get("amount", 0)
             BillingService.handle_subscription_created(data)
-        elif event_type == "subscription_updated":
-            # Get current plan amount
-            current_amount = data.get("plan", {}).get("amount", 0)
-            amount_cents = current_amount
+            return data.get("plan", {}).get("amount", 0)
 
-            # Detect upgrade/downgrade by comparing with previous plan amount
-            prev_attrs = data.get("_previous_attributes", {})
-            prev_plan = prev_attrs.get("plan", {})
-            prev_amount = prev_plan.get("amount") if prev_plan else None
+        if event_type == "subscription_updated":
+            return self._handle_subscription_updated(data)
 
-            # Also check items for multi-item subscriptions
-            if prev_amount is None and "items" in prev_attrs:
-                prev_items = prev_attrs.get("items", {})
-                if isinstance(prev_items, dict) and "data" in prev_items:
-                    items_data = prev_items.get("data", [])
-                    if items_data and len(items_data) > 0:
-                        prev_amount = items_data[0].get("plan", {}).get("amount")
-
-            # Determine change direction
-            if prev_amount is not None:
-                if current_amount > prev_amount:
-                    data["_change_direction"] = "upgrade"
-                elif current_amount < prev_amount:
-                    data["_change_direction"] = "downgrade"
-                else:
-                    data["_change_direction"] = "other"
-
-            BillingService.handle_subscription_updated(data)
-        elif event_type == "subscription_deleted":
-            amount_cents = 0
+        if event_type == "subscription_deleted":
             BillingService.handle_subscription_deleted(data)
-        elif event_type == "payment_success":
-            # Use amount_paid, not amount_due (amount_due is 0 after payment succeeds)
-            amount_cents = data.get("amount_paid", 0)
+            return 0
 
-            # Detect trial conversion: first real payment after trial.
-            # billing_reason "subscription_cycle" indicates recurring payment.
-            # If subscription was trialing and this is first real payment,
-            # it's a conversion.
-            billing_reason = data.get("billing_reason", "")
-            if billing_reason == "subscription_cycle" and amount_cents > 0:
-                # This is the first payment after trial period ended
-                data["_is_trial_conversion"] = True
+        if event_type == "payment_success":
+            return self._handle_payment_success(data)
 
-            BillingService.handle_payment_success(data)
-        elif event_type == "payment_failure":
-            amount_cents = data.get("amount_due", 0)
+        if event_type == "payment_failure":
             BillingService.handle_payment_failed(data)
-        elif event_type == "checkout_completed":
-            amount_cents = data.get("amount_total", 0)
-            BillingService.handle_checkout_completed(data)
-        elif event_type == "trial_ending":
-            amount_cents = 0
-            BillingService.handle_trial_ending(data)
-        elif event_type == "invoice_paid":
-            amount_cents = data.get("amount_paid", 0)
-            BillingService.handle_invoice_paid(data)
-        elif event_type == "payment_action_required":
-            amount_cents = data.get("amount_due", 0)
-            BillingService.handle_payment_action_required(data)
+            return data.get("amount_due", 0)
 
-        # Convert cents to dollars
-        return float(amount_cents) / 100.0
+        if event_type == "checkout_completed":
+            BillingService.handle_checkout_completed(data)
+            return data.get("amount_total", 0)
+
+        if event_type == "trial_ending":
+            BillingService.handle_trial_ending(data)
+            return 0
+
+        if event_type == "invoice_paid":
+            BillingService.handle_invoice_paid(data)
+            return data.get("amount_paid", 0)
+
+        if event_type == "payment_action_required":
+            BillingService.handle_payment_action_required(data)
+            return data.get("amount_due", 0)
+
+        return 0
+
+    def _handle_subscription_updated(self, data: dict[str, Any]) -> int:
+        """Handle subscription_updated event with change detection.
+
+        Args:
+            data: Event data dictionary (mutated with _change_direction).
+
+        Returns:
+            Current plan amount in cents.
+        """
+        from webhooks.services.billing import BillingService
+
+        current_amount = data.get("plan", {}).get("amount", 0)
+        prev_amount = self._get_previous_plan_amount(data)
+        change_direction = self._detect_change_direction(current_amount, prev_amount)
+
+        if change_direction:
+            data["_change_direction"] = change_direction
+
+        BillingService.handle_subscription_updated(data)
+        return current_amount
+
+    def _handle_payment_success(self, data: dict[str, Any]) -> int:
+        """Handle payment_success event with trial conversion detection.
+
+        Args:
+            data: Event data dictionary (mutated with _is_trial_conversion).
+
+        Returns:
+            Amount paid in cents.
+        """
+        from webhooks.services.billing import BillingService
+
+        # Use amount_paid, not amount_due (amount_due is 0 after payment succeeds)
+        amount_cents = data.get("amount_paid", 0)
+
+        # Detect trial conversion: first real payment after trial.
+        # billing_reason "subscription_cycle" indicates recurring payment.
+        billing_reason = data.get("billing_reason", "")
+        if billing_reason == "subscription_cycle" and amount_cents > 0:
+            data["_is_trial_conversion"] = True
+
+        BillingService.handle_payment_success(data)
+        return amount_cents
 
     def _build_stripe_event_data(
         self,
