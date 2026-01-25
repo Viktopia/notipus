@@ -10,11 +10,16 @@ from typing import Any, ClassVar
 
 import stripe
 from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpRequest
 from plugins.base import PluginCapability, PluginMetadata, PluginType
 from plugins.sources.base import BaseSourcePlugin, InvalidDataError
 
 logger = logging.getLogger(__name__)
+
+# Cache key prefix and TTL for customer email lookup
+CUSTOMER_EMAIL_CACHE_PREFIX = "stripe_customer_email:"
+CUSTOMER_EMAIL_CACHE_TTL = 3600  # 1 hour
 
 
 class StripeSourcePlugin(BaseSourcePlugin):
@@ -465,6 +470,12 @@ class StripeSourcePlugin(BaseSourcePlugin):
             # Store webhook data for customer lookup
             self._current_webhook_data = data_dict
 
+            # Cache customer email from invoice events for subscription event lookup
+            # Invoice events have customer_email, subscription events don't
+            customer_email = data_dict.get("customer_email")
+            if customer_id and customer_email:
+                self._cache_customer_email(customer_id, customer_email)
+
             # Build and return event data
             return self._build_stripe_event_data(
                 event_type, customer_id, data_dict, amount, idempotency_key
@@ -480,13 +491,16 @@ class StripeSourcePlugin(BaseSourcePlugin):
         API key - we only receive webhooks. Customer data must be extracted
         from the webhook payload itself.
 
+        For subscription events that lack customer_email, we look up the
+        email from cache (populated by invoice events for the same customer).
+
         Args:
-            customer_id: The Stripe customer identifier (unused, kept for interface).
+            customer_id: The Stripe customer identifier, used for cache lookup.
 
         Returns:
             Dictionary with customer data including:
             - company_name: Empty (not in webhook payload)
-            - email: Customer email from webhook
+            - email: Customer email from webhook or cache
             - first_name: First part of customer name
             - last_name: Last part of customer name
         """
@@ -496,8 +510,13 @@ class StripeSourcePlugin(BaseSourcePlugin):
 
         data = self._current_webhook_data
 
-        # Extract email - available on invoices, subscriptions, etc.
+        # Extract email - available on invoices but NOT on subscription events
         email = data.get("customer_email") or ""
+
+        # If no email in webhook data, try to get it from cache
+        # (cached from invoice events for the same customer)
+        if not email and customer_id:
+            email = self._get_cached_customer_email(customer_id)
 
         # Extract name - often null in Stripe but check anyway
         name = data.get("customer_name") or ""
@@ -543,3 +562,45 @@ class StripeSourcePlugin(BaseSourcePlugin):
         if len(parts) == 1:
             return parts[0], ""
         return parts[0], parts[1]
+
+    def _cache_customer_email(self, customer_id: str, email: str) -> None:
+        """Cache customer email for lookup by subscription events.
+
+        Invoice events include customer_email, but subscription events don't.
+        We cache the email from invoice events so subscription events can
+        look it up by customer ID.
+
+        Args:
+            customer_id: Stripe customer ID (e.g., cus_xxx).
+            email: Customer email address.
+        """
+        if not customer_id or not email:
+            return
+        try:
+            cache_key = f"{CUSTOMER_EMAIL_CACHE_PREFIX}{customer_id}"
+            cache.set(cache_key, email, timeout=CUSTOMER_EMAIL_CACHE_TTL)
+            logger.debug(f"Cached customer email for {customer_id}")
+        except Exception as e:
+            # Don't fail webhook processing if caching fails
+            logger.warning(f"Failed to cache customer email: {e}")
+
+    def _get_cached_customer_email(self, customer_id: str) -> str:
+        """Retrieve cached customer email by customer ID.
+
+        Args:
+            customer_id: Stripe customer ID (e.g., cus_xxx).
+
+        Returns:
+            Cached email address, or empty string if not found.
+        """
+        if not customer_id:
+            return ""
+        try:
+            cache_key = f"{CUSTOMER_EMAIL_CACHE_PREFIX}{customer_id}"
+            email = cache.get(cache_key)
+            if email:
+                logger.debug(f"Found cached email for {customer_id}")
+                return str(email)
+        except Exception as e:
+            logger.warning(f"Failed to get cached customer email: {e}")
+        return ""

@@ -265,10 +265,10 @@ def test_process_event_rich_returns_dict() -> None:
     assert isinstance(result["blocks"], list)
 
 
-def test_display_name_fallback_to_email_domain() -> None:
-    """Test display name falls back to email domain for business emails.
+def test_display_name_fallback_to_email() -> None:
+    """Test display name falls back to full email address.
 
-    When company and name are empty, should extract domain from email.
+    When company and name are empty, should use full email address.
     """
     processor = EventProcessor()
 
@@ -291,13 +291,13 @@ def test_display_name_fallback_to_email_domain() -> None:
     }
 
     notification = processor.build_rich_notification(event_data, customer_data)
-    assert "Techstartup" in notification.headline
+    assert "billing@techstartup.io" in notification.headline
 
 
 def test_display_name_ignores_individual() -> None:
     """Test that 'Individual' company name is ignored.
 
-    Should fall back to other fields when company is 'Individual'.
+    Should fall back to email when company is 'Individual'.
     """
     processor = EventProcessor()
 
@@ -321,4 +321,4 @@ def test_display_name_ignores_individual() -> None:
 
     notification = processor.build_rich_notification(event_data, customer_data)
     assert "Individual" not in notification.headline
-    assert "Enterprise" in notification.headline
+    assert "billing@enterprise.com" in notification.headline

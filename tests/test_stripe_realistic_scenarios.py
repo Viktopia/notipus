@@ -548,12 +548,12 @@ class TestDisplayNameInRichNotification:
 
         assert "John Doe" in notification.headline
 
-    def test_business_email_domain_in_headline(
+    def test_business_email_in_headline(
         self,
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that business email domain is extracted when no name/company."""
+        """Test that full email is used when no name/company available."""
         customer_data = {
             "email": "billing@techstartup.io",
             "first_name": "",
@@ -565,14 +565,14 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "Techstartup" in notification.headline
+        assert "billing@techstartup.io" in notification.headline
 
-    def test_gmail_username_in_headline(
+    def test_gmail_email_in_headline(
         self,
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that Gmail username is used as fallback."""
+        """Test that full email is used for free email providers too."""
         customer_data = {
             "email": "cooluser123@gmail.com",
             "first_name": "",
@@ -584,7 +584,7 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "cooluser123" in notification.headline
+        assert "cooluser123@gmail.com" in notification.headline
 
     def test_individual_ignored_in_headline(
         self,
@@ -604,7 +604,7 @@ class TestDisplayNameInRichNotification:
         )
 
         assert "Individual" not in notification.headline
-        assert "Enterprise" in notification.headline
+        assert "someone@enterprise.com" in notification.headline
 
 
 class TestWebhookCustomerDataExtraction:
@@ -713,6 +713,77 @@ class TestWebhookCustomerDataExtraction:
 
         result = stripe_plugin._extract_idempotency_key(mock_event)
         assert result == "dict-key-67890"
+
+    def test_cache_customer_email_from_invoice(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that customer email is cached from invoice events."""
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            stripe_plugin._cache_customer_email("cus_test123", "test@example.com")
+
+            mock_cache.set.assert_called_once()
+            call_args = mock_cache.set.call_args
+            assert call_args[0][0] == "stripe_customer_email:cus_test123"
+            assert call_args[0][1] == "test@example.com"
+
+    def test_get_cached_customer_email(self, stripe_plugin: StripeSourcePlugin) -> None:
+        """Test that cached customer email is retrieved."""
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            mock_cache.get.return_value = "cached@example.com"
+
+            result = stripe_plugin._get_cached_customer_email("cus_test123")
+
+            assert result == "cached@example.com"
+            mock_cache.get.assert_called_once_with("stripe_customer_email:cus_test123")
+
+    def test_get_customer_data_uses_cached_email_for_subscription(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that subscription events use cached email when not in payload.
+
+        Subscription events don't include customer_email, but invoice events do.
+        We cache the email from invoice events and use it for subscriptions.
+        """
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            mock_cache.get.return_value = "cached@company.com"
+
+            # Simulate subscription webhook data (no customer_email)
+            stripe_plugin._current_webhook_data = {
+                "id": "sub_test123",
+                "customer": "cus_test123",
+                "plan": {"amount": 2660},
+                # Note: no customer_email field (subscriptions don't have it)
+            }
+
+            customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+            # Should have looked up cached email
+            mock_cache.get.assert_called_once_with("stripe_customer_email:cus_test123")
+            assert customer_data["email"] == "cached@company.com"
+
+    def test_get_customer_data_prefers_webhook_email_over_cache(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that webhook email takes precedence over cached email.
+
+        When the webhook payload contains customer_email, we should use it
+        instead of looking up the cache.
+        """
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            mock_cache.get.return_value = "cached@old.com"
+
+            # Simulate invoice webhook data (has customer_email)
+            stripe_plugin._current_webhook_data = {
+                "id": "in_test123",
+                "customer": "cus_test123",
+                "customer_email": "invoice@new.com",
+            }
+
+            customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+            # Should NOT have looked up cache since webhook has email
+            mock_cache.get.assert_not_called()
+            assert customer_data["email"] == "invoice@new.com"
 
 
 class TestPaymentFailureNotFiltered:

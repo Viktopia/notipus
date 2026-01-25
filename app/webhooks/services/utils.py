@@ -6,8 +6,6 @@ to avoid code duplication.
 
 from typing import Any
 
-from core.utils.email_domain import is_free_email_provider
-
 
 def get_display_name(customer_data: dict[str, Any]) -> str:
     """Get display name from customer data with smart fallbacks.
@@ -15,9 +13,8 @@ def get_display_name(customer_data: dict[str, Any]) -> str:
     Priority order:
     1. company_name or company field
     2. Customer's full name (first + last)
-    3. Email domain (capitalized) for business emails
-    4. Email username for free email providers
-    5. "Customer" as last resort
+    3. Full email address
+    4. "Customer" as last resort
 
     Args:
         customer_data: Customer data dictionary.
@@ -36,17 +33,9 @@ def get_display_name(customer_data: dict[str, Any]) -> str:
     if first_name or last_name:
         return f"{first_name} {last_name}".strip()
 
-    # Try email domain or username
+    # Use full email address as fallback
     email = customer_data.get("email", "")
     if email and "@" in email:
-        username, domain = email.split("@", 1)
-        # For business emails, use capitalized domain name
-        if not is_free_email_provider(domain):
-            # Extract company name from domain (e.g., "acme.com" -> "Acme")
-            domain_parts = domain.split(".")
-            if domain_parts:
-                return domain_parts[0].title()
-        # For free email providers, use the username
-        return username
+        return email
 
     return "Customer"
