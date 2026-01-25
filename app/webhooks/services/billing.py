@@ -5,11 +5,24 @@ and updates workspace subscription status accordingly.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from core.models import Workspace
+from core.services.stripe import StripeAPI
 
 logger = logging.getLogger(__name__)
+
+# Map Stripe statuses to our internal statuses
+STRIPE_STATUS_MAPPING: dict[str, str] = {
+    "active": "active",
+    "trialing": "trial",
+    "past_due": "past_due",
+    "canceled": "cancelled",
+    "unpaid": "past_due",
+    "incomplete": "trial",
+    "incomplete_expired": "cancelled",
+}
 
 
 class BillingService:
@@ -18,6 +31,109 @@ class BillingService:
     Provides static methods for processing various subscription and
     payment events and updating workspace records.
     """
+
+    @staticmethod
+    def _get_active_subscription(subscriptions: list[dict[str, Any]]) -> dict[str, Any]:
+        """Get the most relevant subscription from a list.
+
+        Prefers active/trialing subscriptions over cancelled ones.
+
+        Args:
+            subscriptions: List of subscription dictionaries.
+
+        Returns:
+            The most relevant subscription dictionary.
+        """
+        for sub in subscriptions:
+            if sub["status"] in ("active", "trialing", "past_due"):
+                return sub
+        return subscriptions[0]
+
+    @staticmethod
+    def _extract_plan_name_from_subscription(
+        subscription: dict[str, Any],
+    ) -> str | None:
+        """Extract plan name from subscription items.
+
+        Args:
+            subscription: Subscription dictionary with items.
+
+        Returns:
+            Plan name string or None.
+        """
+        if not subscription.get("items"):
+            return None
+
+        first_item = subscription["items"][0]
+        product_name = first_item.get("product_name", "")
+        if not product_name:
+            return None
+
+        # Convert "Notipus Pro Plan" to "pro"
+        return product_name.lower().replace("notipus ", "").replace(" plan", "").strip()
+
+    @staticmethod
+    def sync_workspace_from_stripe(customer_id: str) -> bool:
+        """Sync workspace subscription state from Stripe.
+
+        Fetches the current subscription state directly from Stripe API
+        and updates the workspace. This ensures we have accurate state
+        even if webhooks were missed or processed out of order.
+
+        Args:
+            customer_id: The Stripe customer ID.
+
+        Returns:
+            True if sync was successful, False otherwise.
+        """
+        try:
+            workspace = Workspace.objects.filter(stripe_customer_id=customer_id).first()
+
+            if not workspace:
+                logger.warning(
+                    f"No workspace found for customer {customer_id} during sync"
+                )
+                return False
+
+            stripe_api = StripeAPI()
+            subscriptions = stripe_api.get_customer_subscriptions(
+                customer_id, status="all"
+            )
+
+            if not subscriptions:
+                logger.info(f"No subscriptions found for customer {customer_id}")
+                return True
+
+            active_sub = BillingService._get_active_subscription(subscriptions)
+            stripe_status = active_sub.get("status", "active")
+            internal_status = STRIPE_STATUS_MAPPING.get(stripe_status, "active")
+            plan_name = BillingService._extract_plan_name_from_subscription(active_sub)
+
+            # Build update data
+            update_data: dict[str, Any] = {"subscription_status": internal_status}
+
+            if plan_name:
+                update_data["subscription_plan"] = plan_name
+
+            if active_sub.get("current_period_end"):
+                update_data["billing_cycle_anchor"] = active_sub["current_period_end"]
+
+            if stripe_status == "trialing" and active_sub.get("current_period_end"):
+                update_data["trial_end_date"] = datetime.fromtimestamp(
+                    active_sub["current_period_end"], tz=timezone.utc
+                )
+
+            Workspace.objects.filter(id=workspace.id).update(**update_data)
+
+            logger.info(
+                f"Synced workspace {workspace.name} from Stripe: "
+                f"status={internal_status}, plan={plan_name}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Error syncing workspace from Stripe: {e!s}")
+            return False
 
     @staticmethod
     def _get_customer_id(data: dict[str, Any], data_type: str) -> str | None:
@@ -96,6 +212,8 @@ class BillingService:
                 logger.info(
                     f"Updated subscription for customer {customer_id} to plan {plan_id}"
                 )
+                # Verify/sync full state from Stripe (catches any drift)
+                BillingService.sync_workspace_from_stripe(customer_id)
             else:
                 logger.warning(f"No workspace found for customer {customer_id}")
 
@@ -118,16 +236,7 @@ class BillingService:
             status = subscription.get("status", "active")
 
             # Map Stripe statuses to our internal statuses
-            status_mapping = {
-                "active": "active",
-                "trialing": "trial",
-                "past_due": "past_due",
-                "canceled": "cancelled",
-                "unpaid": "past_due",
-                "incomplete": "trial",
-                "incomplete_expired": "cancelled",
-            }
-            internal_status = status_mapping.get(status, "active")
+            internal_status = STRIPE_STATUS_MAPPING.get(status, "active")
 
             update_data: dict[str, Any] = {"subscription_status": internal_status}
 
@@ -151,6 +260,8 @@ class BillingService:
                     f"Updated subscription status to {internal_status} "
                     f"for customer {customer_id}"
                 )
+                # Verify/sync full state from Stripe (catches any drift)
+                BillingService.sync_workspace_from_stripe(customer_id)
             else:
                 logger.warning(f"No workspace found for customer {customer_id}")
 
@@ -293,6 +404,8 @@ class BillingService:
                     f"Checkout completed for customer {customer_id}, "
                     f"subscription: {subscription_id}, plan: {plan_name}"
                 )
+                # Verify/sync full state from Stripe (catches any drift)
+                BillingService.sync_workspace_from_stripe(customer_id)
             else:
                 logger.warning(
                     f"No workspace found for checkout session. "
