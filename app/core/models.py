@@ -558,7 +558,7 @@ class Company(models.Model):
         from django.conf import settings
         from django.urls import reverse
 
-        url = reverse("company-logo", kwargs={"domain": self.domain})
+        url = reverse("core:company-logo", kwargs={"domain": self.domain})
 
         if request:
             return request.build_absolute_uri(url)
