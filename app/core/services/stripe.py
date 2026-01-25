@@ -471,7 +471,9 @@ class StripeAPI:
 
             params: dict[str, Any] = {
                 "customer": customer_id,
-                "expand": ["data.items.data.price.product"],
+                # Note: Can't expand data.items.data.price.product (5 levels > 4 max)
+                # Expand only to price level, fetch product separately if needed
+                "expand": ["data.items.data.price"],
             }
 
             if status != "all":

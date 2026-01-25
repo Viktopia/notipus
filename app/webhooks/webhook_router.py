@@ -488,9 +488,21 @@ def billing_stripe_webhook(request: HttpRequest) -> JsonResponse:
         from core.models import GlobalBillingIntegration
         from plugins.sources.stripe import StripeSourcePlugin
 
-        billing_integration = get_object_or_404(
-            GlobalBillingIntegration, integration_type="stripe_billing", is_active=True
-        )
+        billing_integration = GlobalBillingIntegration.objects.filter(
+            integration_type="stripe_billing", is_active=True
+        ).first()
+
+        if not billing_integration:
+            # Return 200 to acknowledge receipt - don't trigger Stripe retries
+            # Log error so we know configuration is missing
+            logger.error(
+                "GlobalBillingIntegration not configured for stripe_billing. "
+                "Create record with integration_type='stripe_billing', is_active=True."
+            )
+            return JsonResponse(
+                {"status": "error", "message": "Billing integration not configured"},
+                status=200,  # 200 to prevent Stripe retries
+            )
 
         provider = StripeSourcePlugin(webhook_secret=billing_integration.webhook_secret)
 
@@ -498,5 +510,8 @@ def billing_stripe_webhook(request: HttpRequest) -> JsonResponse:
 
     except Exception as e:
         logger.error(f"Error in billing Stripe webhook: {str(e)}", exc_info=True)
-        error_response = create_error_response(e, 500)
-        return JsonResponse(error_response, status=500)
+        # Return 200 to acknowledge receipt - prevents infinite retries
+        return JsonResponse(
+            {"status": "error", "message": "Internal error processing webhook"},
+            status=200,
+        )
