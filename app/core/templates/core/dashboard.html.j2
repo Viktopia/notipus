@@ -349,7 +349,7 @@
                                                     {% if activity.type == "payment" %}
                                                         ${{ activity.amount|floatformat:2|intcomma }} {{ activity.currency|upper }} • {{ activity.provider|title }}
                                                     {% else %}
-                                                        Order #{{ activity.order_number or activity.external_id }} • ${{ activity.amount|floatformat:2|intcomma }} {{ activity.currency|upper }}
+                                                        Order #{{ activity.order_number|default:activity.external_id }} • ${{ activity.amount|floatformat:2|intcomma }} {{ activity.currency|upper }}
                                                     {% endif %}
                                                 </p>
                                             </div>
