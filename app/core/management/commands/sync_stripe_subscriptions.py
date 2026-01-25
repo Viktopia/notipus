@@ -6,6 +6,7 @@ corresponding workspace billing state. Use for initial sync or recovery.
 
 import logging
 from argparse import ArgumentParser
+from typing import Any
 
 import stripe
 from core.models import Workspace
@@ -134,13 +135,29 @@ class Command(BaseCommand):
 
         self._print_summary(results, dry_run)
 
+    def _safe_get(self, obj: Any, key: str) -> Any:
+        """Safely get attribute from dict-like or object."""
+        if obj is None:
+            return None
+        if hasattr(obj, "get"):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
     def _get_product_name(self, sub: stripe.Subscription) -> str | None:
         """Extract product name from subscription."""
-        if not sub.items or not sub.items.data:
+        # Use safe access - handles both dict-like and object access
+        items = self._safe_get(sub, "items")
+        items_data = self._safe_get(items, "data")
+
+        if not items_data or len(items_data) == 0:
             return None
 
-        product = sub.items.data[0].price.product
+        first_item = items_data[0]
+        price = self._safe_get(first_item, "price")
+        product = self._safe_get(price, "product")
 
+        if product is None:
+            return None
         if isinstance(product, stripe.Product):
             return product.name
         if isinstance(product, str):
@@ -148,7 +165,7 @@ class Command(BaseCommand):
                 return stripe.Product.retrieve(product).name
             except stripe.error.StripeError:
                 return None
-        return None
+        return self._safe_get(product, "name")
 
     def _normalize_plan_name(self, product_name: str | None) -> str | None:
         """Convert product name to internal plan name."""
