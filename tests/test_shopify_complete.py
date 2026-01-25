@@ -173,7 +173,7 @@ class TestShopifySourcePlugin:
         """Test basic event data building"""
         event_type = "payment_success"
         customer_id = "12345"
-        data = {"created_at": "2024-01-01T00:00:00Z"}
+        data = {"id": 789012, "created_at": "2024-01-01T00:00:00Z"}
         topic = "orders/paid"
 
         result = provider._build_shopify_event_data(
@@ -185,6 +185,28 @@ class TestShopifySourcePlugin:
         assert result["provider"] == "shopify"
         assert result["status"] == "success"
         assert result["created_at"] == "2024-01-01T00:00:00Z"
+
+    def test_build_shopify_event_data_has_external_id(self, provider):
+        """Test that event data includes external_id for deduplication."""
+        data = {"id": 820982911946154508, "created_at": "2024-01-01T00:00:00Z"}
+
+        result = provider._build_shopify_event_data(
+            "order_created", "12345", data, "orders/create"
+        )
+
+        assert "external_id" in result
+        assert result["external_id"] == "820982911946154508"
+
+    def test_build_shopify_event_data_external_id_empty_when_missing(self, provider):
+        """Test that external_id defaults to empty string when id is missing."""
+        data = {"created_at": "2024-01-01T00:00:00Z"}
+
+        result = provider._build_shopify_event_data(
+            "order_created", "12345", data, "orders/create"
+        )
+
+        assert "external_id" in result
+        assert result["external_id"] == ""
 
     def test_build_shopify_event_data_with_amount(self, provider):
         """Test event data building with amount"""
@@ -528,6 +550,24 @@ class TestFulfillmentWebhookParsing:
         assert result["metadata"]["order_number"] == "1001"
         assert result["metadata"]["fulfillment_status"] == "success"
         assert len(result["metadata"]["line_items"]) == 1
+
+    def test_build_fulfillment_event_data_has_external_id(
+        self, provider: ShopifySourcePlugin
+    ):
+        """Test that fulfillment event data includes external_id for deduplication."""
+        data = {
+            "id": 4567890123,
+            "order_id": 789,
+            "status": "success",
+            "created_at": "2025-01-24T10:00:00Z",
+        }
+
+        result = provider._build_fulfillment_event_data(
+            "fulfillment_created", "customer_123", data, "fulfillments/create"
+        )
+
+        assert "external_id" in result
+        assert result["external_id"] == "4567890123"
 
     def test_extract_customer_id_from_fulfillment_with_customer(
         self, provider: ShopifySourcePlugin

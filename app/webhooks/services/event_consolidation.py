@@ -58,12 +58,14 @@ class EventConsolidationService:
     # Events that suppress other events when processed first
     # Format: {primary_event: {events_to_suppress}}
     PRIMARY_EVENTS: ClassVar[dict[str, set[str]]] = {
-        # New subscription suppresses the payment notifications that follow
+        # Stripe: New subscription suppresses the payment notifications that follow
         "subscription_created": {"payment_success", "invoice_paid"},
-        # Subscription deletion suppresses final invoice notification
+        # Stripe: Subscription deletion suppresses final invoice notification
         "subscription_deleted": {"invoice_paid"},
-        # Checkout completion suppresses payment notifications
+        # Stripe: Checkout completion suppresses payment notifications
         "checkout_completed": {"payment_success", "invoice_paid"},
+        # Shopify: Order creation suppresses the payment notification that follows
+        "order_created": {"payment_success"},
     }
 
     # Events that should never be suppressed (always important)

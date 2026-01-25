@@ -325,6 +325,43 @@ class TestEventConsolidationService:
 
         assert result is False
 
+    def test_shopify_order_created_suppresses_payment_success(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that Shopify order_created suppresses payment_success.
+
+        When a Shopify order is placed, both orders/create and orders/paid webhooks
+        fire. The order_created event should suppress the subsequent payment_success
+        to prevent duplicate notifications.
+        """
+        # First, process order_created (from orders/create webhook)
+        service.should_send_notification(
+            event_type="order_created",
+            customer_id="shopify_cus_123",
+            workspace_id="ws_456",
+        )
+
+        # Now payment_success (from orders/paid webhook) should be suppressed
+        result = service.should_send_notification(
+            event_type="payment_success",
+            customer_id="shopify_cus_123",
+            workspace_id="ws_456",
+        )
+
+        assert result is False
+
+    def test_shopify_order_created_allows_notification(
+        self, service: EventConsolidationService, mock_cache
+    ) -> None:
+        """Test that Shopify order_created allows its own notification."""
+        result = service.should_send_notification(
+            event_type="order_created",
+            customer_id="shopify_cus_123",
+            workspace_id="ws_456",
+        )
+
+        assert result is True
+
 
 class TestZeroAmountFiltering:
     """Test zero-amount payment filtering functionality."""
@@ -609,3 +646,10 @@ class TestEventConsolidationConstants:
         assert "subscription_created" in primary
         assert "payment_success" in primary["subscription_created"]
         assert "invoice_paid" in primary["subscription_created"]
+
+    def test_shopify_order_created_in_primary_events(self) -> None:
+        """Test that Shopify order_created is defined as a primary event."""
+        primary = EventConsolidationService.PRIMARY_EVENTS
+
+        assert "order_created" in primary
+        assert "payment_success" in primary["order_created"]
