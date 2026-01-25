@@ -144,7 +144,7 @@ class DashboardService:
                     "status": record.get("status"),
                     "amount": record.get("amount"),
                     "currency": record.get("currency"),
-                    "timestamp": timestamp,
+                    "processed_at": timestamp,
                     "external_id": record.get("external_id"),
                     "customer_id": record.get("customer_id"),
                 }
