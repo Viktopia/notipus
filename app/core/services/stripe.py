@@ -483,32 +483,42 @@ class StripeAPI:
 
             result = []
             for sub in subscriptions.data:
+                # Use getattr with defaults for attributes that may be missing
+                # on canceled/incomplete subscriptions
                 sub_data = {
                     "id": sub.id,
                     "status": sub.status,
-                    "current_period_start": sub.current_period_start,
-                    "current_period_end": sub.current_period_end,
-                    "cancel_at_period_end": sub.cancel_at_period_end,
-                    "canceled_at": sub.canceled_at,
+                    "current_period_start": getattr(sub, "current_period_start", None),
+                    "current_period_end": getattr(sub, "current_period_end", None),
+                    "cancel_at_period_end": getattr(sub, "cancel_at_period_end", False),
+                    "canceled_at": getattr(sub, "canceled_at", None),
                     "items": [],
                 }
 
                 # Extract subscription items
-                for item in sub.items.data:
-                    price = item.price
-                    product = price.product
+                items = getattr(sub, "items", None)
+                items_data = getattr(items, "data", []) if items else []
+
+                for item in items_data:
+                    price = getattr(item, "price", None)
+                    if not price:
+                        continue
+
+                    product = getattr(price, "product", None)
                     if isinstance(product, str):
                         product_name = product
+                    elif product:
+                        product_name = getattr(product, "name", product)
                     else:
-                        product_name = product.name
+                        product_name = None
 
                     sub_data["items"].append(
                         {
-                            "price_id": price.id,
+                            "price_id": getattr(price, "id", None),
                             "product_name": product_name,
-                            "unit_amount": price.unit_amount,
-                            "currency": price.currency,
-                            "quantity": item.quantity,
+                            "unit_amount": getattr(price, "unit_amount", None),
+                            "currency": getattr(price, "currency", None),
+                            "quantity": getattr(item, "quantity", 1),
                         }
                     )
 
