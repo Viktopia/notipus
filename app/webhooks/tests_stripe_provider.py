@@ -165,6 +165,7 @@ class StripeProviderTest(TestCase):
             "created_at": 1234567890,
             "currency": "USD",
             "amount": 20.00,
+            "metadata": {},
         }
 
         self.assertEqual(result, expected)
@@ -381,6 +382,8 @@ class StripeProviderTest(TestCase):
             "status": "succeeded",
             "created": 1234567890,
         }
+        # Set previous_attributes to None to avoid item assignment error
+        mock_event.data.previous_attributes = None
         mock_construct_event.return_value = mock_event
 
         request = self._create_mock_request(
@@ -399,6 +402,7 @@ class StripeProviderTest(TestCase):
             "created_at": 1234567890,
             "currency": "USD",
             "amount": 20.00,
+            "metadata": {},
         }
 
         self.assertEqual(result, expected)
@@ -450,3 +454,128 @@ class StripeProviderTest(TestCase):
         result = self.provider.parse_webhook(request)
 
         self.assertIsNone(result)
+
+    def test_handle_stripe_billing_trial_conversion_detected(self) -> None:
+        """Test that trial conversion is detected for subscription_cycle payments."""
+        data = {
+            "amount_paid": 2660,  # $26.60
+            "billing_reason": "subscription_cycle",
+        }
+
+        self.provider._handle_stripe_billing("payment_success", data)
+
+        self.assertTrue(data.get("_is_trial_conversion"))
+
+    def test_handle_stripe_billing_no_trial_conversion_for_zero_amount(self) -> None:
+        """Test that trial conversion is not set for $0 payments."""
+        data = {
+            "amount_paid": 0,
+            "billing_reason": "subscription_cycle",
+        }
+
+        self.provider._handle_stripe_billing("payment_success", data)
+
+        self.assertIsNone(data.get("_is_trial_conversion"))
+
+    def test_handle_stripe_billing_no_trial_conversion_for_manual_payment(self) -> None:
+        """Test that trial conversion is not set for manual billing."""
+        data = {
+            "amount_paid": 2660,
+            "billing_reason": "manual",
+        }
+
+        self.provider._handle_stripe_billing("payment_success", data)
+
+        self.assertIsNone(data.get("_is_trial_conversion"))
+
+    def test_handle_stripe_billing_upgrade_detected(self) -> None:
+        """Test that subscription upgrade is detected from plan amount change."""
+        data = {
+            "plan": {"amount": 5000},  # $50/mo current
+            "_previous_attributes": {
+                "plan": {"amount": 2500},  # $25/mo previous
+            },
+        }
+
+        self.provider._handle_stripe_billing("subscription_updated", data)
+
+        self.assertEqual(data.get("_change_direction"), "upgrade")
+
+    def test_handle_stripe_billing_downgrade_detected(self) -> None:
+        """Test that subscription downgrade is detected from plan amount change."""
+        data = {
+            "plan": {"amount": 2500},  # $25/mo current
+            "_previous_attributes": {
+                "plan": {"amount": 5000},  # $50/mo previous
+            },
+        }
+
+        self.provider._handle_stripe_billing("subscription_updated", data)
+
+        self.assertEqual(data.get("_change_direction"), "downgrade")
+
+    def test_handle_stripe_billing_same_amount_is_other(self) -> None:
+        """Test that same plan amount results in 'other' change direction."""
+        data = {
+            "plan": {"amount": 2500},
+            "_previous_attributes": {
+                "plan": {"amount": 2500},
+            },
+        }
+
+        self.provider._handle_stripe_billing("subscription_updated", data)
+
+        self.assertEqual(data.get("_change_direction"), "other")
+
+    def test_handle_stripe_billing_no_previous_attributes_no_direction(self) -> None:
+        """Test that missing previous_attributes doesn't set change direction."""
+        data = {
+            "plan": {"amount": 2500},
+        }
+
+        self.provider._handle_stripe_billing("subscription_updated", data)
+
+        self.assertIsNone(data.get("_change_direction"))
+
+    def test_build_stripe_event_data_includes_trial_conversion_metadata(self) -> None:
+        """Test that trial conversion flag is included in event metadata."""
+        data = {
+            "id": "in_123",
+            "status": "succeeded",
+            "created": 1234567890,
+            "currency": "usd",
+            "_is_trial_conversion": True,
+        }
+
+        result = self.provider._build_stripe_event_data(
+            "payment_success", "cus_123", data, 26.60
+        )
+
+        self.assertTrue(result["metadata"]["is_trial_conversion"])
+
+    def test_build_stripe_event_data_includes_change_direction_metadata(self) -> None:
+        """Test that change direction is included in event metadata."""
+        data = {
+            "id": "sub_123",
+            "status": "active",
+            "created": 1234567890,
+            "_change_direction": "upgrade",
+        }
+
+        result = self.provider._build_stripe_event_data(
+            "subscription_updated", "cus_123", data, 50.00
+        )
+
+        self.assertEqual(result["metadata"]["change_direction"], "upgrade")
+
+    def test_extract_stripe_event_info_captures_previous_attributes(self) -> None:
+        """Test that previous_attributes are captured from Stripe events."""
+        mock_event = Mock()
+        mock_event.type = "customer.subscription.updated"
+        mock_event.data.object = {"id": "sub_123", "plan": {"amount": 5000}}
+        mock_event.data.previous_attributes = {"plan": {"amount": 2500}}
+
+        event_type, data = self.provider._extract_stripe_event_info(mock_event)
+
+        self.assertEqual(event_type, "subscription_updated")
+        self.assertEqual(data["_previous_attributes"]["plan"]["amount"], 2500)

@@ -37,17 +37,17 @@ def mock_webhook_validation() -> Generator[Any, None, None]:
     """Mock webhook validation for tests.
 
     Yields:
-        Mock format_notification function.
+        Mock process_event_rich function.
     """
 
-    def mock_format_notification(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    def mock_process_event_rich(*args: Any, **kwargs: Any) -> dict[str, Any]:
         return {"blocks": [], "color": "#28a745"}
 
     with patch(
-        "webhooks.services.event_processor.EventProcessor.format_notification",
-        mock_format_notification,
+        "webhooks.services.event_processor.EventProcessor.process_event_rich",
+        mock_process_event_rich,
     ):
-        yield mock_format_notification
+        yield mock_process_event_rich
 
 
 @pytest.fixture

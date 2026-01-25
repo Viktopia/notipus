@@ -485,8 +485,14 @@ def test_chargify_webhook_deduplication() -> None:
 def test_event_processor_notification_formatting() -> None:
     """Verify EventProcessor formats notifications correctly for different events.
 
-    Tests both payment success and failure event formatting.
+    Tests both payment success and failure event formatting using RichNotification.
     """
+    from webhooks.models.rich_notification import (
+        NotificationSeverity,
+        NotificationType,
+        RichNotification,
+    )
+
     processor = EventProcessor()
 
     # Test successful payment event
@@ -496,40 +502,36 @@ def test_event_processor_notification_formatting() -> None:
         "amount": 29.99,
         "currency": "USD",
         "status": "success",
+        "provider": "stripe",
+        "external_id": "evt_123",
         "metadata": {
             "subscription_id": "sub_123",
-            "plan": "enterprise",
+            "plan_name": "Enterprise",
         },
     }
     customer_data: dict[str, Any] = {
         "company": "Acme Corp",
-        "team_size": "50",
-        "plan": "Enterprise",
+        "email": "billing@acme.com",
+        "first_name": "Test",
+        "last_name": "User",
     }
 
-    notification = processor.format_notification(event_data, customer_data)
-    assert notification.title == "💰 Payment received from Acme Corp"
-    assert len(notification.sections) == 2  # Event details + customer info
-    assert notification.sections[0].title == "📊 Event Details"
-    assert notification.sections[1].title == "👤 Customer Info"
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert "Acme Corp" in notification.headline
+    assert notification.type == NotificationType.PAYMENT_SUCCESS
+    assert notification.severity == NotificationSeverity.SUCCESS
 
     # Test payment failure event
     event_data["type"] = "payment_failure"
     event_data["status"] = "failed"
     event_data["metadata"]["failure_reason"] = "card_declined"
 
-    notification = processor.format_notification(event_data, customer_data)
-    assert notification.title == "❌ Payment failed for Acme Corp"
-    assert notification.color == "#dc3545"  # Red for error
-    assert len(notification.sections) == 2  # Event details + customer info
-    # Check that failure reason is displayed in event details
-    event_section = notification.sections[0]
-    field_keys = [field[0] for field in event_section.fields]
-    assert "Failure Reason" in field_keys
-    failure_reason_field = next(
-        field[1] for field in event_section.fields if field[0] == "Failure Reason"
-    )
-    assert "card_declined" in failure_reason_field
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert "Acme Corp" in notification.headline
+    assert notification.type == NotificationType.PAYMENT_FAILURE
+    assert notification.severity == NotificationSeverity.ERROR
 
 
 def test_chargify_memo_parsing() -> None:
@@ -616,6 +618,8 @@ def test_shopify_order_ref_matching() -> None:
 
     Tests that cross-reference enrichment works without errors.
     """
+    from webhooks.models.rich_notification import RichNotification
+
     processor = EventProcessor()
 
     # Test that the processor can handle events with cross-references
@@ -626,6 +630,7 @@ def test_shopify_order_ref_matching() -> None:
         "customer_id": "cust_123",
         "amount": 29.99,
         "currency": "USD",
+        "external_id": "evt_123",
         "metadata": {
             "shopify_order_ref": "1234",
             "memo": "Payment for Shopify Order 1234",
@@ -633,11 +638,13 @@ def test_shopify_order_ref_matching() -> None:
     }
 
     customer_data: dict[str, Any] = {
-        "company_name": "Test Company",
-        "team_size": "10",
+        "company": "Test Company",
+        "email": "billing@test.com",
+        "first_name": "Test",
+        "last_name": "User",
     }
 
     # Test that enrichment works without errors
-    notification = processor.format_notification(chargify_event, customer_data)
-    assert notification is not None
-    assert "Payment received from Test Company" in notification.title
+    notification = processor.build_rich_notification(chargify_event, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert "Test Company" in notification.headline

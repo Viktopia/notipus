@@ -143,6 +143,16 @@ class StripeSourcePlugin(BaseSourcePlugin):
         if not data:
             raise InvalidDataError("Missing data parameter")
 
+        # Capture previous_attributes for detecting changes (upgrades/downgrades)
+        # Stripe provides this for update events to show what changed
+        previous_attributes = getattr(event.data, "previous_attributes", None)
+        if previous_attributes:
+            # Convert to dict if it's a Stripe object
+            if hasattr(previous_attributes, "to_dict"):
+                data["_previous_attributes"] = previous_attributes.to_dict()
+            else:
+                data["_previous_attributes"] = dict(previous_attributes)
+
         return event_type, data
 
     def _handle_stripe_billing(self, event_type: str, data: dict[str, Any]) -> float:
@@ -165,7 +175,32 @@ class StripeSourcePlugin(BaseSourcePlugin):
             amount_cents = data.get("plan", {}).get("amount", 0)
             BillingService.handle_subscription_created(data)
         elif event_type == "subscription_updated":
-            amount_cents = data.get("plan", {}).get("amount", 0)
+            # Get current plan amount
+            current_amount = data.get("plan", {}).get("amount", 0)
+            amount_cents = current_amount
+
+            # Detect upgrade/downgrade by comparing with previous plan amount
+            prev_attrs = data.get("_previous_attributes", {})
+            prev_plan = prev_attrs.get("plan", {})
+            prev_amount = prev_plan.get("amount") if prev_plan else None
+
+            # Also check items for multi-item subscriptions
+            if prev_amount is None and "items" in prev_attrs:
+                prev_items = prev_attrs.get("items", {})
+                if isinstance(prev_items, dict) and "data" in prev_items:
+                    items_data = prev_items.get("data", [])
+                    if items_data and len(items_data) > 0:
+                        prev_amount = items_data[0].get("plan", {}).get("amount")
+
+            # Determine change direction
+            if prev_amount is not None:
+                if current_amount > prev_amount:
+                    data["_change_direction"] = "upgrade"
+                elif current_amount < prev_amount:
+                    data["_change_direction"] = "downgrade"
+                else:
+                    data["_change_direction"] = "other"
+
             BillingService.handle_subscription_updated(data)
         elif event_type == "subscription_deleted":
             amount_cents = 0
@@ -173,6 +208,16 @@ class StripeSourcePlugin(BaseSourcePlugin):
         elif event_type == "payment_success":
             # Use amount_paid, not amount_due (amount_due is 0 after payment succeeds)
             amount_cents = data.get("amount_paid", 0)
+
+            # Detect trial conversion: first real payment after trial.
+            # billing_reason "subscription_cycle" indicates recurring payment.
+            # If subscription was trialing and this is first real payment,
+            # it's a conversion.
+            billing_reason = data.get("billing_reason", "")
+            if billing_reason == "subscription_cycle" and amount_cents > 0:
+                # This is the first payment after trial period ended
+                data["_is_trial_conversion"] = True
+
             BillingService.handle_payment_success(data)
         elif event_type == "payment_failure":
             amount_cents = data.get("amount_due", 0)
@@ -211,7 +256,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
         Returns:
             Standardized event data dictionary.
         """
-        return {
+        event_data: dict[str, Any] = {
             "type": event_type,
             "customer_id": customer_id,
             "provider": self.PROVIDER_NAME,
@@ -220,7 +265,18 @@ class StripeSourcePlugin(BaseSourcePlugin):
             "created_at": data.get("created"),
             "currency": str(data.get("currency", "USD")).upper(),
             "amount": amount,
+            "metadata": {},
         }
+
+        # Add trial conversion flag if detected
+        if data.get("_is_trial_conversion"):
+            event_data["metadata"]["is_trial_conversion"] = True
+
+        # Add change direction for subscription updates (upgrade/downgrade)
+        if data.get("_change_direction"):
+            event_data["metadata"]["change_direction"] = data["_change_direction"]
+
+        return event_data
 
     def parse_webhook(
         self, request: HttpRequest, **kwargs: Any

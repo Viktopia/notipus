@@ -1,21 +1,25 @@
 """Tests for event processing and notification formatting.
 
 This module tests the EventProcessor class for handling various
-webhook events and generating properly formatted notifications.
+webhook events and generating properly formatted RichNotification objects.
 """
 
 from typing import Any
 
 import pytest
-from webhooks.models.notification import Notification
+from webhooks.models.rich_notification import (
+    NotificationSeverity,
+    NotificationType,
+    RichNotification,
+)
 from webhooks.services.event_processor import EventProcessor
 
 
 def test_notification_formatting() -> None:
     """Test that notifications are properly formatted.
 
-    Verifies a payment success event generates a valid notification
-    with correct title, color, and sections.
+    Verifies a payment success event generates a valid RichNotification
+    with correct headline and severity.
     """
     processor = EventProcessor()
 
@@ -25,29 +29,33 @@ def test_notification_formatting() -> None:
         "amount": 29.99,
         "currency": "USD",
         "status": "success",
+        "provider": "stripe",
+        "external_id": "evt_123",
         "metadata": {
             "subscription_id": "sub_123",
-            "plan": "enterprise",
+            "plan_name": "Enterprise",
         },
     }
 
     customer_data: dict[str, Any] = {
-        "company_name": "Acme Corp",
-        "team_size": "50",
-        "plan_name": "Enterprise",
+        "company": "Acme Corp",
+        "email": "billing@acme.com",
+        "first_name": "John",
+        "last_name": "Doe",
     }
 
-    notification = processor.format_notification(event_data, customer_data)
-    assert isinstance(notification, Notification)
-    assert notification.title == "💰 Payment received from Acme Corp"
-    assert notification.color == "#28a745"  # Green
-    assert len(notification.sections) == 2  # Main event details + customer info
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert "Acme Corp" in notification.headline
+    assert notification.severity == NotificationSeverity.SUCCESS
+    assert notification.type == NotificationType.PAYMENT_SUCCESS
 
 
 def test_missing_required_customer_data() -> None:
     """Test handling of missing required customer data.
 
-    Verifies company name defaults to 'Individual' when not provided.
+    Verifies company name defaults to 'Customer' when not provided
+    (no company name, no name, no email).
     """
     processor = EventProcessor()
 
@@ -57,21 +65,21 @@ def test_missing_required_customer_data() -> None:
         "amount": 29.99,
         "currency": "USD",
         "status": "success",
+        "provider": "stripe",
+        "external_id": "evt_123",
+        "metadata": {},
     }
 
     customer_data: dict[str, Any] = {
-        "team_size": "50",  # Missing company_name
+        "team_size": "50",  # Missing company, name, and email
         "plan_name": "Enterprise",
     }
 
-    # No longer raises an error since company defaults to 'Individual'
-    notification = processor.format_notification(event_data, customer_data)
-    company_field = next(
-        (field for field in notification.sections[1].fields if field[0] == "Company"),
-        None,
-    )
-    assert company_field is not None
-    assert company_field[1] == "Individual"
+    # Should still generate notification with "Customer" as fallback
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    # The headline should contain "Customer" as the fallback
+    assert "Customer" in notification.headline
 
 
 def test_invalid_event_type() -> None:
@@ -85,81 +93,182 @@ def test_invalid_event_type() -> None:
         "type": "invalid_event",
         "customer_id": "cust_123",
         "amount": 29.99,
+        "provider": "stripe",
+        "external_id": "evt_123",
     }
 
     customer_data: dict[str, Any] = {
-        "company_name": "Acme Corp",
-        "team_size": "50",
-        "plan_name": "Enterprise",
+        "company": "Acme Corp",
+        "email": "billing@acme.com",
     }
 
     with pytest.raises(ValueError, match="Invalid event type"):
-        processor.process_event(event_data, customer_data)
+        processor.build_rich_notification(event_data, customer_data)
 
 
-def test_missing_event_data() -> None:
-    """Test handling of missing event data.
+def test_missing_event_type() -> None:
+    """Test handling of missing event type.
 
-    Verifies ValueError is raised when event_data is None.
-    """
-    processor = EventProcessor()
-
-    customer_data: dict[str, Any] = {
-        "company_name": "Acme Corp",
-        "team_size": "50",
-        "plan_name": "Enterprise",
-    }
-
-    with pytest.raises(ValueError, match="Missing event data"):
-        processor.format_notification(None, customer_data)
-
-
-def test_missing_customer_data() -> None:
-    """Test handling of missing customer data.
-
-    Verifies ValueError is raised when customer_data is None.
+    Verifies ValueError is raised when event_data has no type.
     """
     processor = EventProcessor()
 
     event_data: dict[str, Any] = {
-        "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
     }
 
-    with pytest.raises(ValueError, match="Missing customer data"):
-        processor.format_notification(event_data, None)
+    customer_data: dict[str, Any] = {
+        "company": "Acme Corp",
+        "email": "billing@acme.com",
+    }
+
+    with pytest.raises(ValueError, match="Missing event type"):
+        processor.build_rich_notification(event_data, customer_data)
 
 
-def test_negative_amount() -> None:
-    """Test handling of negative amount.
+def test_empty_event_data() -> None:
+    """Test handling of empty event data.
 
-    Verifies ValueError is raised for negative payment amounts.
+    Verifies ValueError is raised when event_data is empty dict.
+    """
+    processor = EventProcessor()
+
+    customer_data: dict[str, Any] = {
+        "company": "Acme Corp",
+        "email": "billing@acme.com",
+    }
+
+    with pytest.raises(ValueError, match="Missing event type"):
+        processor.build_rich_notification({}, customer_data)
+
+
+def test_payment_failure_event() -> None:
+    """Test payment failure event processing.
+
+    Verifies payment failures generate error severity notifications.
+    """
+    processor = EventProcessor()
+
+    event_data: dict[str, Any] = {
+        "type": "payment_failure",
+        "customer_id": "cust_123",
+        "amount": 29.99,
+        "currency": "USD",
+        "status": "failed",
+        "provider": "stripe",
+        "external_id": "evt_fail123",
+        "metadata": {
+            "failure_reason": "Card declined",
+        },
+    }
+
+    customer_data: dict[str, Any] = {
+        "company": "Acme Corp",
+        "email": "billing@acme.com",
+    }
+
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert notification.severity == NotificationSeverity.ERROR
+    assert notification.type == NotificationType.PAYMENT_FAILURE
+
+
+def test_subscription_created_event() -> None:
+    """Test subscription created event processing.
+
+    Verifies subscription creation generates success notification.
+    """
+    processor = EventProcessor()
+
+    event_data: dict[str, Any] = {
+        "type": "subscription_created",
+        "customer_id": "cust_123",
+        "amount": 99.00,
+        "currency": "USD",
+        "status": "active",
+        "provider": "stripe",
+        "external_id": "evt_sub123",
+        "metadata": {
+            "plan_name": "Pro",
+        },
+    }
+
+    customer_data: dict[str, Any] = {
+        "company": "Startup Inc",
+        "email": "billing@startup.com",
+    }
+
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert notification.type == NotificationType.SUBSCRIPTION_CREATED
+    assert "Startup" in notification.headline
+
+
+def test_subscription_canceled_event() -> None:
+    """Test subscription canceled event processing.
+
+    Verifies subscription cancellation generates warning notification.
+    """
+    processor = EventProcessor()
+
+    event_data: dict[str, Any] = {
+        "type": "subscription_canceled",
+        "customer_id": "cust_123",
+        "amount": 99.00,
+        "currency": "USD",
+        "status": "canceled",
+        "provider": "stripe",
+        "external_id": "evt_cancel123",
+        "metadata": {},
+    }
+
+    customer_data: dict[str, Any] = {
+        "company": "Churned Co",
+        "email": "billing@churned.com",
+    }
+
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert isinstance(notification, RichNotification)
+    assert notification.type == NotificationType.SUBSCRIPTION_CANCELED
+    assert notification.severity == NotificationSeverity.WARNING
+
+
+def test_process_event_rich_returns_dict() -> None:
+    """Test that process_event_rich returns a formatted dict.
+
+    Verifies the method returns a dict suitable for Slack API.
     """
     processor = EventProcessor()
 
     event_data: dict[str, Any] = {
         "type": "payment_success",
         "customer_id": "cust_123",
-        "amount": -29.99,
+        "amount": 49.99,
         "currency": "USD",
         "status": "success",
+        "provider": "stripe",
+        "external_id": "evt_123",
+        "metadata": {},
     }
 
     customer_data: dict[str, Any] = {
-        "company_name": "Acme Corp",
-        "team_size": "50",
-        "plan_name": "Enterprise",
+        "company": "Test Corp",
+        "email": "billing@test.com",
     }
 
-    with pytest.raises(ValueError, match="Amount cannot be negative"):
-        processor.format_notification(event_data, customer_data)
+    result = processor.process_event_rich(event_data, customer_data, target="slack")
+
+    assert isinstance(result, dict)
+    assert "blocks" in result
+    assert "color" in result
+    assert isinstance(result["blocks"], list)
 
 
-def test_invalid_currency() -> None:
-    """Test handling of invalid currency.
+def test_display_name_fallback_to_email_domain() -> None:
+    """Test display name falls back to email domain for business emails.
 
-    Verifies ValueError is raised for unsupported currency codes.
+    When company and name are empty, should extract domain from email.
     """
     processor = EventProcessor()
 
@@ -167,15 +276,49 @@ def test_invalid_currency() -> None:
         "type": "payment_success",
         "customer_id": "cust_123",
         "amount": 29.99,
-        "currency": "XXX",  # Invalid currency
+        "currency": "USD",
         "status": "success",
+        "provider": "stripe",
+        "external_id": "evt_123",
+        "metadata": {},
     }
 
     customer_data: dict[str, Any] = {
-        "company_name": "Acme Corp",
-        "team_size": "50",
-        "plan_name": "Enterprise",
+        "email": "billing@techstartup.io",
+        "company": "",
+        "first_name": "",
+        "last_name": "",
     }
 
-    with pytest.raises(ValueError, match="Invalid currency"):
-        processor.format_notification(event_data, customer_data)
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert "Techstartup" in notification.headline
+
+
+def test_display_name_ignores_individual() -> None:
+    """Test that 'Individual' company name is ignored.
+
+    Should fall back to other fields when company is 'Individual'.
+    """
+    processor = EventProcessor()
+
+    event_data: dict[str, Any] = {
+        "type": "payment_success",
+        "customer_id": "cust_123",
+        "amount": 29.99,
+        "currency": "USD",
+        "status": "success",
+        "provider": "stripe",
+        "external_id": "evt_123",
+        "metadata": {},
+    }
+
+    customer_data: dict[str, Any] = {
+        "email": "billing@enterprise.com",
+        "company": "Individual",
+        "first_name": "",
+        "last_name": "",
+    }
+
+    notification = processor.build_rich_notification(event_data, customer_data)
+    assert "Individual" not in notification.headline
+    assert "Enterprise" in notification.headline

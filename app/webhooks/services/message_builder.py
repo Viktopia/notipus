@@ -11,6 +11,8 @@ from typing import Any
 
 from core.models import Company
 
+from .utils import get_display_name
+
 
 class ProviderType(Enum):
     """Provider type classification."""
@@ -286,9 +288,7 @@ class MessageBuilder:
         self, ctx: MessageContext, customer_data: dict[str, Any]
     ) -> dict[str, Any]:
         """Build header - same structure for all providers."""
-        company_name = customer_data.get("company_name") or customer_data.get(
-            "company", "Customer"
-        )
+        company_name = get_display_name(customer_data)
         emoji, title = self._get_header_text(ctx, company_name)
         return self.blocks.header(title, emoji)
 

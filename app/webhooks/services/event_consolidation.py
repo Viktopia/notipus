@@ -37,13 +37,17 @@ class EventConsolidationService:
         CONSOLIDATION_WINDOW_SECONDS: Time window for event consolidation.
         DEDUP_WINDOW_MULTIPLIER: Multiplier for deduplication window vs consolidation.
         PRIMARY_EVENTS: Mapping of primary events to events they suppress.
+        NEVER_SUPPRESS: Events that should always send notifications.
+        ZERO_AMOUNT_FILTER_EVENTS: Payment events filtered when amount is $0.
     """
 
-    # Time window (in seconds) during which related events are consolidated
-    CONSOLIDATION_WINDOW_SECONDS: ClassVar[int] = 10
+    # Time window (in seconds) during which related events are consolidated.
+    # 5 minutes to handle Stripe's delayed event delivery (events can
+    # arrive 3-4+ minutes apart for the same user action).
+    CONSOLIDATION_WINDOW_SECONDS: ClassVar[int] = 300
 
     # Deduplication window is longer than consolidation to catch delayed retries
-    # Multiplier of 6 means 60 seconds for dedup vs 10 seconds for consolidation
+    # Multiplier of 6 means 30 minutes for dedup vs 5 minutes for consolidation
     DEDUP_WINDOW_MULTIPLIER: ClassVar[int] = 6
 
     # Events that suppress other events when processed first
@@ -62,6 +66,12 @@ class EventConsolidationService:
         "payment_failure",
         "payment_action_required",
         "trial_ending",
+    }
+
+    # Payment events that should be suppressed when amount is $0 (trial invoices)
+    ZERO_AMOUNT_FILTER_EVENTS: ClassVar[set[str]] = {
+        "payment_success",
+        "invoice_paid",
     }
 
     def __init__(self) -> None:
@@ -100,22 +110,34 @@ class EventConsolidationService:
         event_type: str,
         customer_id: str,
         workspace_id: str,
+        amount: float | None = None,
     ) -> bool:
         """Check if notification should be sent or suppressed.
 
         This method:
-        1. Never suppresses critical events (payment failures, etc.)
-        2. Checks if this event type should be suppressed due to a recent primary event
-        3. If this is a primary event, marks secondary events for suppression
+        1. Filters out $0 payment events (trial invoices, etc.)
+        2. Never suppresses critical events (payment failures, etc.)
+        3. Checks if this event type should be suppressed due to a recent primary event
+        4. If this is a primary event, marks secondary events for suppression
 
         Args:
             event_type: The normalized event type (e.g., "subscription_created").
             customer_id: The customer identifier.
             workspace_id: The workspace UUID.
+            amount: Optional payment amount for filtering zero-amount events.
 
         Returns:
             True if notification should be sent, False if it should be suppressed.
         """
+        # Filter $0 payment events (trial invoices create noise)
+        if event_type in self.ZERO_AMOUNT_FILTER_EVENTS:
+            if amount is None or amount <= 0:
+                logger.info(
+                    f"Suppressing {event_type} with zero/no amount "
+                    f"for customer {customer_id} in workspace {workspace_id}"
+                )
+                return False
+
         if not customer_id or not workspace_id:
             # Can't consolidate without identifiers, so allow the notification
             return True

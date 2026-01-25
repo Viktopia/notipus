@@ -73,6 +73,8 @@ class WebhookStorageService:
             "Content-Length": request.headers.get("Content-Length"),
             "User-Agent": request.headers.get("User-Agent"),
             "X-Forwarded-For": request.headers.get("X-Forwarded-For"),
+            # Shopify webhook topic for debugging
+            "X-Shopify-Topic": request.headers.get("X-Shopify-Topic"),
         }
 
         # Add provider-specific signature headers (masked for security)

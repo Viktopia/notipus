@@ -19,6 +19,7 @@ from webhooks.models.rich_notification import (
 )
 
 from .insight_detector import InsightDetector
+from .utils import get_display_name
 
 # Provider display configurations
 PROVIDER_DISPLAY: dict[str, str] = {
@@ -248,9 +249,8 @@ class NotificationBuilder:
         last_name = customer_data.get("last_name", "")
         name = f"{first_name} {last_name}".strip() or None
 
-        company_name = customer_data.get("company_name") or customer_data.get(
-            "company", ""
-        )
+        # Use smart display name fallback (no more "Individual")
+        company_name = get_display_name(customer_data)
 
         # Calculate tenure display
         tenure_display = self._format_tenure(customer_data)
@@ -362,17 +362,22 @@ class NotificationBuilder:
         event_type = event_data.get("type", "")
         amount = event_data.get("amount")
 
-        # Prefer enriched company name, fall back to customer data
+        # Prefer enriched company name, fall back to smart display name
         if company and company.brand_info:
             company_name = company.brand_info.get("name") or company.name
         else:
-            company_name = customer_data.get("company_name") or customer_data.get(
-                "company", "Customer"
-            )
+            company_name = get_display_name(customer_data)
         company_name = company_name or "Customer"
+
+        metadata = event_data.get("metadata", {})
 
         # Money-first headlines for payment events
         if event_type == "payment_success":
+            # Check for trial conversion (first real payment after trial)
+            if metadata.get("is_trial_conversion"):
+                if amount:
+                    return f"Trial converted! ${amount:,.2f} from {company_name}"
+                return f"Trial converted! {company_name}"
             if amount:
                 return f"${amount:,.2f} from {company_name}"
             return f"Payment from {company_name}"
@@ -386,6 +391,19 @@ class NotificationBuilder:
             if amount:
                 return f"New customer! ${amount:,.2f} from {company_name}"
             return f"New subscription - {company_name}"
+
+        elif event_type == "subscription_updated":
+            # Check for upgrade/downgrade
+            direction = metadata.get("change_direction", "")
+            if direction == "upgrade":
+                if amount:
+                    return f"Upgraded to ${amount:,.2f}/mo - {company_name}"
+                return f"Subscription upgraded - {company_name}"
+            elif direction == "downgrade":
+                if amount:
+                    return f"Downgraded to ${amount:,.2f}/mo - {company_name}"
+                return f"Subscription downgraded - {company_name}"
+            return f"Subscription updated - {company_name}"
 
         elif event_type in ("subscription_canceled", "subscription_deleted"):
             return f"Canceled: {company_name}"

@@ -3,7 +3,6 @@
 Exports notification-related models for webhook processing.
 """
 
-from .notification import Notification, Section
 from .rich_notification import (
     EVENT_CATEGORY_MAP,
     ActionButton,
@@ -20,10 +19,6 @@ from .rich_notification import (
 )
 
 __all__ = [
-    # Legacy notification models
-    "Notification",
-    "Section",
-    # New multi-target notification models
     "ActionButton",
     "CompanyInfo",
     "CustomerInfo",

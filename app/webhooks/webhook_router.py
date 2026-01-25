@@ -186,7 +186,9 @@ def _process_webhook_data(
     Includes event consolidation to prevent notification spam when
     multiple related events fire in quick succession.
     """
-    from .services.slack_client import SlackClient
+    from plugins.base import PluginType
+    from plugins.destinations.base import BaseDestinationPlugin
+    from plugins.registry import PluginRegistry
 
     # Get customer data
     customer_data = provider.get_customer_data(event_data["customer_id"])
@@ -210,10 +212,12 @@ def _process_webhook_data(
         )
 
     # Check if this event should be suppressed due to consolidation
+    # Pass amount to filter out $0 payment events (trial invoices)
     should_notify = event_consolidation_service.should_send_notification(
         event_type=event_type,
         customer_id=customer_id,
         workspace_id=workspace_id,
+        amount=event_data.get("amount"),
     )
 
     if not should_notify:
@@ -231,18 +235,27 @@ def _process_webhook_data(
             status=200,
         )
 
-    # Format notification
-    notification = settings.EVENT_PROCESSOR.format_notification(
-        event_data, customer_data
+    # Build and format rich notification
+    formatted = settings.EVENT_PROCESSOR.process_event_rich(
+        event_data, customer_data, target="slack"
     )
 
     # Send to Slack using workspace-specific integration
     slack_webhook_url = _get_slack_webhook_url(workspace)
 
     if slack_webhook_url:
-        slack_client = SlackClient(webhook_url=slack_webhook_url)
+        registry = PluginRegistry.instance()
+        slack_plugin = registry.get(PluginType.DESTINATION, "slack")
+        if slack_plugin is None or not isinstance(slack_plugin, BaseDestinationPlugin):
+            logger.error("Slack destination plugin not found or not configured")
+            return JsonResponse(
+                create_success_response(
+                    f"{provider_name} webhook processed (Slack plugin unavailable)"
+                ),
+                status=200,
+            )
         try:
-            slack_client.send_notification(notification)
+            slack_plugin.send(formatted, {"webhook_url": slack_webhook_url})
             # Record the event after successful send
             event_consolidation_service.record_event(
                 event_type=event_type,

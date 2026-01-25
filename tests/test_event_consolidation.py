@@ -143,10 +143,12 @@ class TestEventConsolidationService:
         )
 
         # Different customer should not be suppressed
+        # Note: amount > 0 required to pass $0 payment filter
         result = service.should_send_notification(
             event_type="payment_success",
             customer_id="cus_789",
             workspace_id="ws_456",
+            amount=100.00,
         )
 
         assert result is True
@@ -163,10 +165,12 @@ class TestEventConsolidationService:
         )
 
         # Different workspace should not be suppressed
+        # Note: amount > 0 required to pass $0 payment filter
         result = service.should_send_notification(
             event_type="payment_success",
             customer_id="cus_123",
             workspace_id="ws_other",
+            amount=100.00,
         )
 
         assert result is True
@@ -199,9 +203,13 @@ class TestEventConsolidationService:
     def test_empty_customer_id_allows_notification(
         self, service: EventConsolidationService, mock_cache
     ) -> None:
-        """Test that empty customer_id always allows notification."""
+        """Test that empty customer_id always allows notification.
+
+        Note: Uses subscription_created since payment_success without amount
+        is filtered out by the $0 payment filter.
+        """
         result = service.should_send_notification(
-            event_type="payment_success",
+            event_type="subscription_created",
             customer_id="",
             workspace_id="ws_456",
         )
@@ -211,9 +219,13 @@ class TestEventConsolidationService:
     def test_empty_workspace_id_allows_notification(
         self, service: EventConsolidationService, mock_cache
     ) -> None:
-        """Test that empty workspace_id always allows notification."""
+        """Test that empty workspace_id always allows notification.
+
+        Note: Uses subscription_created since payment_success without amount
+        is filtered out by the $0 payment filter.
+        """
         result = service.should_send_notification(
-            event_type="payment_success",
+            event_type="subscription_created",
             customer_id="cus_123",
             workspace_id="",
         )
@@ -277,11 +289,12 @@ class TestEventConsolidationService:
         self, service: EventConsolidationService, mock_cache
     ) -> None:
         """Test that non-primary events don't suppress other events."""
-        # Process a non-primary event
+        # Process a non-primary event with amount > 0
         service.should_send_notification(
             event_type="payment_success",
             customer_id="cus_123",
             workspace_id="ws_456",
+            amount=100.00,
         )
 
         # Another payment_success should still go through
@@ -289,6 +302,7 @@ class TestEventConsolidationService:
             event_type="payment_success",
             customer_id="cus_123",
             workspace_id="ws_456",
+            amount=100.00,
         )
 
         assert result is True
@@ -312,13 +326,108 @@ class TestEventConsolidationService:
         assert result is False
 
 
+class TestZeroAmountFiltering:
+    """Test zero-amount payment filtering functionality."""
+
+    @pytest.fixture
+    def service(self) -> EventConsolidationService:
+        """Create a fresh consolidation service for each test.
+
+        Returns:
+            EventConsolidationService instance.
+        """
+        return EventConsolidationService()
+
+    def test_zero_amount_payment_success_suppressed(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that $0 payment_success events are suppressed."""
+        result = service.should_send_notification(
+            event_type="payment_success",
+            customer_id="cus_123",
+            workspace_id="ws_456",
+            amount=0.0,
+        )
+        assert result is False
+
+    def test_zero_amount_invoice_paid_suppressed(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that $0 invoice_paid events are suppressed."""
+        result = service.should_send_notification(
+            event_type="invoice_paid",
+            customer_id="cus_123",
+            workspace_id="ws_456",
+            amount=0.0,
+        )
+        assert result is False
+
+    def test_none_amount_payment_success_suppressed(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that payment_success with no amount is suppressed."""
+        result = service.should_send_notification(
+            event_type="payment_success",
+            customer_id="cus_123",
+            workspace_id="ws_456",
+            amount=None,
+        )
+        assert result is False
+
+    def test_positive_amount_payment_success_allowed(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that payment_success with positive amount is allowed."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.get.return_value = None
+            result = service.should_send_notification(
+                event_type="payment_success",
+                customer_id="cus_123",
+                workspace_id="ws_456",
+                amount=100.00,
+            )
+        assert result is True
+
+    def test_subscription_created_not_affected_by_zero_filter(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that subscription_created is not affected by zero amount filter."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.get.return_value = None
+            result = service.should_send_notification(
+                event_type="subscription_created",
+                customer_id="cus_123",
+                workspace_id="ws_456",
+                amount=0.0,
+            )
+        assert result is True
+
+    def test_payment_failure_not_affected_by_zero_filter(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that payment_failure is not affected by zero amount filter."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.get.return_value = None
+            result = service.should_send_notification(
+                event_type="payment_failure",
+                customer_id="cus_123",
+                workspace_id="ws_456",
+                amount=0.0,
+            )
+        assert result is True
+
+
 class TestEventConsolidationConstants:
     """Test EventConsolidationService constants."""
 
     def test_consolidation_window_is_reasonable(self) -> None:
-        """Test that consolidation window is a reasonable value."""
-        assert EventConsolidationService.CONSOLIDATION_WINDOW_SECONDS >= 5
-        assert EventConsolidationService.CONSOLIDATION_WINDOW_SECONDS <= 30
+        """Test that consolidation window is a reasonable value.
+
+        Window is 5 minutes (300s) to handle Stripe's delayed event delivery
+        where related events can arrive 3-4+ minutes apart.
+        """
+        assert EventConsolidationService.CONSOLIDATION_WINDOW_SECONDS >= 60
+        assert EventConsolidationService.CONSOLIDATION_WINDOW_SECONDS <= 600
 
     def test_never_suppress_includes_critical_events(self) -> None:
         """Test that critical events are in NEVER_SUPPRESS."""

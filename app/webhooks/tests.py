@@ -152,6 +152,7 @@ class StripeProviderTest(TestCase):
             "created_at": 1234567890,
             "currency": "USD",
             "amount": 20.00,
+            "metadata": {},
         }
 
         self.assertEqual(result, expected)
