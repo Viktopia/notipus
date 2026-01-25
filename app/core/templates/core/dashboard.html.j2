@@ -322,32 +322,52 @@
                                                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                                 <!-- Fallback icon shown when image fails to load -->
                                                 <div class="h-10 w-10 bg-gray-100 rounded-lg items-center justify-center hidden">
-                                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                                    <svg class="h-5 w-5 text-gray-400"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4">
+                                                        </path>
                                                     </svg>
                                                 </div>
                                             {% elif activity.severity == "success" %}
                                                 <div class="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                                    <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                                                    <svg class="h-5 w-5 text-green-600"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1">
+                                                        </path>
                                                     </svg>
                                                 </div>
                                             {% elif activity.severity == "error" %}
                                                 <div class="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center">
-                                                    <svg class="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                                    <svg class="h-5 w-5 text-red-600"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                                                        </path>
                                                     </svg>
                                                 </div>
                                             {% elif activity.type == "order" %}
                                                 <div class="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                    <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                                                    <svg class="h-5 w-5 text-blue-600"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z">
+                                                        </path>
                                                     </svg>
                                                 </div>
                                             {% else %}
                                                 <div class="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                                    <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                                                    <svg class="h-5 w-5 text-green-600"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1">
+                                                        </path>
                                                     </svg>
                                                 </div>
                                             {% endif %}
@@ -378,15 +398,13 @@
 
                                                     <!-- Details Line -->
                                                     <p class="text-sm text-gray-500 mt-0.5">
-                                                        {% if activity.customer_email %}
-                                                            {{ activity.customer_email }}
-                                                        {% endif %}
+                                                        {% if activity.customer_email %}{{ activity.customer_email }}{% endif %}
                                                         {% if activity.plan_name %}
-                                                            {% if activity.customer_email %} · {% endif %}
+                                                            {% if activity.customer_email %}·{% endif %}
                                                             {{ activity.plan_name }}
                                                         {% endif %}
                                                         {% if activity.provider and not activity.plan_name %}
-                                                            {% if activity.customer_email %} · {% endif %}
+                                                            {% if activity.customer_email %}·{% endif %}
                                                             {{ activity.provider|title }}
                                                         {% endif %}
                                                     </p>
