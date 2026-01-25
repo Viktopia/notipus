@@ -181,12 +181,18 @@ class StripeProviderTest(TestCase):
         self.assertEqual(amount, 0.0)
 
     def test_extract_stripe_event_info_unsupported_event(self):
-        """Test extracting info for unsupported event type."""
+        """Test extracting info for unsupported event type returns None.
+
+        Unsupported events should be acknowledged but not processed,
+        so the method returns (None, None) instead of raising an error.
+        """
         mock_event = Mock()
         mock_event.type = "unsupported.event.type"
 
-        with self.assertRaises(InvalidDataError):
-            self.provider._extract_stripe_event_info(mock_event)
+        event_type, data = self.provider._extract_stripe_event_info(mock_event)
+
+        self.assertIsNone(event_type)
+        self.assertIsNone(data)
 
     def test_extract_stripe_event_info_missing_event_type(self):
         """Test extracting info with missing event type."""

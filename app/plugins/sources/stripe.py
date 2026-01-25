@@ -113,17 +113,20 @@ class StripeSourcePlugin(BaseSourcePlugin):
             logger.error(f"Stripe webhook validation error: {e!s}")
             return False
 
-    def _extract_stripe_event_info(self, event: Any) -> tuple[str, Any]:
+    def _extract_stripe_event_info(
+        self, event: Any
+    ) -> tuple[str, Any] | tuple[None, None]:
         """Extract event type and data from Stripe event object.
 
         Args:
             event: Stripe event object.
 
         Returns:
-            Tuple of (event_type, event_data).
+            Tuple of (event_type, event_data), or (None, None) for unsupported
+            event types that should be acknowledged but not processed.
 
         Raises:
-            InvalidDataError: If event type is missing or unsupported.
+            InvalidDataError: If event type is missing or data is missing.
         """
         body_event_type = event.type
         if not body_event_type:
@@ -131,7 +134,10 @@ class StripeSourcePlugin(BaseSourcePlugin):
 
         event_type = self.EVENT_TYPE_MAPPING.get(body_event_type)
         if not event_type:
-            raise InvalidDataError(f"Unsupported webhook type: {body_event_type}")
+            # Unsupported event types are acknowledged but not processed.
+            # Stripe sends many event types; we only handle a subset.
+            logger.info(f"Ignoring unsupported Stripe event type: {body_event_type}")
+            return None, None
 
         data = event.data.object
         if not data:
@@ -258,6 +264,10 @@ class StripeSourcePlugin(BaseSourcePlugin):
 
         # Extract event info using Stripe event object
         event_type, data = self._extract_stripe_event_info(event)
+
+        # Return None for unsupported event types (acknowledged but not processed)
+        if event_type is None:
+            return None
 
         try:
             # Convert Stripe object to dict for easier processing

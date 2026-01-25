@@ -264,12 +264,32 @@ class StripeProviderTest(TestCase):
         self.assertEqual(event_type, "payment_failure")
 
     def test_extract_stripe_event_info_unsupported_event(self) -> None:
-        """Test extracting info for unsupported event type."""
+        """Test extracting info for unsupported event type returns None.
+
+        Unsupported events should be acknowledged but not processed,
+        so the method returns (None, None) instead of raising an error.
+        """
         mock_event = Mock()
         mock_event.type = "unsupported.event.type"
 
-        with self.assertRaises(InvalidDataError):
-            self.provider._extract_stripe_event_info(mock_event)
+        event_type, data = self.provider._extract_stripe_event_info(mock_event)
+
+        self.assertIsNone(event_type)
+        self.assertIsNone(data)
+
+    def test_extract_stripe_event_info_customer_updated_returns_none(self) -> None:
+        """Test that customer.updated event type is acknowledged but not processed.
+
+        The customer.updated event is informational and doesn't require
+        notification processing, so it should return (None, None).
+        """
+        mock_event = Mock()
+        mock_event.type = "customer.updated"
+
+        event_type, data = self.provider._extract_stripe_event_info(mock_event)
+
+        self.assertIsNone(event_type)
+        self.assertIsNone(data)
 
     def test_extract_stripe_event_info_missing_event_type(self) -> None:
         """Test extracting info with missing event type."""
@@ -409,3 +429,24 @@ class StripeProviderTest(TestCase):
             self.provider.parse_webhook(request)
 
         self.assertIn("Invalid webhook signature", str(context.exception))
+
+    @patch("plugins.sources.stripe.stripe.Webhook.construct_event")
+    def test_parse_webhook_unsupported_event_returns_none(
+        self, mock_construct_event: Mock
+    ) -> None:
+        """Test that parsing unsupported event types returns None.
+
+        Unsupported event types (like customer.updated) should be acknowledged
+        with a success response but not processed further.
+        """
+        mock_event = Mock()
+        mock_event.type = "customer.updated"
+        mock_construct_event.return_value = mock_event
+
+        request = self._create_mock_request(
+            '{"type": "customer.updated"}', "t=123456789,v1=test_signature"
+        )
+
+        result = self.provider.parse_webhook(request)
+
+        self.assertIsNone(result)
