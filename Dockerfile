@@ -6,6 +6,10 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Git SHA for Sentry release tracking (passed as build arg)
+ARG GIT_SHA=unknown
+ENV SENTRY_RELEASE=${GIT_SHA}
+
 # Copy uv binary from official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
