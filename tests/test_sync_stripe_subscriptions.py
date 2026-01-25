@@ -150,6 +150,44 @@ class TestExtractPlanNameFromSubscription:
         result = BillingService._extract_plan_name_from_subscription(subscription)
         assert result == "enterprise"
 
+    def test_prefers_plan_name_from_metadata(self) -> None:
+        """Verify plan_name from Product metadata is preferred over product_name."""
+        subscription = {
+            "items": [
+                {
+                    "product_name": "Pro Plan",
+                    "plan_name": "pro",  # From Product metadata
+                }
+            ],
+        }
+        result = BillingService._extract_plan_name_from_subscription(subscription)
+        assert result == "pro"
+
+    def test_uses_plan_name_even_without_product_name(self) -> None:
+        """Verify plan_name works even if product_name is missing."""
+        subscription = {
+            "items": [
+                {
+                    "plan_name": "basic",  # From Product metadata
+                }
+            ],
+        }
+        result = BillingService._extract_plan_name_from_subscription(subscription)
+        assert result == "basic"
+
+    def test_falls_back_to_product_name_when_no_plan_name(self) -> None:
+        """Verify falls back to normalizing product_name when plan_name is absent."""
+        subscription = {
+            "items": [
+                {
+                    "product_name": "Pro Plan",
+                    # No plan_name from metadata
+                }
+            ],
+        }
+        result = BillingService._extract_plan_name_from_subscription(subscription)
+        assert result == "pro"
+
 
 @pytest.mark.django_db
 class TestSyncWorkspaceFromStripe:

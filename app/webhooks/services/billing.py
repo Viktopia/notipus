@@ -55,6 +55,9 @@ class BillingService:
     ) -> str | None:
         """Extract plan name from subscription items.
 
+        Prefers Product metadata.plan_name (most reliable) over
+        normalizing the product name string.
+
         Args:
             subscription: Subscription dictionary with items.
 
@@ -65,11 +68,18 @@ class BillingService:
             return None
 
         first_item = subscription["items"][0]
+
+        # Prefer plan_name from Product metadata (most reliable)
+        plan_name = first_item.get("plan_name")
+        if plan_name:
+            return plan_name
+
+        # Fall back to normalizing product name
         product_name = first_item.get("product_name", "")
         if not product_name:
             return None
 
-        # Convert "Notipus Pro Plan" to "pro"
+        # Convert "Notipus Pro Plan" or "Pro Plan" to "pro"
         return product_name.lower().replace("notipus ", "").replace(" plan", "").strip()
 
     @staticmethod
@@ -153,35 +163,6 @@ class BillingService:
         return customer_id
 
     @staticmethod
-    def _extract_plan_id(subscription: dict[str, Any]) -> str | None:
-        """Extract plan ID from subscription data.
-
-        Handles multiple Stripe API formats (nested and direct).
-
-        Args:
-            subscription: Subscription data dictionary.
-
-        Returns:
-            Plan ID string, or None if not found.
-        """
-        # Try the nested items.data[0].plan.id format (Stripe API 2020-08-27 and later)
-        items = subscription.get("items", {})
-        if isinstance(items, dict):
-            data_list = items.get("data", [])
-            if data_list and isinstance(data_list, list):
-                first_item = data_list[0] if data_list else {}
-                plan = first_item.get("plan", {})
-                if isinstance(plan, dict) and plan.get("id"):
-                    return plan.get("id")
-
-        # Try direct plan.id format (older format)
-        plan = subscription.get("plan", {})
-        if isinstance(plan, dict) and plan.get("id"):
-            return plan.get("id")
-
-        return None
-
-    @staticmethod
     def handle_subscription_created(subscription: dict[str, Any]) -> None:
         """Handle subscription created event.
 
@@ -193,26 +174,21 @@ class BillingService:
             if not customer_id:
                 return
 
-            plan_id = BillingService._extract_plan_id(subscription)
-            if not plan_id:
-                logger.error(
-                    f"Missing plan ID in subscription data for customer {customer_id}"
-                )
-                return
-
+            # Don't set subscription_plan here - sync_workspace_from_stripe will
+            # properly extract and normalize the plan name from the Product.
+            # Previously this was setting plan_id (a Price ID) which is wrong.
             updated_count = Workspace.objects.filter(
                 stripe_customer_id=customer_id
             ).update(
-                subscription_plan=plan_id,
                 subscription_status="active",
                 billing_cycle_anchor=subscription.get("current_period_start"),
             )
 
             if updated_count > 0:
                 logger.info(
-                    f"Updated subscription for customer {customer_id} to plan {plan_id}"
+                    f"Subscription created for customer {customer_id}, syncing..."
                 )
-                # Verify/sync full state from Stripe (catches any drift)
+                # Sync full state from Stripe (properly extracts plan name)
                 BillingService.sync_workspace_from_stripe(customer_id)
             else:
                 logger.warning(f"No workspace found for customer {customer_id}")
@@ -238,12 +214,10 @@ class BillingService:
             # Map Stripe statuses to our internal statuses
             internal_status = STRIPE_STATUS_MAPPING.get(status, "active")
 
+            # Don't set subscription_plan here - sync_workspace_from_stripe will
+            # properly extract and normalize the plan name from the Product.
+            # Previously this was setting plan_id (a Price ID) which is wrong.
             update_data: dict[str, Any] = {"subscription_status": internal_status}
-
-            # Update plan if changed
-            plan_id = BillingService._extract_plan_id(subscription)
-            if plan_id:
-                update_data["subscription_plan"] = plan_id
 
             # Update billing cycle anchor if present
             if subscription.get("current_period_end"):
@@ -258,9 +232,9 @@ class BillingService:
             if updated_count > 0:
                 logger.info(
                     f"Updated subscription status to {internal_status} "
-                    f"for customer {customer_id}"
+                    f"for customer {customer_id}, syncing..."
                 )
-                # Verify/sync full state from Stripe (catches any drift)
+                # Sync full state from Stripe (properly extracts plan name)
                 BillingService.sync_workspace_from_stripe(customer_id)
             else:
                 logger.warning(f"No workspace found for customer {customer_id}")

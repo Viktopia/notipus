@@ -474,6 +474,27 @@ class StripeAPI:
             logger.error(f"Unexpected error listing prices: {e!s}")
             return []
 
+    def _get_nested_value(self, obj: Any, key: str, default: Any = None) -> Any:
+        """Get a value from an object using dict-style or attribute access.
+
+        Stripe SDK objects can behave as both dicts and objects, and the
+        access pattern can vary. This helper tries dict-style first, then
+        falls back to _safe_getattr.
+
+        Args:
+            obj: The object to get the value from.
+            key: The key/attribute name.
+            default: Default value if not found.
+
+        Returns:
+            The value, or default if not found.
+        """
+        if obj is None:
+            return default
+        if hasattr(obj, "get"):
+            return obj.get(key, default)
+        return _safe_getattr(obj, key, default)
+
     def _extract_subscription_items(self, sub: Any) -> list[dict[str, Any]]:
         """Extract items from a Stripe subscription object.
 
@@ -485,39 +506,54 @@ class StripeAPI:
         """
         items = []
 
-        # Must access sub.items.data directly - getattr doesn't work
-        # correctly with Stripe's ListObject which uses __getattr__ magic.
-        # Also handle KeyError which Stripe SDK raises for missing attributes.
+        # Use dict-style access for Stripe SDK objects. Attribute access
+        # (sub.items.data) can fail with 'builtin_function_or_method' error
+        # because .items is both an attribute and a method in some contexts.
         try:
-            items_data = list(sub.items.data) if sub.items else []
-        except (AttributeError, TypeError, KeyError):
+            items_obj = sub["items"] if "items" in sub else None
+            items_data = (
+                list(items_obj["data"]) if items_obj and "data" in items_obj else []
+            )
+        except (AttributeError, TypeError, KeyError) as e:
+            sub_id = sub.get("id", "unknown") if hasattr(sub, "get") else "unknown"
+            logger.warning(f"Failed to extract subscription items for {sub_id}: {e}")
             return []
 
         for item in items_data:
-            price = _safe_getattr(item, "price")
+            # Use dict-style access for nested Stripe objects
+            price = self._get_nested_value(item, "price")
             if not price:
                 continue
 
-            product = _safe_getattr(price, "product")
+            product = self._get_nested_value(price, "product")
             product_name = None
+            plan_name = None
 
             if isinstance(product, str):
                 # Product is not expanded, fetch it from Stripe
                 try:
                     fetched_product = stripe.Product.retrieve(product)
                     product_name = fetched_product.name
+                    # Prefer metadata.plan_name if available (more reliable)
+                    if hasattr(fetched_product, "metadata"):
+                        plan_name = fetched_product.metadata.get("plan_name")
                 except stripe.error.StripeError:
                     product_name = None
             elif product:
-                product_name = _safe_getattr(product, "name")
+                # Product is expanded as a dict or object
+                product_name = self._get_nested_value(product, "name")
+                metadata = self._get_nested_value(product, "metadata")
+                if metadata:
+                    plan_name = self._get_nested_value(metadata, "plan_name")
 
             items.append(
                 {
-                    "price_id": _safe_getattr(price, "id"),
+                    "price_id": self._get_nested_value(price, "id"),
                     "product_name": product_name,
-                    "unit_amount": _safe_getattr(price, "unit_amount"),
-                    "currency": _safe_getattr(price, "currency"),
-                    "quantity": _safe_getattr(item, "quantity", 1),
+                    "plan_name": plan_name,
+                    "unit_amount": self._get_nested_value(price, "unit_amount"),
+                    "currency": self._get_nested_value(price, "currency"),
+                    "quantity": self._get_nested_value(item, "quantity", 1),
                 }
             )
 

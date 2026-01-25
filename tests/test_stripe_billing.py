@@ -710,6 +710,150 @@ class TestStripeAPISubscriptions:
         assert result == []
 
 
+class TestExtractSubscriptionItems:
+    """Tests for StripeAPI._extract_subscription_items with dict-style access.
+
+    The Stripe SDK objects can behave differently depending on context.
+    These tests ensure dict-style access works correctly.
+    """
+
+    @pytest.fixture
+    def stripe_api(self) -> StripeAPI:
+        """Create a StripeAPI instance for testing.
+
+        Returns:
+            Configured StripeAPI instance.
+        """
+        return StripeAPI()
+
+    def test_extracts_items_from_dict_style_subscription(
+        self, stripe_api: StripeAPI
+    ) -> None:
+        """Test extraction from subscription with dict-style access.
+
+        Args:
+            stripe_api: StripeAPI fixture.
+        """
+        # Simulate Stripe SDK object that behaves like a dict
+        subscription = {
+            "id": "sub_test123",
+            "items": {
+                "data": [
+                    {
+                        "price": {
+                            "id": "price_test123",
+                            "product": {
+                                "name": "Pro Plan",
+                                "metadata": {"plan_name": "pro"},
+                            },
+                            "unit_amount": 9900,
+                            "currency": "usd",
+                        },
+                        "quantity": 1,
+                    }
+                ]
+            },
+        }
+
+        result = stripe_api._extract_subscription_items(subscription)
+
+        assert len(result) == 1
+        assert result[0]["price_id"] == "price_test123"
+        assert result[0]["product_name"] == "Pro Plan"
+        assert result[0]["plan_name"] == "pro"
+        assert result[0]["unit_amount"] == 9900
+        assert result[0]["currency"] == "usd"
+        assert result[0]["quantity"] == 1
+
+    def test_extracts_plan_name_from_metadata(self, stripe_api: StripeAPI) -> None:
+        """Test that plan_name is extracted from Product metadata.
+
+        Args:
+            stripe_api: StripeAPI fixture.
+        """
+        subscription = {
+            "items": {
+                "data": [
+                    {
+                        "price": {
+                            "id": "price_123",
+                            "product": {
+                                "name": "Enterprise Plan",
+                                "metadata": {"plan_name": "enterprise"},
+                            },
+                        },
+                        "quantity": 1,
+                    }
+                ]
+            },
+        }
+
+        result = stripe_api._extract_subscription_items(subscription)
+
+        assert result[0]["plan_name"] == "enterprise"
+
+    def test_returns_empty_list_when_no_items(self, stripe_api: StripeAPI) -> None:
+        """Test returns empty list when subscription has no items.
+
+        Args:
+            stripe_api: StripeAPI fixture.
+        """
+        subscription: dict[str, Any] = {"id": "sub_test123"}
+
+        result = stripe_api._extract_subscription_items(subscription)
+
+        assert result == []
+
+    def test_returns_empty_list_when_items_data_empty(
+        self, stripe_api: StripeAPI
+    ) -> None:
+        """Test returns empty list when items.data is empty.
+
+        Args:
+            stripe_api: StripeAPI fixture.
+        """
+        subscription = {"items": {"data": []}}
+
+        result = stripe_api._extract_subscription_items(subscription)
+
+        assert result == []
+
+    @patch("core.services.stripe.stripe.Product.retrieve")
+    def test_fetches_product_when_not_expanded(
+        self, mock_retrieve: MagicMock, stripe_api: StripeAPI
+    ) -> None:
+        """Test that Product is fetched when only ID is provided.
+
+        Args:
+            mock_retrieve: Mock for stripe.Product.retrieve.
+            stripe_api: StripeAPI fixture.
+        """
+        mock_product = Mock()
+        mock_product.name = "Basic Plan"
+        mock_product.metadata = {"plan_name": "basic"}
+        mock_retrieve.return_value = mock_product
+
+        subscription = {
+            "items": {
+                "data": [
+                    {
+                        "price": {
+                            "id": "price_123",
+                            "product": "prod_123",  # Just the product ID
+                        },
+                        "quantity": 1,
+                    }
+                ]
+            },
+        }
+
+        result = stripe_api._extract_subscription_items(subscription)
+
+        mock_retrieve.assert_called_once_with("prod_123")
+        assert result[0]["product_name"] == "Basic Plan"
+        assert result[0]["plan_name"] == "basic"
+
+
 class TestStripeAPIArchive:
     """Tests for Stripe product and price archiving functionality."""
 

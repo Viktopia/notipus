@@ -8,244 +8,151 @@ from webhooks.services.billing import BillingService
 
 
 class DomainEnrichmentServiceTest(TestCase):
-    """Test DomainEnrichmentService"""
+    """Test DomainEnrichmentService with plugin-based architecture."""
 
-    def setUp(self):
-        """Set up test data"""
-        self.service = DomainEnrichmentService()
+    def setUp(self) -> None:
+        """Set up test data."""
+        # Create service with mocked plugin registry
+        with patch("core.services.enrichment.PluginRegistry") as mock_registry_class:
+            mock_registry = Mock()
+            mock_registry.get_enabled.return_value = []
+            mock_registry_class.instance.return_value = mock_registry
+            self.service = DomainEnrichmentService()
+            self.mock_registry = mock_registry
 
-    @patch("django.conf.settings")
-    @patch("core.services.enrichment.BrandfetchProvider")
-    def test_initialize_providers_with_api_key(self, mock_brandfetch, mock_settings):
-        """Test provider initialization when API key is available"""
-        mock_settings.BRANDFETCH_API_KEY = "test_key"
+    def test_initialize_with_no_plugins(self) -> None:
+        """Test service initialization when no plugins available."""
+        with patch("core.services.enrichment.PluginRegistry") as mock_registry_class:
+            mock_registry = Mock()
+            mock_registry.get_enabled.return_value = []
+            mock_registry_class.instance.return_value = mock_registry
 
-        # Mock hasattr to return True
-        with patch("builtins.hasattr", return_value=True):
             service = DomainEnrichmentService()
 
-            self.assertEqual(len(service.providers), 1)
-            mock_brandfetch.assert_called_once()
+            self.assertEqual(len(service._plugins), 0)
 
-    @patch("django.conf.settings")
-    def test_initialize_providers_without_api_key(self, mock_settings):
-        """Test provider initialization when no API key available"""
-        # Mock hasattr to return False for BRANDFETCH_API_KEY
-        with patch("builtins.hasattr", return_value=False):
+    def test_initialize_with_plugins(self) -> None:
+        """Test service initialization with available plugins."""
+        mock_plugin = Mock()
+        mock_plugin.get_plugin_name.return_value = "test_plugin"
+
+        with patch("core.services.enrichment.PluginRegistry") as mock_registry_class:
+            mock_registry = Mock()
+            mock_registry.get_enabled.return_value = [mock_plugin]
+            mock_registry_class.instance.return_value = mock_registry
+
             service = DomainEnrichmentService()
 
-            self.assertEqual(len(service.providers), 0)
+            self.assertEqual(len(service._plugins), 1)
 
-    @patch("django.conf.settings")
-    def test_initialize_providers_empty_api_key(self, mock_settings):
-        """Test provider initialization when API key is empty"""
-        mock_settings.BRANDFETCH_API_KEY = ""
+    def test_enrich_domain_creates_new_company(self) -> None:
+        """Test enriching domain creates new company."""
+        domain = "newcompany.com"
 
-        # Mock hasattr to return True but key is empty
-        with patch("builtins.hasattr", return_value=True):
-            service = DomainEnrichmentService()
-
-            self.assertEqual(len(service.providers), 0)
-
-    def test_enrich_domain_creates_new_company(self):
-        """Test enriching domain creates new company"""
-        domain = "example.com"
-
-        # Mock providers
-        mock_provider = Mock()
-        mock_provider.enrich_domain.return_value = {
-            "name": "Example Company",
-            "logo_url": "https://example.com/logo.png",
-            "brand_info": {"industry": "Technology"},
+        # Mock plugin
+        mock_plugin = Mock()
+        mock_plugin.get_plugin_name.return_value = "testplugin"
+        mock_plugin.enrich_domain.return_value = {
+            "name": "New Company",
+            "logo_url": "https://newcompany.com/logo.png",
         }
-        mock_provider.get_provider_name.return_value = "testprovider"
+        self.service._plugins = [mock_plugin]
 
-        self.service.providers = [mock_provider]
-
-        result = self.service.enrich_domain(domain)
+        with patch.object(self.service, "_update_company"):
+            result = self.service.enrich_domain(domain)
 
         # Check company was created
         self.assertTrue(Company.objects.filter(domain=domain).exists())
-        company = Company.objects.get(domain=domain)
-        self.assertEqual(company.name, "Example Company")
-        self.assertEqual(company.logo_url, "https://example.com/logo.png")
-        self.assertEqual(company.brand_info["testprovider"]["industry"], "Technology")
+        self.assertEqual(result.domain, domain)
+        mock_plugin.enrich_domain.assert_called_once_with(domain)
 
-        self.assertEqual(result, company)
+    def test_enrich_domain_existing_company_with_enrichment(self) -> None:
+        """Test enriching existing company that already has enrichment data."""
+        domain = "existing.com"
 
-    def test_enrich_domain_existing_company_with_data(self):
-        """Test enriching existing company that already has data"""
-        domain = "example.com"
-
-        # Create existing company with data
+        # Create existing company with enrichment data (_blended_at indicates enriched)
         existing_company = Company.objects.create(
             domain=domain,
             name="Existing Company",
-            logo_url="https://existing.com/logo.png",
+            brand_info={"_blended_at": "2024-01-01T00:00:00Z"},
         )
 
-        # Mock providers
-        mock_provider = Mock()
-        mock_provider.enrich_domain.return_value = {
-            "name": "New Company Name",
-            "logo_url": "https://new.com/logo.png",
-        }
-
-        self.service.providers = [mock_provider]
+        # Mock plugin
+        mock_plugin = Mock()
+        self.service._plugins = [mock_plugin]
 
         result = self.service.enrich_domain(domain)
 
-        # Should return existing company without calling provider
+        # Should return existing company without calling plugin
         self.assertEqual(result, existing_company)
-        mock_provider.enrich_domain.assert_not_called()
+        mock_plugin.enrich_domain.assert_not_called()
 
-        # Data should remain unchanged
-        existing_company.refresh_from_db()
-        self.assertEqual(existing_company.name, "Existing Company")
-        self.assertEqual(existing_company.logo_url, "https://existing.com/logo.png")
+    def test_enrich_domain_no_plugins(self) -> None:
+        """Test enriching domain with no plugins available."""
+        domain = "noplugins.com"
 
-    def test_enrich_domain_existing_company_without_data(self):
-        """Test enriching existing company that has no name or logo"""
-        domain = "example.com"
-
-        # Create existing company without name or logo
-        existing_company = Company.objects.create(domain=domain)
-
-        # Mock providers
-        mock_provider = Mock()
-        mock_provider.enrich_domain.return_value = {
-            "name": "New Company Name",
-            "logo_url": "https://new.com/logo.png",
-            "brand_info": {"industry": "Technology"},
-        }
-        mock_provider.get_provider_name.return_value = "testprovider"
-
-        self.service.providers = [mock_provider]
+        # No plugins
+        self.service._plugins = []
 
         result = self.service.enrich_domain(domain)
 
-        # Should call provider and update company
-        mock_provider.enrich_domain.assert_called_once_with(domain)
+        # Should create company but not enrich it
+        company = Company.objects.get(domain=domain)
+        self.assertEqual(company.name, "")
+        self.assertEqual(result, company)
 
-        existing_company.refresh_from_db()
-        self.assertEqual(existing_company.name, "New Company Name")
-        self.assertEqual(existing_company.logo_url, "https://new.com/logo.png")
-        self.assertEqual(result, existing_company)
+    def test_enrich_domain_plugin_exception(self) -> None:
+        """Test handling plugin exceptions gracefully."""
+        domain = "error.com"
 
-    def test_enrich_domain_provider_exception(self):
-        """Test handling provider exceptions"""
-        domain = "example.com"
-
-        # Mock provider that raises exception
-        mock_provider = Mock()
-        mock_provider.enrich_domain.side_effect = Exception("API Error")
-        mock_provider.get_provider_name.return_value = "testprovider"
-
-        self.service.providers = [mock_provider]
+        # Mock plugin that raises exception
+        mock_plugin = Mock()
+        mock_plugin.get_plugin_name.return_value = "failing_plugin"
+        mock_plugin.enrich_domain.side_effect = Exception("API Error")
+        self.service._plugins = [mock_plugin]
 
         with patch("core.services.enrichment.logger") as mock_logger:
             result = self.service.enrich_domain(domain)
 
             # Should create company but not update it
             company = Company.objects.get(domain=domain)
-            # Model default is empty string, not None
             self.assertEqual(company.name, "")
-            self.assertEqual(company.logo_url, "")
             self.assertEqual(result, company)
 
-            # Should log error
-            mock_logger.error.assert_called_once()
-            self.assertIn(
-                "Provider Mock failed for example.com: API Error",
-                mock_logger.error.call_args[0][0],
-            )
+            # Should log warning for plugin failure
+            mock_logger.warning.assert_called()
 
-    def test_enrich_domain_no_providers(self):
-        """Test enriching domain with no providers available"""
-        domain = "example.com"
+    def test_update_company_with_blended_data(self) -> None:
+        """Test updating company with blended enrichment data."""
+        company = Company.objects.create(domain="update.com")
 
-        # No providers
-        self.service.providers = []
-
-        result = self.service.enrich_domain(domain)
-
-        # Should create company but not enrich it
-        company = Company.objects.get(domain=domain)
-        # Model default is empty string, not None
-        self.assertEqual(company.name, "")
-        self.assertEqual(company.logo_url, "")
-        self.assertEqual(result, company)
-
-    def test_update_company_all_fields(self):
-        """Test updating company with all available data"""
-        company = Company.objects.create(domain="example.com")
-
-        data = {
-            "name": "Example Company",
-            "logo_url": "https://example.com/logo.png",
-            "brand_info": {"industry": "Technology"},
+        blended_data = {
+            "name": "Updated Company",
+            "_blended_at": "2024-01-01T00:00:00Z",
+            "_sources": {"plugin1": {"fetched_at": "2024-01-01", "raw": {}}},
         }
 
-        with patch.object(company, "save") as mock_save:
-            self.service._update_company(company, data, "testprovider")
+        with patch("core.services.enrichment.get_logo_storage_service"):
+            self.service._update_company(company, blended_data)
 
-            self.assertEqual(company.name, "Example Company")
-            self.assertEqual(company.logo_url, "https://example.com/logo.png")
-            self.assertEqual(
-                company.brand_info["testprovider"]["industry"], "Technology"
-            )
+        company.refresh_from_db()
+        self.assertEqual(company.name, "Updated Company")
+        self.assertEqual(company.brand_info["_blended_at"], "2024-01-01T00:00:00Z")
 
-            mock_save.assert_called_once_with(
-                update_fields=["name", "logo_url", "brand_info"]
-            )
-
-    def test_update_company_partial_data(self):
-        """Test updating company with partial data"""
-        company = Company.objects.create(domain="example.com", name="Existing Name")
-
-        data = {
-            "logo_url": "https://example.com/logo.png",
-            "brand_info": {"industry": "Technology"},
-        }
-
-        with patch.object(company, "save") as mock_save:
-            self.service._update_company(company, data, "testprovider")
-
-            # Name should not change (already exists)
-            self.assertEqual(company.name, "Existing Name")
-            self.assertEqual(company.logo_url, "https://example.com/logo.png")
-
-            mock_save.assert_called_once_with(update_fields=["logo_url", "brand_info"])
-
-    def test_update_company_no_data(self):
-        """Test updating company with no relevant data"""
-        company = Company.objects.create(domain="example.com")
-
-        data = {}
-
-        with patch.object(company, "save") as mock_save:
-            self.service._update_company(company, data, "testprovider")
-
-            # No fields should be updated
-            mock_save.assert_not_called()
-
-    def test_update_company_existing_brand_info(self):
-        """Test updating company that already has brand info"""
+    def test_has_enrichment_true(self) -> None:
+        """Test _has_enrichment returns True when company has enrichment data."""
         company = Company.objects.create(
-            domain="example.com", brand_info={"existing": "data"}
+            domain="enriched.com",
+            brand_info={"_blended_at": "2024-01-01T00:00:00Z"},
         )
 
-        data = {"brand_info": {"industry": "Technology"}}
+        self.assertTrue(self.service._has_enrichment(company))
 
-        with patch.object(company, "save"):
-            self.service._update_company(company, data, "testprovider")
+    def test_has_enrichment_false(self) -> None:
+        """Test _has_enrichment returns False when company lacks enrichment data."""
+        company = Company.objects.create(domain="notenriched.com", brand_info={})
 
-            # Should merge brand info
-            expected_brand_info = {
-                "existing": "data",
-                "testprovider": {"industry": "Technology"},
-            }
-            self.assertEqual(company.brand_info, expected_brand_info)
+        self.assertFalse(self.service._has_enrichment(company))
 
 
 class BillingServiceTest(TestCase):
@@ -259,8 +166,9 @@ class BillingServiceTest(TestCase):
             stripe_customer_id="cus_test123",
         )
 
+    @patch("webhooks.services.billing.BillingService.sync_workspace_from_stripe")
     @patch("webhooks.services.billing.logger")
-    def test_handle_subscription_created_success(self, mock_logger):
+    def test_handle_subscription_created_success(self, mock_logger, mock_sync):
         """Test successful subscription creation handling"""
         subscription_data = {
             "customer": "cus_test123",
@@ -271,13 +179,14 @@ class BillingServiceTest(TestCase):
         BillingService.handle_subscription_created(subscription_data)
 
         self.workspace.refresh_from_db()
-        self.assertEqual(self.workspace.subscription_plan, "plan_basic")
+        # subscription_plan is set by sync_workspace_from_stripe, not directly
         self.assertEqual(self.workspace.subscription_status, "active")
         self.assertEqual(self.workspace.billing_cycle_anchor, 1234567890)
 
         mock_logger.info.assert_called_once_with(
-            "Updated subscription for customer cus_test123 to plan plan_basic"
+            "Subscription created for customer cus_test123, syncing..."
         )
+        mock_sync.assert_called_once_with("cus_test123")
 
     @patch("webhooks.services.billing.logger")
     def test_handle_subscription_created_missing_customer(self, mock_logger):
@@ -287,30 +196,36 @@ class BillingServiceTest(TestCase):
         BillingService.handle_subscription_created(subscription_data)
 
         self.workspace.refresh_from_db()
-        # Should not update workspace
-        self.assertEqual(self.workspace.subscription_plan, "trial")
+        # Should not update workspace - plan stays at default (free)
+        self.assertEqual(self.workspace.subscription_plan, "free")
 
         mock_logger.error.assert_called_once_with(
             "Missing customer ID in subscription data"
         )
 
+    @patch("webhooks.services.billing.BillingService.sync_workspace_from_stripe")
     @patch("webhooks.services.billing.logger")
-    def test_handle_subscription_created_missing_plan(self, mock_logger):
-        """Test subscription creation with missing plan ID"""
+    def test_handle_subscription_created_missing_plan(self, mock_logger, mock_sync):
+        """Test subscription creation with missing plan ID in webhook data.
+
+        The webhook handler no longer extracts plan_id directly - it delegates
+        to sync_workspace_from_stripe which fetches the full subscription.
+        """
         subscription_data = {
             "customer": "cus_test123",
-            "items": {"data": [{}]},  # Missing plan
+            "items": {"data": [{}]},  # Missing plan - but handled by sync
         }
 
         BillingService.handle_subscription_created(subscription_data)
 
         self.workspace.refresh_from_db()
-        # Should not update workspace
-        self.assertEqual(self.workspace.subscription_plan, "trial")
+        # Status is updated, plan extraction delegated to sync
+        self.assertEqual(self.workspace.subscription_status, "active")
 
-        mock_logger.error.assert_called_once_with(
-            "Missing plan ID in subscription data for customer cus_test123"
+        mock_logger.info.assert_called_once_with(
+            "Subscription created for customer cus_test123, syncing..."
         )
+        mock_sync.assert_called_once_with("cus_test123")
 
     @patch("webhooks.services.billing.logger")
     def test_handle_subscription_created_customer_not_found(self, mock_logger):
@@ -324,7 +239,7 @@ class BillingServiceTest(TestCase):
         BillingService.handle_subscription_created(subscription_data)
 
         mock_logger.warning.assert_called_once_with(
-            "No organization found for customer cus_nonexistent"
+            "No workspace found for customer cus_nonexistent"
         )
 
     @patch("webhooks.services.billing.logger")
@@ -358,8 +273,8 @@ class BillingServiceTest(TestCase):
 
         BillingService.handle_payment_failed(invoice_data)
 
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.subscription_status, "past_due")
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.subscription_status, "past_due")
 
         mock_logger.warning.assert_called_once_with(
             "Updated payment status to past_due for customer cus_test123"
@@ -419,8 +334,9 @@ class BillingServiceTest(TestCase):
             "Error handling payment failure: Database error"
         )
 
+    @patch("webhooks.services.billing.BillingService.sync_workspace_from_stripe")
     @patch("webhooks.services.billing.logger")
-    def test_handle_subscription_updated_success(self, mock_logger):
+    def test_handle_subscription_updated_success(self, mock_logger, mock_sync):
         """Test successful subscription update handling"""
         subscription_data = {
             "customer": "cus_test123",
@@ -432,12 +348,13 @@ class BillingServiceTest(TestCase):
         BillingService.handle_subscription_updated(subscription_data)
 
         self.workspace.refresh_from_db()
-        self.assertEqual(self.workspace.subscription_plan, "plan_pro")
+        # subscription_plan is set by sync_workspace_from_stripe, not directly
         self.assertEqual(self.workspace.subscription_status, "active")
         self.assertEqual(self.workspace.billing_cycle_anchor, 1234567890)
 
         mock_logger.info.assert_called_once()
         self.assertIn("active", mock_logger.info.call_args[0][0])
+        mock_sync.assert_called_once_with("cus_test123")
 
     @patch("webhooks.services.billing.logger")
     def test_handle_subscription_updated_status_changes(self, mock_logger):
@@ -511,40 +428,16 @@ class BillingServiceTest(TestCase):
         BillingService.handle_subscription_deleted(subscription_data)
 
         mock_logger.warning.assert_called_once_with(
-            "No organization found for customer cus_nonexistent"
+            "No workspace found for customer cus_nonexistent"
         )
-
-    def test_extract_plan_id_nested_format(self):
-        """Test plan ID extraction from nested items.data format"""
-        subscription = {"items": {"data": [{"plan": {"id": "plan_nested"}}]}}
-
-        result = BillingService._extract_plan_id(subscription)
-
-        self.assertEqual(result, "plan_nested")
-
-    def test_extract_plan_id_direct_format(self):
-        """Test plan ID extraction from direct plan format"""
-        subscription = {"plan": {"id": "plan_direct"}}
-
-        result = BillingService._extract_plan_id(subscription)
-
-        self.assertEqual(result, "plan_direct")
-
-    def test_extract_plan_id_missing(self):
-        """Test plan ID extraction when plan is missing"""
-        subscription = {"items": {"data": [{}]}}
-
-        result = BillingService._extract_plan_id(subscription)
-
-        self.assertIsNone(result)
 
 
 class StripeAPITest(TestCase):
-    """Test StripeAPI service"""
+    """Test StripeAPI service."""
 
     @patch("core.services.stripe.stripe.Customer.create")
-    def test_create_stripe_customer_success(self, mock_create):
-        """Test successful customer creation"""
+    def test_create_stripe_customer_success(self, mock_create: Mock) -> None:
+        """Test successful customer creation."""
         # Mock successful customer creation
         mock_customer = Mock()
         mock_customer.to_dict.return_value = {
@@ -560,7 +453,9 @@ class StripeAPITest(TestCase):
             "metadata": {"source": "test"},
         }
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        # Use instance method
+        api = StripeAPI()
+        result = api.create_stripe_customer(customer_data)
 
         expected = {
             "id": "cus_test123",
@@ -572,26 +467,28 @@ class StripeAPITest(TestCase):
         mock_create.assert_called_once_with(**customer_data)
 
     @patch("core.services.stripe.stripe.Customer.create")
-    def test_create_stripe_customer_stripe_error(self, mock_create):
-        """Test customer creation with Stripe error"""
+    def test_create_stripe_customer_stripe_error(self, mock_create: Mock) -> None:
+        """Test customer creation with Stripe error."""
         # Mock Stripe error using the actual stripe library structure
         mock_create.side_effect = Exception("Test Stripe error")
 
         customer_data = {"email": "test@example.com", "name": "Test Customer"}
 
-        result = StripeAPI.create_stripe_customer(customer_data)
+        api = StripeAPI()
+        result = api.create_stripe_customer(customer_data)
 
         self.assertIsNone(result)
 
     @patch("core.services.stripe.stripe.Customer.create")
-    def test_create_stripe_customer_empty_data(self, mock_create):
-        """Test customer creation with empty data"""
+    def test_create_stripe_customer_empty_data(self, mock_create: Mock) -> None:
+        """Test customer creation with empty data."""
         # Mock successful creation with empty data
         mock_customer = Mock()
         mock_customer.to_dict.return_value = {"id": "cus_empty"}
         mock_create.return_value = mock_customer
 
-        result = StripeAPI.create_stripe_customer({})
+        api = StripeAPI()
+        result = api.create_stripe_customer({})
 
         self.assertEqual(result, {"id": "cus_empty"})
         mock_create.assert_called_once_with()
@@ -690,12 +587,13 @@ class DashboardServiceTest(TestCase):
         self.assertFalse(result["has_chargify"])
         self.assertFalse(result["has_stripe"])
 
-    def test_get_trial_info_active_trial(self):
-        """Test trial info for active trial"""
+    def test_get_trial_info_active_trial(self) -> None:
+        """Test trial info for active trial."""
         from core.services.dashboard import DashboardService
         from django.utils import timezone
 
-        # Set workspace as trial
+        # Set workspace as trial with a paid plan (free plan can't have trial status)
+        self.workspace.subscription_plan = "pro"
         self.workspace.subscription_status = "trial"
         self.workspace.trial_end_date = timezone.now() + timezone.timedelta(days=10)
         self.workspace.save()
