@@ -16,6 +16,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _safe_getattr(obj: Any, attr: str, default: Any = None) -> Any:
+    """Safely get an attribute from a Stripe object.
+
+    The Stripe SDK's __getattr__ raises KeyError instead of AttributeError
+    when an attribute doesn't exist on certain object types (e.g., canceled
+    or incomplete subscriptions). Since Python's getattr() only catches
+    AttributeError, this function handles both exceptions.
+
+    Args:
+        obj: The object to get the attribute from.
+        attr: The attribute name.
+        default: Default value if attribute doesn't exist.
+
+    Returns:
+        The attribute value, or default if not found.
+    """
+    try:
+        return getattr(obj, attr, default)
+    except KeyError:
+        return default
+
+
 class StripeAPI:
     """API client for Stripe operations using the official Stripe SDK.
 
@@ -148,7 +170,7 @@ class StripeAPI:
                 try:
                     customer = stripe.Customer.retrieve(workspace.stripe_customer_id)
                     # Check if customer was deleted
-                    if not getattr(customer, "deleted", False):
+                    if not _safe_getattr(customer, "deleted", False):
                         return customer.to_dict()
                     logger.warning(
                         f"Stripe customer {workspace.stripe_customer_id} was deleted"
@@ -464,18 +486,19 @@ class StripeAPI:
         items = []
 
         # Must access sub.items.data directly - getattr doesn't work
-        # correctly with Stripe's ListObject which uses __getattr__ magic
+        # correctly with Stripe's ListObject which uses __getattr__ magic.
+        # Also handle KeyError which Stripe SDK raises for missing attributes.
         try:
             items_data = list(sub.items.data) if sub.items else []
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError, KeyError):
             return []
 
         for item in items_data:
-            price = getattr(item, "price", None)
+            price = _safe_getattr(item, "price")
             if not price:
                 continue
 
-            product = getattr(price, "product", None)
+            product = _safe_getattr(price, "product")
             product_name = None
 
             if isinstance(product, str):
@@ -486,15 +509,15 @@ class StripeAPI:
                 except stripe.error.StripeError:
                     product_name = None
             elif product:
-                product_name = getattr(product, "name", None)
+                product_name = _safe_getattr(product, "name")
 
             items.append(
                 {
-                    "price_id": getattr(price, "id", None),
+                    "price_id": _safe_getattr(price, "id"),
                     "product_name": product_name,
-                    "unit_amount": getattr(price, "unit_amount", None),
-                    "currency": getattr(price, "currency", None),
-                    "quantity": getattr(item, "quantity", 1),
+                    "unit_amount": _safe_getattr(price, "unit_amount"),
+                    "currency": _safe_getattr(price, "currency"),
+                    "quantity": _safe_getattr(item, "quantity", 1),
                 }
             )
 
@@ -531,15 +554,18 @@ class StripeAPI:
 
             result = []
             for sub in subscriptions.data:
-                # Use getattr with defaults for attributes that may be missing
-                # on canceled/incomplete subscriptions
+                # Use _safe_getattr for attributes that may be missing
+                # on canceled/incomplete subscriptions. Stripe SDK's __getattr__
+                # raises KeyError (not AttributeError) for missing attributes.
                 sub_data = {
                     "id": sub.id,
                     "status": sub.status,
-                    "current_period_start": getattr(sub, "current_period_start", None),
-                    "current_period_end": getattr(sub, "current_period_end", None),
-                    "cancel_at_period_end": getattr(sub, "cancel_at_period_end", False),
-                    "canceled_at": getattr(sub, "canceled_at", None),
+                    "current_period_start": _safe_getattr(sub, "current_period_start"),
+                    "current_period_end": _safe_getattr(sub, "current_period_end"),
+                    "cancel_at_period_end": _safe_getattr(
+                        sub, "cancel_at_period_end", False
+                    ),
+                    "canceled_at": _safe_getattr(sub, "canceled_at"),
                     "items": self._extract_subscription_items(sub),
                 }
                 result.append(sub_data)

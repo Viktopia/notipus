@@ -20,6 +20,15 @@ from django.utils.functional import SimpleLazyObject
 
 sentry_sdk.init(
     dsn=os.environ.get("SENTRY_DSN", ""),
+    # Release tracking: Git SHA passed via SENTRY_RELEASE env var (set at build time)
+    release=os.environ.get("SENTRY_RELEASE"),
+    # Environment: defaults based on DEBUG setting
+    environment=os.environ.get(
+        "SENTRY_ENVIRONMENT",
+        "development"
+        if os.environ.get("DEBUG", "False").lower() == "true"
+        else "production",
+    ),
     # Add data like request headers and IP for users, see
     # https://docs.sentry.io/platforms/python/data-management/data-collected/
     send_default_pii=True,

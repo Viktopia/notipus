@@ -11,8 +11,74 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from core.services.stripe import StripeAPI
+from core.services.stripe import StripeAPI, _safe_getattr
 from webhooks.services.billing import BillingService
+
+
+class TestSafeGetattr:
+    """Tests for the _safe_getattr helper function.
+
+    The Stripe SDK's __getattr__ raises KeyError instead of AttributeError
+    for missing attributes on certain object types. This test class ensures
+    _safe_getattr handles both exceptions correctly.
+    """
+
+    def test_returns_attribute_value_when_exists(self) -> None:
+        """Test that _safe_getattr returns attribute value when it exists."""
+        obj = MagicMock()
+        obj.test_attr = "test_value"
+        result = _safe_getattr(obj, "test_attr")
+        assert result == "test_value"
+
+    def test_returns_default_on_attribute_error(self) -> None:
+        """Test that _safe_getattr returns default when attribute doesn't exist."""
+
+        class SimpleObject:
+            pass
+
+        obj = SimpleObject()
+        result = _safe_getattr(obj, "missing_attr", "default_value")
+        assert result == "default_value"
+
+    def test_returns_none_as_default(self) -> None:
+        """Test that _safe_getattr returns None as default when not specified."""
+
+        class SimpleObject:
+            pass
+
+        obj = SimpleObject()
+        result = _safe_getattr(obj, "missing_attr")
+        assert result is None
+
+    def test_returns_default_on_key_error(self) -> None:
+        """Test that _safe_getattr handles KeyError from Stripe-like objects.
+
+        This simulates the Stripe SDK behavior where __getattr__ raises
+        KeyError instead of AttributeError for missing attributes.
+        """
+
+        class StripeStyleObject:
+            """Simulates Stripe SDK object that raises KeyError."""
+
+            def __getattr__(self, name: str) -> Any:
+                raise KeyError(name)
+
+        obj = StripeStyleObject()
+        result = _safe_getattr(obj, "current_period_start", "default")
+        assert result == "default"
+
+    def test_returns_none_on_key_error_without_default(self) -> None:
+        """Test that _safe_getattr returns None on KeyError when no default."""
+
+        class StripeStyleObject:
+            """Simulates Stripe SDK object that raises KeyError."""
+
+            def __getattr__(self, name: str) -> Any:
+                raise KeyError(name)
+
+        obj = StripeStyleObject()
+        result = _safe_getattr(obj, "current_period_start")
+        assert result is None
 
 
 class TestStripeAPICheckout:
