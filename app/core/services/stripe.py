@@ -218,6 +218,17 @@ class StripeAPI:
         try:
             stripe.api_key = self.api_key
 
+            # Append session_id to success URL for retrieval after redirect
+            # This avoids session cookie issues with cross-site redirects
+            from urllib.parse import urlparse
+
+            base_success_url = success_url or settings.STRIPE_SUCCESS_URL
+            parsed = urlparse(base_success_url)
+            separator = "&" if parsed.query else "?"
+            success_url_with_session = (
+                f"{base_success_url}{separator}session_id={{CHECKOUT_SESSION_ID}}"
+            )
+
             session_params: dict[str, Any] = {
                 "customer": customer_id,
                 "payment_method_types": ["card"],
@@ -228,7 +239,7 @@ class StripeAPI:
                     }
                 ],
                 "mode": "subscription",
-                "success_url": success_url or settings.STRIPE_SUCCESS_URL,
+                "success_url": success_url_with_session,
                 "cancel_url": cancel_url or settings.STRIPE_CANCEL_URL,
                 "allow_promotion_codes": True,
                 "billing_address_collection": "auto",
@@ -261,6 +272,39 @@ class StripeAPI:
             return None
         except Exception as e:
             logger.error(f"Unexpected error creating checkout session: {e!s}")
+            return None
+
+    def retrieve_checkout_session(self, session_id: str) -> dict[str, Any] | None:
+        """Retrieve a Stripe Checkout Session by ID.
+
+        Args:
+            session_id: The Stripe Checkout Session ID.
+
+        Returns:
+            Session data including metadata, or None on failure.
+        """
+        # Validate session_id format (Stripe checkout sessions start with "cs_")
+        if not session_id or not session_id.startswith("cs_"):
+            logger.warning(f"Invalid checkout session_id format: {session_id!r}")
+            return None
+
+        try:
+            stripe.api_key = self.api_key
+            session = stripe.checkout.Session.retrieve(session_id)
+
+            return {
+                "id": session.id,
+                "customer": session.customer,
+                "status": session.status,
+                "metadata": dict(session.metadata) if session.metadata else {},
+                "subscription": session.subscription,
+            }
+
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error retrieving checkout session: {e!s}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving checkout session: {e!s}")
             return None
 
     def create_portal_session(

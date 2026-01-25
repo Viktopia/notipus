@@ -290,9 +290,6 @@ def checkout(
         else:
             price_id = price["id"]
 
-        # Store plan selection in session for checkout success
-        request.session["checkout_plan"] = plan_name
-
         # Create Stripe Checkout Session
         checkout_session = stripe_api.create_checkout_session(
             customer_id=customer["id"],
@@ -371,18 +368,36 @@ def billing_portal(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
 def checkout_success(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Checkout success page.
 
+    Retrieves plan information from Stripe session to avoid session cookie issues
+    with cross-site redirects.
+
     Args:
         request: The HTTP request object.
 
     Returns:
         Success page or redirect to billing dashboard.
     """
-    plan_name = request.session.get("checkout_plan")
-    if not plan_name:
-        return redirect("core:billing_dashboard")
+    from core.services.stripe import StripeAPI
 
-    # Clear session
-    request.session.pop("checkout_plan", None)
+    # Get session_id from query params (passed by Stripe)
+    session_id = request.GET.get("session_id")
+
+    plan_name = None
+
+    if session_id:
+        # Retrieve plan name from Stripe Checkout Session metadata
+        try:
+            stripe_api = StripeAPI()
+            checkout_session = stripe_api.retrieve_checkout_session(session_id)
+            if checkout_session:
+                plan_name = checkout_session.get("metadata", {}).get("plan_name")
+        except Exception as e:
+            logger.warning(f"Error retrieving Stripe session: {e}")
+
+    if not plan_name:
+        # No plan info available, redirect to billing dashboard
+        messages.info(request, "Your subscription has been updated successfully.")
+        return redirect("core:billing_dashboard")
 
     context: dict[str, Any] = {
         "plan_name": plan_name,
@@ -400,7 +415,4 @@ def checkout_cancel(request: HttpRequest) -> HttpResponse:
     Returns:
         Checkout cancel page.
     """
-    # Clear session
-    request.session.pop("checkout_plan", None)
-
     return render(request, "core/checkout_cancel.html.j2")
