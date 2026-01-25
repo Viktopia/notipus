@@ -675,3 +675,290 @@ class DashboardServiceTest(TestCase):
         self.assertEqual(result[0]["type"], "payment_success")
         self.assertEqual(result[0]["provider"], "stripe")
         self.assertEqual(result[0]["amount"], "99.99")
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_transform_activity_data_with_enriched_fields(self, mock_db_service):
+        """Test activity data transformation with enriched fields"""
+        from core.services.dashboard import DashboardService
+
+        service = DashboardService()
+
+        raw_activity = [
+            {
+                "type": "payment",
+                "event_type": "payment_success",
+                "provider": "stripe",
+                "status": "success",
+                "severity": "success",
+                "amount": 299.00,
+                "currency": "USD",
+                "timestamp": 1234567890,
+                "external_id": "pi_123",
+                "customer_id": "cus_123",
+                "headline": "$299.00 from Acme Corp",
+                "company_name": "Acme Corp",
+                "company_logo_url": "https://logo.clearbit.com/acme.com",
+                "company_domain": "acme.com",
+                "customer_email": "billing@acme.com",
+                "customer_name": "John Doe",
+                "customer_ltv": "$2.5k",
+                "customer_tenure": "Since Mar 2024",
+                "customer_status_flags": ["vip"],
+                "insight_text": "First payment - Welcome aboard!",
+                "insight_icon": "celebration",
+                "plan_name": "Pro Plan",
+                "payment_method": "visa",
+                "card_last4": "4242",
+            },
+        ]
+
+        result = service._transform_activity_data(raw_activity)
+
+        self.assertEqual(len(result), 1)
+        item = result[0]
+        self.assertEqual(item["headline"], "$299.00 from Acme Corp")
+        self.assertEqual(item["company_name"], "Acme Corp")
+        self.assertEqual(item["company_logo_url"], "https://logo.clearbit.com/acme.com")
+        self.assertEqual(item["customer_email"], "billing@acme.com")
+        self.assertEqual(item["customer_ltv"], "$2.5k")
+        self.assertEqual(item["customer_tenure"], "Since Mar 2024")
+        self.assertEqual(item["customer_status_flags"], ["vip"])
+        self.assertEqual(item["insight_text"], "First payment - Welcome aboard!")
+        self.assertEqual(item["insight_icon"], "celebration")
+        self.assertEqual(item["plan_name"], "Pro Plan")
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_empty(self, mock_db_service):
+        """Test deduplication with empty activity list"""
+        from core.services.dashboard import DashboardService
+
+        service = DashboardService()
+        result = service._deduplicate_activity([])
+
+        self.assertEqual(result, [])
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_single_event(self, mock_db_service):
+        """Test deduplication with single event"""
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        activity = [
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": timezone.now(),
+                "amount": 100.00,
+            }
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["event_count"], 1)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_groups_same_customer_type_date(self, mock_db_service):
+        """Test deduplication groups events by customer+type+date"""
+        from datetime import timedelta
+
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        now = timezone.now()
+        # Same customer, same type, same day - should be grouped
+        activity = [
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 100.00,
+            },
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now - timedelta(hours=2),
+                "amount": 200.00,
+            },
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now - timedelta(hours=4),
+                "amount": 150.00,
+            },
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["event_count"], 3)
+        self.assertEqual(result[0]["total_amount"], 450.00)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_keeps_different_customers_separate(
+        self, mock_db_service
+    ):
+        """Test deduplication keeps different customers separate"""
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        now = timezone.now()
+        activity = [
+            {
+                "customer_email": "alice@example.com",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 100.00,
+            },
+            {
+                "customer_email": "bob@example.com",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 200.00,
+            },
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["event_count"], 1)
+        self.assertEqual(result[1]["event_count"], 1)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_keeps_different_event_types_separate(
+        self, mock_db_service
+    ):
+        """Test deduplication keeps different event types separate"""
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        now = timezone.now()
+        activity = [
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 100.00,
+            },
+            {
+                "customer_email": "test@example.com",
+                "event_type": "subscription_created",
+                "processed_at": now,
+                "amount": 100.00,
+            },
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 2)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_keeps_different_dates_separate(self, mock_db_service):
+        """Test deduplication keeps different dates separate"""
+        from datetime import timedelta
+
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        now = timezone.now()
+        yesterday = now - timedelta(days=1)
+
+        activity = [
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 100.00,
+            },
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": yesterday,
+                "amount": 100.00,
+            },
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 2)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_uses_most_recent_event(self, mock_db_service):
+        """Test deduplication uses most recent event as representative"""
+        from datetime import timedelta
+
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        now = timezone.now()
+        activity = [
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now - timedelta(hours=4),
+                "amount": 100.00,
+                "headline": "Old headline",
+            },
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 300.00,
+                "headline": "Most recent headline",
+            },
+            {
+                "customer_email": "test@example.com",
+                "event_type": "payment_success",
+                "processed_at": now - timedelta(hours=2),
+                "amount": 200.00,
+                "headline": "Middle headline",
+            },
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["headline"], "Most recent headline")
+        self.assertEqual(result[0]["amount"], 300.00)
+        self.assertEqual(result[0]["event_count"], 3)
+
+    @patch("core.services.dashboard.DatabaseLookupService")
+    def test_deduplicate_activity_fallback_to_customer_id(self, mock_db_service):
+        """Test deduplication falls back to customer_id when email is missing"""
+        from core.services.dashboard import DashboardService
+        from django.utils import timezone
+
+        service = DashboardService()
+
+        now = timezone.now()
+        activity = [
+            {
+                "customer_id": "cus_123",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 100.00,
+            },
+            {
+                "customer_id": "cus_123",
+                "event_type": "payment_success",
+                "processed_at": now,
+                "amount": 200.00,
+            },
+        ]
+
+        result = service._deduplicate_activity(activity)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["event_count"], 2)

@@ -84,7 +84,8 @@ class EventProcessor:
         """Process an event and return formatted output for target platform.
 
         This method uses the multi-target notification system with
-        RichNotification and formatters.
+        RichNotification and formatters. It also stores the enriched
+        record in Redis for dashboard display.
 
         Args:
             event_data: Dictionary containing event type and metadata.
@@ -97,6 +98,11 @@ class EventProcessor:
         Raises:
             ValueError: If event_data is missing or has invalid type.
             KeyError: If no formatter registered for target.
+
+        Note:
+            This method stores the enriched record for dashboard display.
+            If you only need the RichNotification without storage, use
+            the notification_builder directly.
         """
         if not event_data or "type" not in event_data:
             raise ValueError("Missing event type")
@@ -115,6 +121,9 @@ class EventProcessor:
         notification = self.notification_builder.build(
             enriched_event_data, customer_data, company
         )
+
+        # Store enriched record for dashboard display
+        self._store_enriched_record(enriched_event_data, notification)
 
         # Format for target platform using destination plugin
         registry = PluginRegistry.instance()
@@ -142,6 +151,10 @@ class EventProcessor:
 
         Raises:
             ValueError: If event_data is missing or has invalid type.
+
+        Note:
+            This method also stores the enriched record in Redis for
+            dashboard display (same as process_event_rich).
         """
         if not event_data or "type" not in event_data:
             raise ValueError("Missing event type")
@@ -156,27 +169,28 @@ class EventProcessor:
         # Enrich company data
         company = self._enrich_company(customer_data)
 
-        return self.notification_builder.build(
+        notification = self.notification_builder.build(
             enriched_event_data, customer_data, company
         )
 
-    def _enrich_with_cross_references(
-        self, event_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Enrich event data with cross-references and store in database.
+        # Store enriched record for dashboard display
+        self._store_enriched_record(enriched_event_data, notification)
+
+        return notification
+
+    def _store_enriched_record(
+        self,
+        event_data: dict[str, Any],
+        notification: RichNotification,
+    ) -> None:
+        """Store enriched event record for dashboard display.
 
         Args:
-            event_data: Original event data dictionary.
-
-        Returns:
-            Enriched copy of event data with cross-reference information.
+            event_data: The event data dictionary.
+            notification: The built RichNotification.
         """
-        # Make a copy to avoid modifying the original
-        enriched_data = event_data.copy()
-
-        # Store the event data in database
-        # All payment/subscription events should be stored for activity tracking
-        payment_event_types = {
+        # Determine which events should be stored for activity tracking
+        storable_event_types = {
             "payment_success",
             "payment_failure",
             "subscription_created",
@@ -186,14 +200,34 @@ class EventProcessor:
             "invoice_paid",
             "trial_ending",
             "payment_action_required",
+            "order_created",
+            "order_fulfilled",
+            "fulfillment_created",
+            "fulfillment_updated",
+            "shipment_delivered",
         }
         event_type = event_data.get("type")
-        provider = event_data.get("provider", "").lower()
 
-        if event_type in payment_event_types:
-            self.db_lookup.store_payment_record(event_data)
-        elif provider == "shopify":
-            self.db_lookup.store_order_record(event_data)
+        if event_type in storable_event_types:
+            try:
+                self.db_lookup.store_enriched_record(event_data, notification)
+            except Exception as e:
+                # Don't fail event processing if storage fails
+                logger.warning(f"Failed to store enriched record: {e}")
+
+    def _enrich_with_cross_references(
+        self, event_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Enrich event data with cross-references.
+
+        Args:
+            event_data: Original event data dictionary.
+
+        Returns:
+            Enriched copy of event data with cross-reference information.
+        """
+        # Make a copy to avoid modifying the original
+        enriched_data = event_data.copy()
 
         # Perform cross-reference lookups
         if "metadata" not in enriched_data:

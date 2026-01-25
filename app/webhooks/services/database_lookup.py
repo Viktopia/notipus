@@ -4,14 +4,19 @@ This module provides services for storing and retrieving webhook
 records in Redis with TTL-based expiration.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from django.utils import timezone
+
+if TYPE_CHECKING:
+    from webhooks.models.rich_notification import RichNotification
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +32,18 @@ class DatabaseLookupService:
         ttl_seconds: Time-to-live for webhook records.
     """
 
-    def __init__(self) -> None:
-        """Initialize the database lookup service."""
+    # Default TTL of 7 days for webhook activity records
+    DEFAULT_TTL_DAYS = 7
+
+    def __init__(self, ttl_days: int | None = None) -> None:
+        """Initialize the database lookup service.
+
+        Args:
+            ttl_days: Number of days to keep webhook records. Defaults to 7.
+        """
         self.lookup_window_hours = 24  # Look for matches within 24 hours
-        self.ttl_seconds = 60 * 60 * 24  # 24 hours TTL for webhook records
+        days = ttl_days if ttl_days is not None else self.DEFAULT_TTL_DAYS
+        self.ttl_seconds = 60 * 60 * 24 * days  # TTL for webhook records
 
     def _get_webhook_key(self, webhook_type: str, timestamp: str) -> str:
         """Generate Redis key for webhook record.
@@ -365,6 +378,123 @@ class DatabaseLookupService:
             current_activity = current_activity[-100:]
 
         cache.set(activity_key, json.dumps(current_activity), timeout=self.ttl_seconds)
+
+    def store_enriched_record(
+        self,
+        event_data: dict[str, Any],
+        notification: RichNotification,
+    ) -> bool:
+        """Store an enriched webhook record in Redis with TTL.
+
+        This method stores both basic event data and enriched fields from
+        a RichNotification for display in the dashboard.
+
+        Args:
+            event_data: Dictionary containing event data.
+            notification: RichNotification with enriched data.
+
+        Returns:
+            True if storage was successful, False otherwise.
+        """
+        try:
+            provider = event_data.get("provider", "").lower()
+            if not provider:
+                logger.warning("Missing provider in event data")
+                return False
+
+            # Extract and validate fields
+            external_id = (
+                event_data.get("external_id")
+                or event_data.get("transaction_id")
+                or event_data.get("id")
+            )
+            customer_id = event_data.get("customer_id")
+            if not customer_id:
+                logger.warning(
+                    f"Missing customer_id in event: {event_data.get('type')}"
+                )
+                return False
+
+            # Generate fallback ID if needed
+            now = timezone.now()
+            if not external_id:
+                external_id = f"{provider}_{now.strftime('%Y%m%d_%H%M%S_%f')}"
+
+            # Extract basic fields with defaults
+            amount = event_data.get("amount", 0) or 0
+            currency = event_data.get("currency", "USD") or "USD"
+            status = self._normalize_status(event_data.get("status"))
+            event_type = event_data.get("type", "payment")
+            display_type = self._get_event_display_type(event_type)
+
+            # Create webhook record with enriched fields
+            webhook_record: dict[str, Any] = {
+                # Basic fields
+                "type": display_type,
+                "event_type": event_type,
+                "provider": provider,
+                "external_id": str(external_id),
+                "customer_id": str(customer_id),
+                "amount": float(Decimal(str(amount))),
+                "currency": currency.upper(),
+                "status": status,
+                "metadata": event_data.get("metadata", {}),
+                "processed_at": now.isoformat(),
+                "timestamp": now.timestamp(),
+                # Enriched fields from RichNotification
+                "headline": notification.headline,
+                "severity": notification.severity.value,
+            }
+
+            # Add company enrichment if available
+            if notification.company:
+                webhook_record["company_name"] = notification.company.name
+                webhook_record["company_logo_url"] = notification.company.logo_url
+                webhook_record["company_domain"] = notification.company.domain
+
+            # Add customer info if available
+            if notification.customer:
+                webhook_record["customer_email"] = notification.customer.email
+                webhook_record["customer_name"] = notification.customer.name
+                webhook_record["customer_ltv"] = notification.customer.ltv_display
+                webhook_record["customer_tenure"] = notification.customer.tenure_display
+                webhook_record["customer_status_flags"] = (
+                    notification.customer.status_flags
+                )
+
+            # Add insight if available
+            if notification.insight:
+                webhook_record["insight_text"] = notification.insight.text
+                webhook_record["insight_icon"] = notification.insight.icon
+
+            # Add payment info if available
+            if notification.payment:
+                webhook_record["plan_name"] = notification.payment.plan_name
+                webhook_record["payment_method"] = notification.payment.payment_method
+                webhook_record["card_last4"] = notification.payment.card_last4
+                if notification.payment.order_number:
+                    webhook_record["order_number"] = notification.payment.order_number
+
+            # Store in Redis with TTL
+            timestamp_key = now.strftime("%Y%m%d_%H%M%S_%f")
+            webhook_key = self._get_webhook_key(display_type, timestamp_key)
+
+            cache.set(webhook_key, json.dumps(webhook_record), timeout=self.ttl_seconds)
+
+            # Add to daily activity list
+            self._add_to_activity_list(webhook_key)
+
+            logger.info(
+                f"Stored enriched {event_type} record in Redis: "
+                f"{provider} {external_id}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Error storing enriched record in Redis: {e!s}", exc_info=True
+            )
+            return False
 
     def get_recent_webhook_activity(
         self, days: int = 7, limit: int = 50

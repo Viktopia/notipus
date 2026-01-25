@@ -5,7 +5,9 @@ integration overview data for the application frontend.
 """
 
 import logging
+from collections import defaultdict
 from datetime import datetime
+from datetime import timezone as dt_timezone
 from typing import Any
 
 from core.models import Integration, Plan, UserProfile, Workspace, WorkspaceMember
@@ -104,13 +106,17 @@ class DashboardService:
             workspace: Workspace model instance.
 
         Returns:
-            List of recent activity records.
+            List of recent activity records, deduplicated with counts.
         """
         try:
+            # Fetch more records than needed to allow for deduplication
             recent_activity_raw = self.db_service.get_recent_webhook_activity(
-                days=7, limit=15
+                days=7, limit=100
             )
-            return self._transform_activity_data(recent_activity_raw)
+            transformed = self._transform_activity_data(recent_activity_raw)
+            deduplicated = self._deduplicate_activity(transformed)
+            # Return limited results after deduplication
+            return deduplicated[:15]
         except Exception as e:
             logger.warning(f"Error getting recent activity: {e!s}")
             return []
@@ -124,7 +130,7 @@ class DashboardService:
             raw_activity: List of raw activity records from Redis.
 
         Returns:
-            List of transformed activity records.
+            List of transformed activity records with enriched fields.
         """
         recent_activity: list[dict[str, Any]] = []
 
@@ -139,14 +145,32 @@ class DashboardService:
                     timestamp = timezone.now()
 
                 activity_item: dict[str, Any] = {
+                    # Basic fields
                     "type": record.get("type"),
+                    "event_type": record.get("event_type"),
                     "provider": record.get("provider"),
                     "status": record.get("status"),
+                    "severity": record.get("severity", "info"),
                     "amount": record.get("amount"),
                     "currency": record.get("currency"),
                     "processed_at": timestamp,
                     "external_id": record.get("external_id"),
                     "customer_id": record.get("customer_id"),
+                    # Enriched fields
+                    "headline": record.get("headline"),
+                    "company_name": record.get("company_name"),
+                    "company_logo_url": record.get("company_logo_url"),
+                    "company_domain": record.get("company_domain"),
+                    "customer_email": record.get("customer_email"),
+                    "customer_name": record.get("customer_name"),
+                    "customer_ltv": record.get("customer_ltv"),
+                    "customer_tenure": record.get("customer_tenure"),
+                    "customer_status_flags": record.get("customer_status_flags", []),
+                    "insight_text": record.get("insight_text"),
+                    "insight_icon": record.get("insight_icon"),
+                    "plan_name": record.get("plan_name"),
+                    "payment_method": record.get("payment_method"),
+                    "card_last4": record.get("card_last4"),
                 }
 
                 # Add type-specific fields
@@ -160,6 +184,72 @@ class DashboardService:
                 continue
 
         return recent_activity
+
+    def _deduplicate_activity(
+        self, activity: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Deduplicate activity records by grouping similar events.
+
+        Groups events by customer_email + event_type + date (same day).
+        Keeps the most recent event as representative and adds event_count.
+
+        Args:
+            activity: List of transformed activity records.
+
+        Returns:
+            List of deduplicated activity records with event_count field.
+        """
+        if not activity:
+            return []
+
+        # Group events by deduplication key
+        groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+        for item in activity:
+            # Create deduplication key: customer_email + event_type + date
+            customer_email = item.get("customer_email") or item.get("customer_id") or ""
+            event_type = item.get("event_type") or item.get("type") or ""
+            timestamp = item.get("processed_at")
+
+            if timestamp:
+                date_str = timestamp.strftime("%Y-%m-%d")
+            else:
+                date_str = timezone.now().strftime("%Y-%m-%d")
+
+            dedup_key = f"{customer_email}:{event_type}:{date_str}"
+            groups[dedup_key].append(item)
+
+        # Build deduplicated list
+        deduplicated: list[dict[str, Any]] = []
+
+        # Use a minimum datetime as fallback for sorting
+        # (avoids creating new datetime per comparison)
+        min_time = datetime.min.replace(tzinfo=dt_timezone.utc)
+
+        for _dedup_key, items in groups.items():
+            # Sort by timestamp descending to get most recent first
+            items.sort(key=lambda x: x.get("processed_at") or min_time, reverse=True)
+
+            # Use the most recent event as representative
+            representative = items[0].copy()
+            representative["event_count"] = len(items)
+
+            # Aggregate total amount if there are multiple events
+            if len(items) > 1:
+                total_amount = sum(
+                    item.get("amount") or 0
+                    for item in items
+                    if item.get("amount") is not None
+                )
+                if total_amount > 0:
+                    representative["total_amount"] = total_amount
+
+            deduplicated.append(representative)
+
+        # Sort by most recent timestamp
+        deduplicated.sort(key=lambda x: x.get("processed_at") or min_time, reverse=True)
+
+        return deduplicated
 
     def _get_usage_data(self, workspace: Workspace) -> dict[str, Any]:
         """Get rate limiting and usage statistics for the workspace.
