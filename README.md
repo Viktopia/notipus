@@ -520,7 +520,11 @@ Redis is used for multiple purposes:
 - `STRIPE_SECRET_KEY`: Stripe secret key for processing subscriptions
 - `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key for frontend integration
 - `STRIPE_API_VERSION`: Stripe API version (default: `2025-12-15.clover`)
-- `NOTIPUS_STRIPE_WEBHOOK_SECRET`: Webhook secret for Stripe billing events
+- `NOTIPUS_STRIPE_WEBHOOK_SECRET`: Webhook secret for Stripe billing events (from Stripe Dashboard → Webhooks)
+
+> **Important**: Set `NOTIPUS_STRIPE_WEBHOOK_SECRET` before running migrations.
+> The migration `0017_add_stripe_billing_integration` creates the required
+> `GlobalBillingIntegration` record using this environment variable.
 
 **Stripe Checkout and Portal URLs:**
 
@@ -576,7 +580,11 @@ Customer webhook integrations are configured per-tenant through the web interfac
 
 **Global Webhooks** (Notipus billing):
 
-- `POST /webhooks/billing/stripe/` - Notipus subscription billing events
+- `POST /webhook/billing/stripe/` - Notipus subscription billing events
+
+> **Important**: The billing webhook requires a `GlobalBillingIntegration` database record.
+> This is created automatically by running migrations. Ensure `NOTIPUS_STRIPE_WEBHOOK_SECRET`
+> is set in your environment before running `python manage.py migrate`.
 
 ### Supported Events
 
