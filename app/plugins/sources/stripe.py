@@ -268,8 +268,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
         from webhooks.services.billing import BillingService
 
         if event_type == "subscription_created":
-            BillingService.handle_subscription_created(data)
-            return data.get("plan", {}).get("amount", 0)
+            return self._handle_subscription_created(data)
 
         if event_type == "subscription_updated":
             return self._handle_subscription_updated(data)
@@ -302,6 +301,46 @@ class StripeSourcePlugin(BaseSourcePlugin):
             return data.get("amount_due", 0)
 
         return 0
+
+    def _handle_subscription_created(self, data: dict[str, Any]) -> int:
+        """Handle subscription_created event with trial detection.
+
+        Args:
+            data: Event data dictionary (mutated with trial flags if trialing).
+
+        Returns:
+            Amount in cents (0 for trials, plan amount otherwise).
+        """
+        from webhooks.services.billing import BillingService
+
+        BillingService.handle_subscription_created(data)
+
+        # Check if this is a trial subscription
+        if data.get("status") == "trialing":
+            return self._flag_as_trial(data)
+
+        return data.get("plan", {}).get("amount", 0)
+
+    def _flag_as_trial(self, data: dict[str, Any]) -> int:
+        """Flag subscription data as trial and extract trial metadata.
+
+        Args:
+            data: Event data dictionary (mutated with trial flags).
+
+        Returns:
+            0 (no payment for trials).
+        """
+        data["_is_trial"] = True
+        data["_trial_end"] = data.get("trial_end")
+        data["_plan_amount_cents"] = data.get("plan", {}).get("amount", 0)
+
+        # Calculate trial days from trial_start and trial_end (Unix timestamps)
+        trial_start = data.get("trial_start")
+        trial_end = data.get("trial_end")
+        if trial_start and trial_end:
+            data["_trial_days"] = (trial_end - trial_start) // 86400
+
+        return 0  # No payment for trials
 
     def _handle_subscription_updated(self, data: dict[str, Any]) -> int:
         """Handle subscription_updated event with change detection.
@@ -377,67 +416,117 @@ class StripeSourcePlugin(BaseSourcePlugin):
             "currency": str(data.get("currency", "USD")).upper(),
             "amount": amount,
             "metadata": {},
-            # Idempotency key for cross-event deduplication
-            # (multiple events from same action share this key)
             "idempotency_key": idempotency_key,
         }
 
+        # Add metadata based on event flags and type
+        self._add_event_metadata(event_data, event_type, data)
+
+        return event_data
+
+    def _add_event_metadata(
+        self, event_data: dict[str, Any], event_type: str, data: dict[str, Any]
+    ) -> None:
+        """Add metadata to event data based on flags and event type.
+
+        Args:
+            event_data: Event data dictionary to mutate.
+            event_type: The normalized event type.
+            data: Raw event data with internal flags.
+        """
+        metadata = event_data["metadata"]
+
         # Add trial conversion flag if detected
         if data.get("_is_trial_conversion"):
-            event_data["metadata"]["is_trial_conversion"] = True
+            metadata["is_trial_conversion"] = True
+
+        # Add trial metadata for trial_started events
+        if data.get("_is_trial"):
+            self._add_trial_metadata(metadata, data)
 
         # Add change direction for subscription updates (upgrade/downgrade)
         if data.get("_change_direction"):
-            event_data["metadata"]["change_direction"] = data["_change_direction"]
+            metadata["change_direction"] = data["_change_direction"]
 
-        # Add subscription metadata for recurring payment detection
-        if event_type in (
+        # Add subscription metadata for subscription events
+        subscription_events = {
             "subscription_created",
             "subscription_updated",
             "subscription_deleted",
-        ):
-            # Add subscription ID
-            event_data["metadata"]["subscription_id"] = data.get("id", "")
+            "trial_started",
+        }
+        if event_type in subscription_events:
+            self._add_subscription_metadata(metadata, event_type, data)
 
-            # Map Stripe interval to billing period
-            plan = data.get("plan", {})
-            interval = plan.get("interval")
-            if interval:
-                interval_map = {
-                    "month": "monthly",
-                    "year": "annual",
-                    "week": "weekly",
-                    "day": "daily",
-                }
-                event_data["metadata"]["billing_period"] = interval_map.get(
-                    interval, interval
-                )
-
-            # Add plan name if available
-            plan_name = plan.get("nickname") or plan.get("name")
-            if plan_name:
-                event_data["metadata"]["plan_name"] = plan_name
-
-            # For subscription updates, extract previous amount for upgrade headlines
-            if event_type == "subscription_updated":
-                prev_attrs = data.get("_previous_attributes", {})
-                prev_plan = prev_attrs.get("plan", {})
-                if prev_plan and prev_plan.get("amount") is not None:
-                    # Convert cents to dollars
-                    event_data["metadata"]["previous_amount"] = (
-                        prev_plan["amount"] / 100
-                    )
-
-        # For invoice events (payment_success, payment_failure), check if it's
-        # a subscription invoice and extract subscription info
+        # Add invoice metadata for payment events
         if event_type in ("payment_success", "payment_failure"):
-            subscription_id = data.get("subscription")
-            if subscription_id:
-                event_data["metadata"]["subscription_id"] = subscription_id
-                # Note: billing_period not set here - invoice payloads don't
-                # include plan interval, and we can't call the Stripe API
+            self._add_invoice_metadata(metadata, data)
 
-        return event_data
+    def _add_trial_metadata(
+        self, metadata: dict[str, Any], data: dict[str, Any]
+    ) -> None:
+        """Add trial-related metadata.
+
+        Args:
+            metadata: Metadata dictionary to mutate.
+            data: Raw event data with trial flags.
+        """
+        metadata["is_trial"] = True
+        if data.get("_trial_end"):
+            metadata["trial_end"] = data["_trial_end"]
+        if data.get("_trial_days"):
+            metadata["trial_days"] = data["_trial_days"]
+        if data.get("_plan_amount_cents"):
+            metadata["plan_amount"] = data["_plan_amount_cents"] / 100
+
+    def _add_subscription_metadata(
+        self, metadata: dict[str, Any], event_type: str, data: dict[str, Any]
+    ) -> None:
+        """Add subscription-related metadata.
+
+        Args:
+            metadata: Metadata dictionary to mutate.
+            event_type: The normalized event type.
+            data: Raw event data.
+        """
+        metadata["subscription_id"] = data.get("id", "")
+
+        # Map Stripe interval to billing period
+        plan = data.get("plan", {})
+        interval = plan.get("interval")
+        if interval:
+            interval_map = {
+                "month": "monthly",
+                "year": "annual",
+                "week": "weekly",
+                "day": "daily",
+            }
+            metadata["billing_period"] = interval_map.get(interval, interval)
+
+        # Add plan name if available
+        plan_name = plan.get("nickname") or plan.get("name")
+        if plan_name:
+            metadata["plan_name"] = plan_name
+
+        # For subscription updates, extract previous amount for upgrade headlines
+        if event_type == "subscription_updated":
+            prev_attrs = data.get("_previous_attributes", {})
+            prev_plan = prev_attrs.get("plan", {})
+            if prev_plan and prev_plan.get("amount") is not None:
+                metadata["previous_amount"] = prev_plan["amount"] / 100
+
+    def _add_invoice_metadata(
+        self, metadata: dict[str, Any], data: dict[str, Any]
+    ) -> None:
+        """Add invoice-related metadata for payment events.
+
+        Args:
+            metadata: Metadata dictionary to mutate.
+            data: Raw event data.
+        """
+        subscription_id = data.get("subscription")
+        if subscription_id:
+            metadata["subscription_id"] = subscription_id
 
     def parse_webhook(
         self, request: HttpRequest, **kwargs: Any
@@ -513,6 +602,10 @@ class StripeSourcePlugin(BaseSourcePlugin):
 
             # Handle billing and get amount
             amount = self._handle_stripe_billing(event_type, data_dict)
+
+            # Transform subscription_created to trial_started if it's a trial
+            if data_dict.get("_is_trial"):
+                event_type = "trial_started"
 
             # Store webhook data for customer lookup
             self._current_webhook_data = data_dict

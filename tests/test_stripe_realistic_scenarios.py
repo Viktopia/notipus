@@ -121,27 +121,32 @@ class TestTrialSignupIntegration:
             "company": "",  # Often empty in Stripe
         }
 
-    def test_subscription_created_generates_rich_notification(
+    def test_trial_subscription_generates_trial_started_notification(
         self,
         stripe_plugin: StripeSourcePlugin,
         event_processor: EventProcessor,
         subscription_created_payload: dict[str, Any],
         customer_data: dict[str, Any],
     ) -> None:
-        """Test that subscription.created generates a proper RichNotification."""
+        """Test subscription.created with status=trialing generates trial_started."""
         # Create mock Stripe event object
         mock_event = Mock()
         mock_event.type = subscription_created_payload["type"]
         mock_event.data.object = subscription_created_payload["data"]["object"]
         mock_event.data.previous_attributes = None
 
-        # Extract event info
+        # Extract event info - initially subscription_created
         event_type, data = stripe_plugin._extract_stripe_event_info(mock_event)
         assert event_type == "subscription_created"
 
-        # Handle billing
+        # Handle billing - should detect trial and return 0 amount
         amount = stripe_plugin._handle_stripe_billing(event_type, data)
-        assert amount == 26.60  # $26.60 plan
+        assert amount == 0.0  # No payment for trials
+        assert data.get("_is_trial") is True  # Trial flag should be set
+
+        # Transform event type for trials (as done in parse_webhook)
+        if data.get("_is_trial"):
+            event_type = "trial_started"
 
         # Build event data
         event_data = stripe_plugin._build_stripe_event_data(
@@ -151,6 +156,11 @@ class TestTrialSignupIntegration:
             amount=amount,
         )
 
+        # Verify trial metadata
+        assert event_data["metadata"]["is_trial"] is True
+        assert event_data["metadata"]["trial_days"] == 14  # 14-day trial
+        assert event_data["metadata"]["plan_amount"] == 26.60  # Future billing amount
+
         # Build rich notification
         notification = event_processor.build_rich_notification(
             event_data, customer_data
@@ -158,8 +168,9 @@ class TestTrialSignupIntegration:
 
         # Verify notification structure
         assert isinstance(notification, RichNotification)
-        # Headline contains company name or "new customer" for subscriptions
-        assert notification.headline is not None
+        # Headline should indicate trial, not payment
+        assert "Trial started" in notification.headline
+        assert "New customer" not in notification.headline
 
         # Format for Slack
         slack_message = event_processor.process_event_rich(
@@ -170,9 +181,150 @@ class TestTrialSignupIntegration:
         assert "blocks" in slack_message
         assert "color" in slack_message
 
-        # Verify header block exists
+        # Verify header block exists with trial headline
         header_block = slack_message["blocks"][0]
         assert header_block["type"] == "header"
+
+    def test_non_trial_subscription_generates_new_customer_notification(
+        self,
+        stripe_plugin: StripeSourcePlugin,
+        event_processor: EventProcessor,
+        customer_data: dict[str, Any],
+    ) -> None:
+        """Test that subscription.created with status=active shows 'New customer!'."""
+        # Create a non-trial subscription payload (status=active, no trial fields)
+        active_subscription_data = {
+            "id": "sub_active123",
+            "object": "subscription",
+            "customer": "cus_TestCustomer123",
+            "status": "active",  # Not trialing!
+            "currency": "usd",
+            "created": 1769327717,
+            "current_period_start": 1769327717,
+            "current_period_end": 1770537317,
+            "cancel_at_period_end": False,
+            "canceled_at": None,
+            "plan": {
+                "id": "price_1ABC123",
+                "object": "plan",
+                "amount": 2660,
+                "currency": "usd",
+                "interval": "month",
+                "product": "prod_TestProduct",
+            },
+        }
+
+        mock_event = Mock()
+        mock_event.type = "customer.subscription.created"
+        mock_event.data.object = active_subscription_data
+        mock_event.data.previous_attributes = None
+
+        # Extract event info
+        event_type, data = stripe_plugin._extract_stripe_event_info(mock_event)
+        assert event_type == "subscription_created"
+
+        # Handle billing - should NOT detect trial, return actual amount
+        amount = stripe_plugin._handle_stripe_billing(event_type, data)
+        assert amount == 26.60  # Actual payment amount
+        assert data.get("_is_trial") is None  # Not a trial
+
+        # Build event data
+        event_data = stripe_plugin._build_stripe_event_data(
+            event_type=event_type,
+            customer_id=data["customer"],
+            data=data,
+            amount=amount,
+        )
+
+        # Verify NOT trial metadata
+        assert event_data["metadata"].get("is_trial") is None
+
+        # Build rich notification
+        notification = event_processor.build_rich_notification(
+            event_data, customer_data
+        )
+
+        # Verify notification shows "New customer!"
+        assert "New customer" in notification.headline
+
+    def test_trial_does_not_show_first_payment_insight(
+        self,
+        stripe_plugin: StripeSourcePlugin,
+        event_processor: EventProcessor,
+        subscription_created_payload: dict[str, Any],
+        customer_data: dict[str, Any],
+    ) -> None:
+        """Test that trial subscriptions don't show 'First payment' insight."""
+        mock_event = Mock()
+        mock_event.type = subscription_created_payload["type"]
+        mock_event.data.object = subscription_created_payload["data"]["object"]
+        mock_event.data.previous_attributes = None
+
+        event_type, data = stripe_plugin._extract_stripe_event_info(mock_event)
+        stripe_plugin._handle_stripe_billing(event_type, data)
+
+        # Transform to trial_started
+        if data.get("_is_trial"):
+            event_type = "trial_started"
+
+        event_data = stripe_plugin._build_stripe_event_data(
+            event_type=event_type,
+            customer_id=data["customer"],
+            data=data,
+            amount=0.0,
+        )
+
+        # Build notification
+        notification = event_processor.build_rich_notification(
+            event_data, customer_data
+        )
+
+        # Insight should be trial-related, NOT "First payment"
+        assert notification.insight is not None
+        assert "First payment" not in notification.insight.text
+        assert "trial" in notification.insight.text.lower()
+
+    def test_trial_does_not_show_payment_info(
+        self,
+        stripe_plugin: StripeSourcePlugin,
+        event_processor: EventProcessor,
+        subscription_created_payload: dict[str, Any],
+        customer_data: dict[str, Any],
+    ) -> None:
+        """Test that trial subscriptions don't show payment details.
+
+        Trials should not display payment info since no payment has occurred.
+        This ensures customer success teams see it as a trial, not a payment.
+        """
+        mock_event = Mock()
+        mock_event.type = subscription_created_payload["type"]
+        mock_event.data.object = subscription_created_payload["data"]["object"]
+        mock_event.data.previous_attributes = None
+
+        event_type, data = stripe_plugin._extract_stripe_event_info(mock_event)
+        stripe_plugin._handle_stripe_billing(event_type, data)
+
+        # Transform to trial_started
+        if data.get("_is_trial"):
+            event_type = "trial_started"
+
+        event_data = stripe_plugin._build_stripe_event_data(
+            event_type=event_type,
+            customer_id=data["customer"],
+            data=data,
+            amount=0.0,
+        )
+
+        # Build notification
+        notification = event_processor.build_rich_notification(
+            event_data, customer_data
+        )
+
+        # Payment info should be None for trials
+        assert notification.payment is None, "Trials should not have payment info"
+
+        # Amount in event data should be 0
+        assert event_data["amount"] == 0.0
 
     def test_zero_amount_invoice_filtered_before_notification(
         self,
@@ -205,7 +357,7 @@ class TestTrialSignupIntegration:
         with patch("webhooks.services.event_consolidation.cache") as mock_cache:
             mock_cache.get.return_value = None
 
-            # Event 1: subscription.created
+            # Event 1: subscription.created (with status=trialing)
             mock_event_1 = Mock()
             mock_event_1.type = subscription_created_payload["type"]
             mock_event_1.data.object = subscription_created_payload["data"]["object"]
@@ -215,9 +367,18 @@ class TestTrialSignupIntegration:
                 mock_event_1
             )
             amount_1 = stripe_plugin._handle_stripe_billing(event_type_1, data_1)
+
+            # Transform to trial_started if it's a trial (as done in parse_webhook)
+            if data_1.get("_is_trial"):
+                event_type_1 = "trial_started"
+
             event_data_1 = stripe_plugin._build_stripe_event_data(
                 event_type_1, data_1["customer"], data_1, amount_1
             )
+
+            # Verify this is now a trial_started event
+            assert event_data_1["type"] == "trial_started"
+            assert event_data_1["metadata"]["is_trial"] is True
 
             if consolidation_service.should_send_notification(
                 event_type_1, data_1["customer"], "ws_test", amount_1

@@ -43,6 +43,7 @@ class InsightDetector:
     # Semantic icon names for different insight types
     ICONS = {
         "first_payment": "new",
+        "trial_started": "rocket",
         "ltv_milestone": "celebration",
         "anniversary": "celebration",
         "payment_growth": "chart",
@@ -76,6 +77,7 @@ class InsightDetector:
         """
         # Priority order for milestone detection
         detectors = [
+            self._detect_trial_started,
             self._detect_first_payment,
             self._detect_ltv_milestone,
             self._detect_anniversary,
@@ -143,7 +145,13 @@ class InsightDetector:
             InsightInfo for first payment or None.
         """
         event_type = event_data.get("type", "")
+        # Note: trial_started is excluded - no payment has occurred yet
         if event_type not in ("payment_success", "subscription_created"):
+            return None
+
+        # Don't show "first payment" for trials - they haven't paid yet
+        metadata = event_data.get("metadata", {})
+        if metadata.get("is_trial"):
             return None
 
         # Check order count or payment history
@@ -158,6 +166,37 @@ class InsightDetector:
             )
 
         return None
+
+    def _detect_trial_started(
+        self, event_data: dict[str, Any], customer_data: dict[str, Any]
+    ) -> InsightInfo | None:
+        """Detect if this is a new trial starting.
+
+        Args:
+            event_data: Event data dictionary.
+            customer_data: Customer data dictionary (unused but required for interface).
+
+        Returns:
+            InsightInfo for trial started or None.
+        """
+        _ = customer_data  # unused
+        event_type = event_data.get("type", "")
+        if event_type != "trial_started":
+            return None
+
+        metadata = event_data.get("metadata", {})
+        trial_days = metadata.get("trial_days")
+
+        if trial_days:
+            return InsightInfo(
+                icon=self.ICONS["trial_started"],
+                text=f"New {trial_days}-day trial - Welcome aboard!",
+            )
+
+        return InsightInfo(
+            icon=self.ICONS["trial_started"],
+            text="New trial - Welcome aboard!",
+        )
 
     def _detect_ltv_milestone(
         self, event_data: dict[str, Any], customer_data: dict[str, Any]

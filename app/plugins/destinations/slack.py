@@ -17,6 +17,7 @@ from webhooks.models.rich_notification import (
     DetailSection,
     InsightInfo,
     NotificationSeverity,
+    NotificationType,
     PaymentInfo,
     RichNotification,
 )
@@ -25,6 +26,13 @@ logger = logging.getLogger(__name__)
 
 # Default timeout for Slack API requests (seconds)
 DEFAULT_TIMEOUT = 30
+
+# Trial notification types - used to show "Trial" badge instead of payment type
+TRIAL_NOTIFICATION_TYPES = {
+    NotificationType.TRIAL_STARTED,
+    NotificationType.TRIAL_ENDING,
+    NotificationType.TRIAL_CONVERTED,
+}
 
 # Semantic icon to Slack emoji mapping
 SLACK_ICONS: dict[str, str] = {
@@ -302,8 +310,11 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
 
         # Only add payment-specific badges for payment events
         if n.is_payment_event:
+            # Check for trial events - show "Trial" badge instead of payment type
+            if n.type in TRIAL_NOTIFICATION_TYPES:
+                elements.append(":rocket: Trial")
             # Add payment type (recurring/one-time) without extra emojis
-            if n.is_recurring:
+            elif n.is_recurring:
                 if n.billing_interval:
                     elements.append(f"Recurring ({n.billing_interval.title()})")
                 else:

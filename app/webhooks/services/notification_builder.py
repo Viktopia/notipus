@@ -281,6 +281,11 @@ class NotificationBuilder:
         Returns:
             PaymentInfo or None if no payment data.
         """
+        # Don't show payment info for trials - no payment has occurred
+        metadata = event_data.get("metadata", {})
+        if metadata.get("is_trial"):
+            return None
+
         amount = event_data.get("amount")
         if amount is None:
             return None
@@ -416,6 +421,17 @@ class NotificationBuilder:
 
         elif event_type in ("subscription_canceled", "subscription_deleted"):
             return "Subscription canceled"
+
+        elif event_type == "trial_started":
+            trial_days = metadata.get("trial_days")
+            plan_amount = metadata.get("plan_amount")
+            if trial_days and plan_amount:
+                return (
+                    f"Trial started! ({trial_days} days, then ${plan_amount:,.2f}/mo)"
+                )
+            elif trial_days:
+                return f"Trial started! ({trial_days} days)"
+            return "Trial started!"
 
         elif event_type == "trial_ending":
             return "Trial ending soon"

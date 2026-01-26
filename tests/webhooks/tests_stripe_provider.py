@@ -41,36 +41,38 @@ class StripeProviderTest(TestCase):
             request.headers["Stripe-Signature"] = signature
         return request
 
-    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
-    def test_get_customer_data_success(self, mock_retrieve: Mock) -> None:
-        """Test getting customer data from Stripe API."""
-        mock_retrieve.return_value = {
-            "id": "cus_123",
-            "email": "john@acme.com",
-            "name": "John Doe",
-            "metadata": {"company": "Acme Inc"},
-            "deleted": False,
+    def test_get_customer_data_success(self) -> None:
+        """Test getting customer data from webhook payload.
+
+        Customer data is extracted from stored webhook payload (_current_webhook_data)
+        since we don't have the customer's Stripe API key.
+        """
+        # Set up webhook data (simulating what parse_webhook stores)
+        self.provider._current_webhook_data = {
+            "id": "in_123",
+            "customer": "cus_123",
+            "customer_email": "john@acme.com",
+            "customer_name": "John Doe",
         }
 
         result = self.provider.get_customer_data("cus_123")
 
+        # Note: company_name is not available in webhook payload
         expected = {
-            "company_name": "Acme Inc",
+            "company_name": "",
             "email": "john@acme.com",
             "first_name": "John",
             "last_name": "Doe",
         }
         self.assertEqual(result, expected)
-        mock_retrieve.assert_called_once_with("cus_123")
 
-    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
-    def test_get_customer_data_no_company(self, mock_retrieve: Mock) -> None:
+    def test_get_customer_data_no_company(self) -> None:
         """Test getting customer data without company metadata."""
-        mock_retrieve.return_value = {
-            "id": "cus_123",
-            "email": "jane@example.com",
-            "name": "Jane Smith",
-            "metadata": {},
+        self.provider._current_webhook_data = {
+            "id": "in_123",
+            "customer": "cus_123",
+            "customer_email": "jane@example.com",
+            "customer_name": "Jane Smith",
         }
 
         result = self.provider.get_customer_data("cus_123")
@@ -80,14 +82,13 @@ class StripeProviderTest(TestCase):
         self.assertEqual(result["first_name"], "Jane")
         self.assertEqual(result["last_name"], "Smith")
 
-    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
-    def test_get_customer_data_single_name(self, mock_retrieve: Mock) -> None:
+    def test_get_customer_data_single_name(self) -> None:
         """Test getting customer data with single name."""
-        mock_retrieve.return_value = {
-            "id": "cus_123",
-            "email": "prince@example.com",
-            "name": "Prince",
-            "metadata": {},
+        self.provider._current_webhook_data = {
+            "id": "in_123",
+            "customer": "cus_123",
+            "customer_email": "prince@example.com",
+            "customer_name": "Prince",
         }
 
         result = self.provider.get_customer_data("cus_123")
@@ -95,14 +96,11 @@ class StripeProviderTest(TestCase):
         self.assertEqual(result["first_name"], "Prince")
         self.assertEqual(result["last_name"], "")
 
-    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
-    def test_get_customer_data_deleted_customer(self, mock_retrieve: Mock) -> None:
-        """Test getting data for deleted customer."""
-        mock_customer = Mock()
-        mock_customer.deleted = True
-        mock_retrieve.return_value = mock_customer
+    def test_get_customer_data_no_webhook_data(self) -> None:
+        """Test getting data when no webhook data is available."""
+        self.provider._current_webhook_data = None
 
-        result = self.provider.get_customer_data("cus_deleted")
+        result = self.provider.get_customer_data("cus_123")
 
         expected = {
             "company_name": "",
@@ -112,24 +110,20 @@ class StripeProviderTest(TestCase):
         }
         self.assertEqual(result, expected)
 
-    @patch("plugins.sources.stripe.stripe.Customer.retrieve")
-    def test_get_customer_data_api_error(self, mock_retrieve: Mock) -> None:
-        """Test handling Stripe API errors."""
-        import stripe.error
-
-        mock_retrieve.side_effect = stripe.error.InvalidRequestError(
-            "No such customer", "customer"
-        )
-
-        result = self.provider.get_customer_data("cus_invalid")
-
-        expected = {
-            "company_name": "",
-            "email": "",
-            "first_name": "",
-            "last_name": "",
+    def test_get_customer_data_missing_email(self) -> None:
+        """Test getting customer data when email is missing from webhook."""
+        self.provider._current_webhook_data = {
+            "id": "sub_123",
+            "customer": "cus_123",
+            # Subscription webhooks don't include customer_email
         }
-        self.assertEqual(result, expected)
+
+        # Without cache, should return empty email
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            mock_cache.get.return_value = None
+            result = self.provider.get_customer_data("cus_123")
+
+        self.assertEqual(result["email"], "")
 
     def test_get_customer_data_empty_id(self) -> None:
         """Test getting customer data with empty ID."""
@@ -166,6 +160,7 @@ class StripeProviderTest(TestCase):
             "currency": "USD",
             "amount": 20.00,
             "metadata": {},
+            "idempotency_key": None,
         }
 
         self.assertEqual(result, expected)
@@ -384,6 +379,8 @@ class StripeProviderTest(TestCase):
         }
         # Set previous_attributes to None to avoid item assignment error
         mock_event.data.previous_attributes = None
+        # Set request to None (no idempotency key)
+        mock_event.request = None
         mock_construct_event.return_value = mock_event
 
         request = self._create_mock_request(
@@ -403,6 +400,7 @@ class StripeProviderTest(TestCase):
             "currency": "USD",
             "amount": 20.00,
             "metadata": {},
+            "idempotency_key": None,
         }
 
         self.assertEqual(result, expected)
