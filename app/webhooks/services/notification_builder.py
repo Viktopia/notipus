@@ -359,86 +359,95 @@ class NotificationBuilder:
         Returns:
             Headline string.
         """
+        # Note: company and customer_data params kept for interface compatibility
+        # but company name is now shown in body, not headline
+        _ = company  # unused
+        _ = customer_data  # unused
+
         event_type = event_data.get("type", "")
         amount = event_data.get("amount")
-
-        # Prefer enriched company name, fall back to smart display name
-        if company and company.brand_info:
-            company_name = company.brand_info.get("name") or company.name
-        else:
-            company_name = get_display_name(customer_data)
-        company_name = company_name or "Customer"
-
         metadata = event_data.get("metadata", {})
 
-        # Money-first headlines for payment events
+        # Event-focused headlines (company/customer info shown in body)
         if event_type == "payment_success":
             # Check for trial conversion (first real payment after trial)
             if metadata.get("is_trial_conversion"):
-                if amount:
-                    return f"Trial converted! ${amount:,.2f} from {company_name}"
-                return f"Trial converted! {company_name}"
+                return "Trial converted!"
             if amount:
-                return f"${amount:,.2f} from {company_name}"
-            return f"Payment from {company_name}"
+                return f"${amount:,.2f} received"
+            return "Payment received"
 
         elif event_type == "payment_failure":
             if amount:
-                return f"${amount:,.2f} failed - {company_name}"
-            return f"Payment failed - {company_name}"
+                return f"${amount:,.2f} payment failed"
+            return "Payment failed"
 
         elif event_type == "subscription_created":
-            if amount:
-                return f"New customer! ${amount:,.2f} from {company_name}"
-            return f"New subscription - {company_name}"
+            return "New customer!"
 
         elif event_type == "subscription_updated":
             # Check for upgrade/downgrade
             direction = metadata.get("change_direction", "")
+            plan_name = metadata.get("plan_name")
+            previous_amount = metadata.get("previous_amount")
+
             if direction == "upgrade":
-                if amount:
-                    return f"Upgraded to ${amount:,.2f}/mo - {company_name}"
-                return f"Subscription upgraded - {company_name}"
+                # Show plan name if available (Chargify), otherwise amount change
+                if plan_name and amount:
+                    return f"Upgraded to {plan_name} (${amount:,.2f}/mo)"
+                elif previous_amount and amount:
+                    old = f"${previous_amount:,.2f}"
+                    new = f"${amount:,.2f}"
+                    return f"Upgraded: {old}/mo to {new}/mo"
+                elif amount:
+                    return f"Subscription upgraded to ${amount:,.2f}/mo"
+                return "Subscription upgraded"
             elif direction == "downgrade":
-                if amount:
-                    return f"Downgraded to ${amount:,.2f}/mo - {company_name}"
-                return f"Subscription downgraded - {company_name}"
-            return f"Subscription updated - {company_name}"
+                if plan_name and amount:
+                    return f"Downgraded to {plan_name} (${amount:,.2f}/mo)"
+                elif previous_amount and amount:
+                    old = f"${previous_amount:,.2f}"
+                    new = f"${amount:,.2f}"
+                    return f"Downgraded: {old}/mo to {new}/mo"
+                elif amount:
+                    return f"Subscription downgraded to ${amount:,.2f}/mo"
+                return "Subscription downgraded"
+            return "Subscription updated"
 
         elif event_type in ("subscription_canceled", "subscription_deleted"):
-            return f"Canceled: {company_name}"
+            return "Subscription canceled"
 
         elif event_type == "trial_ending":
-            return f"Trial ending soon - {company_name}"
+            return "Trial ending soon"
 
-        # Logistics event headlines
+        # Logistics event headlines (e-commerce/Shopify)
         elif event_type == "order_created":
             metadata = event_data.get("metadata", {})
             order_number = metadata.get("order_number") or metadata.get("order_ref")
             if order_number and amount:
-                return f"New order #{order_number} - ${amount:,.2f} from {company_name}"
+                return f"New order #{order_number} (${amount:,.2f})"
             elif order_number:
-                return f"New order #{order_number} from {company_name}"
+                return f"New order #{order_number}"
             elif amount:
-                return f"New order - ${amount:,.2f} from {company_name}"
-            return f"New order from {company_name}"
+                return f"New order (${amount:,.2f})"
+            return "New order"
 
         elif event_type == "order_fulfilled":
             metadata = event_data.get("metadata", {})
             order_number = metadata.get("order_number") or metadata.get("order_ref")
             if order_number:
-                return f"Order #{order_number} fulfilled - {company_name}"
-            return f"Order fulfilled - {company_name}"
+                return f"Order #{order_number} fulfilled"
+            return "Order fulfilled"
 
         elif event_type == "fulfillment_created":
             metadata = event_data.get("metadata", {})
             order_number = metadata.get("order_number") or metadata.get("order_ref")
             tracking_number = metadata.get("tracking_number")
             if order_number and tracking_number:
-                return f"Order #{order_number} shipped - {company_name}"
+                return f"Order #{order_number} shipped"
             elif order_number:
-                return f"Order #{order_number} fulfillment created - {company_name}"
-            return f"Fulfillment created - {company_name}"
+                return f"Order #{order_number} fulfillment created"
+            return "Fulfillment created"
 
         elif event_type == "fulfillment_updated":
             metadata = event_data.get("metadata", {})
@@ -449,19 +458,19 @@ class NotificationBuilder:
             if order_number and status:
                 return f"Order #{order_number} - {status.replace('_', ' ').title()}"
             elif order_number:
-                return f"Order #{order_number} shipment updated - {company_name}"
-            return f"Shipment updated - {company_name}"
+                return f"Order #{order_number} shipment updated"
+            return "Shipment updated"
 
         elif event_type == "shipment_delivered":
             metadata = event_data.get("metadata", {})
             order_number = metadata.get("order_number") or metadata.get("order_ref")
             if order_number:
-                return f"Order #{order_number} delivered - {company_name}"
-            return f"Shipment delivered - {company_name}"
+                return f"Order #{order_number} delivered"
+            return "Shipment delivered"
 
         else:
             title = event_type.replace("_", " ").title()
-            return f"{title} - {company_name}"
+            return title
 
     def _build_actions(
         self,

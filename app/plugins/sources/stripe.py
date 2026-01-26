@@ -390,6 +390,53 @@ class StripeSourcePlugin(BaseSourcePlugin):
         if data.get("_change_direction"):
             event_data["metadata"]["change_direction"] = data["_change_direction"]
 
+        # Add subscription metadata for recurring payment detection
+        if event_type in (
+            "subscription_created",
+            "subscription_updated",
+            "subscription_deleted",
+        ):
+            # Add subscription ID
+            event_data["metadata"]["subscription_id"] = data.get("id", "")
+
+            # Map Stripe interval to billing period
+            plan = data.get("plan", {})
+            interval = plan.get("interval")
+            if interval:
+                interval_map = {
+                    "month": "monthly",
+                    "year": "annual",
+                    "week": "weekly",
+                    "day": "daily",
+                }
+                event_data["metadata"]["billing_period"] = interval_map.get(
+                    interval, interval
+                )
+
+            # Add plan name if available
+            plan_name = plan.get("nickname") or plan.get("name")
+            if plan_name:
+                event_data["metadata"]["plan_name"] = plan_name
+
+            # For subscription updates, extract previous amount for upgrade headlines
+            if event_type == "subscription_updated":
+                prev_attrs = data.get("_previous_attributes", {})
+                prev_plan = prev_attrs.get("plan", {})
+                if prev_plan and prev_plan.get("amount") is not None:
+                    # Convert cents to dollars
+                    event_data["metadata"]["previous_amount"] = (
+                        prev_plan["amount"] / 100
+                    )
+
+        # For invoice events (payment_success, payment_failure), check if it's
+        # a subscription invoice and extract subscription info
+        if event_type in ("payment_success", "payment_failure"):
+            subscription_id = data.get("subscription")
+            if subscription_id:
+                event_data["metadata"]["subscription_id"] = subscription_id
+                # Note: billing_period not set here - invoice payloads don't
+                # include plan interval, and we can't call the Stripe API
+
         return event_data
 
     def parse_webhook(

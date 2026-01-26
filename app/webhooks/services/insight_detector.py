@@ -154,7 +154,7 @@ class InsightDetector:
         if orders_count <= 1 and payment_count <= 1:
             return InsightInfo(
                 icon=self.ICONS["first_payment"],
-                text="First payment - Welcome aboard!",
+                text="First payment from this customer",
             )
 
         return None
@@ -330,7 +330,7 @@ class InsightDetector:
         if ltv >= self.config.vip_ltv_threshold:
             return InsightInfo(
                 icon=self.ICONS["vip_status"],
-                text="VIP Customer - Top tier",
+                text="VIP customer ($10k+ LTV)",
             )
 
         return None

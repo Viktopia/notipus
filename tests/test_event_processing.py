@@ -19,7 +19,7 @@ def test_notification_formatting() -> None:
     """Test that notifications are properly formatted.
 
     Verifies a payment success event generates a valid RichNotification
-    with correct headline and severity.
+    with correct headline (event-focused, no company name) and severity.
     """
     processor = EventProcessor()
 
@@ -46,7 +46,9 @@ def test_notification_formatting() -> None:
 
     notification = processor.build_rich_notification(event_data, customer_data)
     assert isinstance(notification, RichNotification)
-    assert "Acme Corp" in notification.headline
+    # Headlines are now event-focused, company info is in body
+    assert "$29.99" in notification.headline
+    assert "received" in notification.headline.lower()
     assert notification.severity == NotificationSeverity.SUCCESS
     assert notification.type == NotificationType.PAYMENT_SUCCESS
 
@@ -54,8 +56,8 @@ def test_notification_formatting() -> None:
 def test_missing_required_customer_data() -> None:
     """Test handling of missing required customer data.
 
-    Verifies company name defaults to 'Customer' when not provided
-    (no company name, no name, no email).
+    Verifies notification is still generated when customer data is incomplete.
+    Headlines are now event-focused and don't include customer info.
     """
     processor = EventProcessor()
 
@@ -75,11 +77,12 @@ def test_missing_required_customer_data() -> None:
         "plan_name": "Enterprise",
     }
 
-    # Should still generate notification with "Customer" as fallback
+    # Should still generate notification (headline is event-focused)
     notification = processor.build_rich_notification(event_data, customer_data)
     assert isinstance(notification, RichNotification)
-    # The headline should contain "Customer" as the fallback
-    assert "Customer" in notification.headline
+    # Headlines are now event-focused, no customer info needed
+    assert "$29.99" in notification.headline
+    assert "received" in notification.headline.lower()
 
 
 def test_invalid_event_type() -> None:
@@ -202,7 +205,8 @@ def test_subscription_created_event() -> None:
     notification = processor.build_rich_notification(event_data, customer_data)
     assert isinstance(notification, RichNotification)
     assert notification.type == NotificationType.SUBSCRIPTION_CREATED
-    assert "Startup" in notification.headline
+    # Headlines are now event-focused
+    assert "New customer" in notification.headline
 
 
 def test_subscription_canceled_event() -> None:
@@ -266,9 +270,10 @@ def test_process_event_rich_returns_dict() -> None:
 
 
 def test_display_name_fallback_to_email() -> None:
-    """Test display name falls back to full email address.
+    """Test customer info email is captured when company/name are empty.
 
-    When company and name are empty, should use full email address.
+    Customer email should be available in notification customer info.
+    Headlines are event-focused and don't include customer details.
     """
     processor = EventProcessor()
 
@@ -291,13 +296,17 @@ def test_display_name_fallback_to_email() -> None:
     }
 
     notification = processor.build_rich_notification(event_data, customer_data)
-    assert "billing@techstartup.io" in notification.headline
+    # Headlines are event-focused
+    assert "$29.99" in notification.headline
+    # Customer email is available in CustomerInfo
+    assert notification.customer is not None
+    assert notification.customer.email == "billing@techstartup.io"
 
 
 def test_display_name_ignores_individual() -> None:
     """Test that 'Individual' company name is ignored.
 
-    Should fall back to email when company is 'Individual'.
+    Customer info should have email available, not 'Individual'.
     """
     processor = EventProcessor()
 
@@ -320,5 +329,8 @@ def test_display_name_ignores_individual() -> None:
     }
 
     notification = processor.build_rich_notification(event_data, customer_data)
-    assert "Individual" not in notification.headline
-    assert "billing@enterprise.com" in notification.headline
+    # Headlines are event-focused (no customer info)
+    assert "$29.99" in notification.headline
+    # Customer info should have email, and company_name should be set to "Individual"
+    assert notification.customer is not None
+    assert notification.customer.email == "billing@enterprise.com"

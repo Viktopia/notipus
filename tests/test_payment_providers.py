@@ -518,7 +518,9 @@ def test_event_processor_notification_formatting() -> None:
 
     notification = processor.build_rich_notification(event_data, customer_data)
     assert isinstance(notification, RichNotification)
-    assert "Acme Corp" in notification.headline
+    # Headlines are event-focused (no company name)
+    assert "$29.99" in notification.headline
+    assert "received" in notification.headline.lower()
     assert notification.type == NotificationType.PAYMENT_SUCCESS
     assert notification.severity == NotificationSeverity.SUCCESS
 
@@ -529,7 +531,8 @@ def test_event_processor_notification_formatting() -> None:
 
     notification = processor.build_rich_notification(event_data, customer_data)
     assert isinstance(notification, RichNotification)
-    assert "Acme Corp" in notification.headline
+    # Headlines are event-focused (no company name)
+    assert "failed" in notification.headline.lower()
     assert notification.type == NotificationType.PAYMENT_FAILURE
     assert notification.severity == NotificationSeverity.ERROR
 
@@ -647,4 +650,5 @@ def test_shopify_order_ref_matching() -> None:
     # Test that enrichment works without errors
     notification = processor.build_rich_notification(chargify_event, customer_data)
     assert isinstance(notification, RichNotification)
-    assert "Test Company" in notification.headline
+    # Headlines are event-focused (no company name)
+    assert "$29.99" in notification.headline

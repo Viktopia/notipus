@@ -228,11 +228,11 @@ class TestHeadlineBuilding:
         payment_success_event: dict,
         customer_data: dict,
     ) -> None:
-        """Test payment success headline includes amount and company."""
+        """Test payment success headline includes amount (event-focused, no company)."""
         result = builder.build(payment_success_event, customer_data)
 
         assert "$299.00" in result.headline
-        assert "Acme Inc" in result.headline
+        assert "received" in result.headline.lower()
 
     def test_payment_failure_headline(
         self,
@@ -240,11 +240,11 @@ class TestHeadlineBuilding:
         payment_failure_event: dict,
         customer_data: dict,
     ) -> None:
-        """Test payment failure headline."""
+        """Test payment failure headline (event-focused, no company)."""
         result = builder.build(payment_failure_event, customer_data)
 
         assert "failed" in result.headline.lower()
-        assert "Acme Inc" in result.headline
+        assert "payment" in result.headline.lower()
 
     def test_subscription_created_headline(
         self,
@@ -257,17 +257,19 @@ class TestHeadlineBuilding:
 
         assert "New" in result.headline or "subscription" in result.headline.lower()
 
-    def test_headline_uses_enriched_company_name(
+    def test_company_info_available_when_enriched(
         self,
         builder: NotificationBuilder,
         payment_success_event: dict,
         customer_data: dict,
         mock_company: MagicMock,
     ) -> None:
-        """Test that headline uses enriched company name when available."""
+        """Test that enriched company info is available in notification."""
         result = builder.build(payment_success_event, customer_data, mock_company)
 
-        assert "Acme Corporation" in result.headline
+        # Company name is shown in body (CompanyInfo), not headline
+        assert result.company is not None
+        assert result.company.name == "Acme Corporation"
 
 
 class TestPaymentInfo:

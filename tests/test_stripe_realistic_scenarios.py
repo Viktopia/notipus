@@ -358,8 +358,8 @@ class TestTrialConversionIntegration:
         )
 
         assert isinstance(notification, RichNotification)
-        # The headline should mention the company
-        assert "Acme" in notification.headline
+        # Headlines are event-focused (no company name)
+        assert "Trial converted" in notification.headline
 
 
 class TestSubscriptionUpgradeIntegration:
@@ -476,8 +476,10 @@ class TestSubscriptionUpgradeIntegration:
         )
 
         assert isinstance(notification, RichNotification)
-        # The headline should mention the company
-        assert "BigCorp" in notification.headline
+        # Headlines are event-focused (show upgrade with amounts)
+        assert "Upgraded" in notification.headline
+        # Should show old and new amounts
+        assert "$26.60" in notification.headline or "$49.00" in notification.headline
 
 
 class TestDisplayNameInRichNotification:
@@ -515,7 +517,10 @@ class TestDisplayNameInRichNotification:
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that company name appears in notification headline."""
+        """Test that company info is available in notification (not headline).
+
+        Headlines are now event-focused. Customer info is in CustomerInfo.
+        """
         customer_data = {
             "email": "billing@acme.com",
             "first_name": "John",
@@ -527,14 +532,18 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "Acme Corporation" in notification.headline
+        # Headlines are event-focused
+        assert "$99.00" in notification.headline
+        # Company info is in CustomerInfo
+        assert notification.customer is not None
+        assert notification.customer.company_name == "Acme Corporation"
 
     def test_personal_name_in_headline_when_no_company(
         self,
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that personal name is used when company is missing."""
+        """Test customer name is available in CustomerInfo when no company."""
         customer_data = {
             "email": "john.doe@gmail.com",
             "first_name": "John",
@@ -546,14 +555,18 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "John Doe" in notification.headline
+        # Headlines are event-focused
+        assert "$99.00" in notification.headline
+        # Name is in CustomerInfo
+        assert notification.customer is not None
+        assert notification.customer.name == "John Doe"
 
     def test_business_email_in_headline(
         self,
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that full email is used when no name/company available."""
+        """Test email is available in CustomerInfo when no name/company."""
         customer_data = {
             "email": "billing@techstartup.io",
             "first_name": "",
@@ -565,14 +578,18 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "billing@techstartup.io" in notification.headline
+        # Headlines are event-focused
+        assert "$99.00" in notification.headline
+        # Email is in CustomerInfo
+        assert notification.customer is not None
+        assert notification.customer.email == "billing@techstartup.io"
 
     def test_gmail_email_in_headline(
         self,
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that full email is used for free email providers too."""
+        """Test email is available in CustomerInfo for free email providers."""
         customer_data = {
             "email": "cooluser123@gmail.com",
             "first_name": "",
@@ -584,14 +601,18 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "cooluser123@gmail.com" in notification.headline
+        # Headlines are event-focused
+        assert "$99.00" in notification.headline
+        # Email is in CustomerInfo
+        assert notification.customer is not None
+        assert notification.customer.email == "cooluser123@gmail.com"
 
     def test_individual_ignored_in_headline(
         self,
         event_processor: EventProcessor,
         payment_event_data: dict[str, Any],
     ) -> None:
-        """Test that 'Individual' company is ignored, falls back to email."""
+        """Test 'Individual' company handling in CustomerInfo."""
         customer_data = {
             "email": "someone@enterprise.com",
             "first_name": "",
@@ -603,8 +624,11 @@ class TestDisplayNameInRichNotification:
             payment_event_data, customer_data
         )
 
-        assert "Individual" not in notification.headline
-        assert "someone@enterprise.com" in notification.headline
+        # Headlines are event-focused (no customer info)
+        assert "$99.00" in notification.headline
+        # Email is in CustomerInfo
+        assert notification.customer is not None
+        assert notification.customer.email == "someone@enterprise.com"
 
 
 class TestWebhookCustomerDataExtraction:
@@ -852,5 +876,6 @@ class TestPaymentFailureNotFiltered:
         # Payment failures should have error severity
         assert notification.severity == NotificationSeverity.ERROR
 
-        # Headline should mention the company
-        assert "Test Company" in notification.headline
+        # Headlines are event-focused (no company name)
+        assert "failed" in notification.headline.lower()
+        assert "$99.00" in notification.headline

@@ -192,9 +192,11 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             if links_block:
                 blocks.append(links_block)
 
-        # Customer footer (optional for system events)
+        # Customer footer (optional - only shown when there's meaningful data)
         if n.customer:
-            blocks.append(self._format_customer_footer(n.customer))
+            customer_footer = self._format_customer_footer(n.customer)
+            if customer_footer:
+                blocks.append(customer_footer)
 
         # Action buttons (if present)
         if n.actions:
@@ -300,18 +302,16 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
 
         # Only add payment-specific badges for payment events
         if n.is_payment_event:
-            # Add payment type (recurring/one-time)
+            # Add payment type (recurring/one-time) without extra emojis
             if n.is_recurring:
                 if n.billing_interval:
-                    elements.append(
-                        f":repeat: Recurring ({n.billing_interval.title()})"
-                    )
+                    elements.append(f"Recurring ({n.billing_interval.title()})")
                 else:
-                    elements.append(":repeat: Recurring")
+                    elements.append("Recurring")
             elif n.payment:
-                elements.append(":moneybag: One-Time")
+                elements.append("One-Time")
 
-            # Add payment method if available
+            # Add payment method if available (keep credit_card emoji for clarity)
             if n.payment and n.payment.payment_method:
                 pm_emoji = PAYMENT_METHOD_ICONS.get(
                     n.payment.payment_method.lower(), "credit_card"
@@ -369,7 +369,7 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
         Returns:
             Slack section block dict.
         """
-        lines = [":bar_chart: *Payment Details*"]
+        lines = ["*Payment Details*"]
 
         # Amount with ARR
         lines.append(f"*Amount:* {payment.format_amount_with_arr()}")
@@ -402,7 +402,9 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
         lines.append(f"*Amount:* {payment.currency} {payment.amount:,.2f}")
 
         # Line items (max 5)
+        has_many_items = False
         if payment.line_items:
+            has_many_items = len(payment.line_items) > 3
             for item in payment.line_items[:5]:
                 qty = item.get("quantity", 1)
                 name = item.get("name", "Item")
@@ -413,10 +415,16 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
                 remaining = len(payment.line_items) - 5
                 lines.append(f"_...and {remaining} more items_")
 
-        return {
+        block: dict[str, Any] = {
             "type": "section",
             "text": {"type": "mrkdwn", "text": "\n".join(lines)},
         }
+
+        # Make collapsible if many line items (shows "see more")
+        if has_many_items:
+            block["expand"] = False
+
+        return block
 
     def _format_detail_section(self, section: DetailSection) -> dict[str, Any]:
         """Format a generic detail section.
@@ -500,6 +508,10 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
                 "alt_text": company.name,
             }
 
+        # Make section collapsible if it has description (shows "see more")
+        if company.description:
+            block["expand"] = False
+
         return block
 
     def _format_company_links(self, company: CompanyInfo) -> dict[str, Any] | None:
@@ -531,14 +543,14 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             "elements": [{"type": "mrkdwn", "text": " • ".join(elements)}],
         }
 
-    def _format_customer_footer(self, customer: CustomerInfo) -> dict[str, Any]:
+    def _format_customer_footer(self, customer: CustomerInfo) -> dict[str, Any] | None:
         """Format customer info footer.
 
         Args:
             customer: CustomerInfo object.
 
         Returns:
-            Slack context block dict.
+            Slack context block dict, or None if no meaningful data.
         """
         elements: list[str] = []
 
@@ -550,17 +562,17 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
         if not customer.email and customer.name:
             elements.append(f":bust_in_silhouette: {customer.name}")
 
-        # Tenure
+        # Tenure (no emoji for cleaner look)
         if customer.tenure_display:
-            elements.append(f":calendar: {customer.tenure_display}")
+            elements.append(customer.tenure_display)
 
-        # LTV
+        # LTV (no emoji for cleaner look)
         if customer.ltv_display:
-            elements.append(f":moneybag: {customer.ltv_display} LTV")
+            elements.append(f"{customer.ltv_display} LTV")
 
-        # Orders count
+        # Orders count (no emoji for cleaner look)
         if customer.orders_count:
-            elements.append(f":package: {customer.orders_count} orders")
+            elements.append(f"{customer.orders_count} orders")
 
         # Status flags
         for flag in customer.status_flags:
@@ -569,8 +581,9 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             elif flag == "vip":
                 elements.append(":star: *VIP*")
 
+        # Return None if no meaningful customer data to display
         if not elements:
-            elements = [":bust_in_silhouette: Customer"]
+            return None
 
         return {
             "type": "context",
