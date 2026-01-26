@@ -322,6 +322,7 @@ class Integration(models.Model):
         ("chargify", "Chargify / Maxio Advanced Billing"),
         # Notification integrations (workspace-specific)
         ("slack_notifications", "Slack Notifications"),
+        ("telegram_notifications", "Telegram Notifications"),
     )
 
     workspace = models.ForeignKey(

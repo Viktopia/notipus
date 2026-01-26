@@ -169,10 +169,126 @@ def _get_slack_webhook_url(workspace: Optional[Workspace]) -> Optional[str]:
         )
         return incoming_webhook.get("url")
     except Integration.DoesNotExist:
-        logger.warning(
+        logger.debug(
             f"No active Slack integration found for workspace {workspace.uuid}"
         )
         return None
+
+
+def _get_telegram_credentials(
+    workspace: Optional[Workspace],
+) -> Optional[Dict[str, str]]:
+    """Get Telegram credentials for a workspace.
+
+    Returns:
+        Dict with 'bot_token' and 'chat_id' if configured, None otherwise.
+    """
+    if not workspace:
+        return None
+
+    try:
+        telegram_integration = Integration.objects.get(
+            workspace=workspace,
+            integration_type="telegram_notifications",
+            is_active=True,
+        )
+        bot_token = telegram_integration.oauth_credentials.get("bot_token")
+        chat_id = telegram_integration.oauth_credentials.get("chat_id")
+
+        if bot_token and chat_id:
+            return {"bot_token": bot_token, "chat_id": chat_id}
+        return None
+    except Integration.DoesNotExist:
+        logger.debug(
+            f"No active Telegram integration found for workspace {workspace.uuid}"
+        )
+        return None
+
+
+def _send_to_slack(
+    workspace: Optional[Workspace],
+    notification: Any,
+    registry: Any,
+) -> bool:
+    """Send notification to Slack if configured.
+
+    Args:
+        workspace: The workspace to send for.
+        notification: RichNotification object.
+        registry: PluginRegistry instance.
+
+    Returns:
+        True if sent successfully or not configured, False on error.
+    """
+    from plugins.base import PluginType
+    from plugins.destinations.base import BaseDestinationPlugin
+
+    slack_webhook_url = _get_slack_webhook_url(workspace)
+    if not slack_webhook_url:
+        return True  # Not configured is not an error
+
+    slack_plugin = registry.get(PluginType.DESTINATION, "slack")
+    if slack_plugin is None or not isinstance(slack_plugin, BaseDestinationPlugin):
+        logger.error("Slack destination plugin not found or not configured")
+        return False
+
+    try:
+        formatted = slack_plugin.format(notification)
+        slack_plugin.send(formatted, {"webhook_url": slack_webhook_url})
+        logger.debug(
+            f"Sent Slack notification for workspace "
+            f"{workspace.uuid if workspace else 'unknown'}"
+        )
+        return True
+    except Exception as e:
+        logger.error(
+            f"Failed to send Slack notification for workspace "
+            f"{workspace.uuid if workspace else 'unknown'}: {str(e)}"
+        )
+        return False
+
+
+def _send_to_telegram(
+    workspace: Optional[Workspace],
+    notification: Any,
+    registry: Any,
+) -> bool:
+    """Send notification to Telegram if configured.
+
+    Args:
+        workspace: The workspace to send for.
+        notification: RichNotification object.
+        registry: PluginRegistry instance.
+
+    Returns:
+        True if sent successfully or not configured, False on error.
+    """
+    from plugins.base import PluginType
+    from plugins.destinations.base import BaseDestinationPlugin
+
+    telegram_credentials = _get_telegram_credentials(workspace)
+    if not telegram_credentials:
+        return True  # Not configured is not an error
+
+    telegram_plugin = registry.get(PluginType.DESTINATION, "telegram")
+    if not telegram_plugin or not isinstance(telegram_plugin, BaseDestinationPlugin):
+        logger.error("Telegram destination plugin not found or not configured")
+        return False
+
+    try:
+        formatted = telegram_plugin.format(notification)
+        telegram_plugin.send(formatted, telegram_credentials)
+        logger.debug(
+            f"Sent Telegram notification for workspace "
+            f"{workspace.uuid if workspace else 'unknown'}"
+        )
+        return True
+    except Exception as e:
+        logger.error(
+            f"Failed to send Telegram notification for workspace "
+            f"{workspace.uuid if workspace else 'unknown'}: {str(e)}"
+        )
+        return False
 
 
 def _process_webhook_data(
@@ -185,9 +301,10 @@ def _process_webhook_data(
 
     Includes event consolidation to prevent notification spam when
     multiple related events fire in quick succession.
+
+    Sends notifications to all configured destinations (Slack, Telegram).
+    Each destination operates independently - failure in one doesn't block others.
     """
-    from plugins.base import PluginType
-    from plugins.destinations.base import BaseDestinationPlugin
     from plugins.registry import PluginRegistry
 
     # Get customer data from webhook payload
@@ -259,50 +376,53 @@ def _process_webhook_data(
             status=200,
         )
 
-    # Build and format rich notification
-    formatted = settings.EVENT_PROCESSOR.process_event_rich(
-        event_data, customer_data, target="slack"
+    # Build rich notification once (target-agnostic)
+    notification = settings.EVENT_PROCESSOR.build_rich_notification(
+        event_data, customer_data
     )
 
-    # Send to Slack using workspace-specific integration
-    slack_webhook_url = _get_slack_webhook_url(workspace)
+    # Get plugin registry for destination lookups
+    registry = PluginRegistry.instance()
 
-    if slack_webhook_url:
-        registry = PluginRegistry.instance()
-        slack_plugin = registry.get(PluginType.DESTINATION, "slack")
-        if slack_plugin is None or not isinstance(slack_plugin, BaseDestinationPlugin):
-            logger.error("Slack destination plugin not found or not configured")
-            return JsonResponse(
-                create_success_response(
-                    f"{provider_name} webhook processed (Slack plugin unavailable)"
-                ),
-                status=200,
-            )
-        try:
-            slack_plugin.send(formatted, {"webhook_url": slack_webhook_url})
-            # Record the event after successful send
-            event_consolidation_service.record_event(
-                event_type=event_type,
-                customer_id=customer_id,
-                workspace_id=workspace_id,
-                external_id=external_id,
-            )
-            # Record idempotency key to suppress related events from same action
-            event_consolidation_service.record_idempotency_key(
-                workspace_id, idempotency_key
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to send Slack notification for workspace "
-                f"{workspace.uuid if workspace else 'unknown'}: {str(e)}"
-            )
-            # Continue processing even if Slack notification fails
-    else:
+    # Send to all configured destinations
+    # Each destination operates independently - failure in one doesn't block others
+    slack_sent = _send_to_slack(workspace, notification, registry)
+    telegram_sent = _send_to_telegram(workspace, notification, registry)
+
+    # Check if at least one destination was configured
+    slack_configured = _get_slack_webhook_url(workspace) is not None
+    telegram_configured = _get_telegram_credentials(workspace) is not None
+
+    if not slack_configured and not telegram_configured:
         logger.warning(
-            f"No Slack webhook URL configured for workspace "
-            f"{workspace.uuid if workspace else 'unknown'}, "
-            f"skipping notification"
+            f"No notification destinations configured for workspace "
+            f"{workspace.uuid if workspace else 'unknown'}"
         )
+    else:
+        # Record the event after attempting to send
+        # (even if some destinations failed, we don't want to retry)
+        event_consolidation_service.record_event(
+            event_type=event_type,
+            customer_id=customer_id,
+            workspace_id=workspace_id,
+            external_id=external_id,
+        )
+        # Record idempotency key to suppress related events from same action
+        event_consolidation_service.record_idempotency_key(
+            workspace_id, idempotency_key
+        )
+
+    # Log summary of send results
+    if slack_configured or telegram_configured:
+        destinations_summary = []
+        if slack_configured:
+            destinations_summary.append(f"Slack={'ok' if slack_sent else 'failed'}")
+        if telegram_configured:
+            destinations_summary.append(
+                f"Telegram={'ok' if telegram_sent else 'failed'}"
+            )
+        summary = ", ".join(destinations_summary)
+        logger.info(f"Notification dispatch for {provider_name}: {summary}")
 
     return JsonResponse(
         create_success_response(f"{provider_name} webhook processed successfully"),
