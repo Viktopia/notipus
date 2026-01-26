@@ -643,6 +643,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
             - email: Customer email from webhook or cache
             - first_name: First part of customer name
             - last_name: Last part of customer name
+            - customer_id: The Stripe customer ID for fallback display
         """
         if not self._current_webhook_data:
             logger.warning("No webhook data available for customer lookup")
@@ -671,6 +672,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
             "email": email,
             "first_name": first_name,
             "last_name": last_name,
+            "customer_id": customer_id,
         }
 
     def _empty_customer_data(self) -> dict[str, Any]:
@@ -684,6 +686,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
             "email": "",
             "first_name": "",
             "last_name": "",
+            "customer_id": "",
         }
 
     def _split_name(self, full_name: str) -> tuple[str, str]:

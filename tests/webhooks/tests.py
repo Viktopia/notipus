@@ -130,11 +130,12 @@ class StripeProviderTest(TestCase):
             "email": "test@acme.com",
             "first_name": "Test",
             "last_name": "User",
+            "customer_id": "cus_123",
         }
 
         self.assertEqual(result, expected)
 
-    def test_get_customer_data_no_webhook_data(self):
+    def test_get_customer_data_no_webhook_data(self) -> None:
         """Test getting customer data when no webhook data is available."""
         # No webhook data stored
         self.provider._current_webhook_data = None
@@ -147,6 +148,7 @@ class StripeProviderTest(TestCase):
             "email": "",
             "first_name": "",
             "last_name": "",
+            "customer_id": "",
         }
 
         self.assertEqual(result, expected)

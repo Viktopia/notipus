@@ -14,7 +14,8 @@ def get_display_name(customer_data: dict[str, Any]) -> str:
     1. company_name or company field
     2. Customer's full name (first + last)
     3. Full email address
-    4. "Customer" as last resort
+    4. Customer ID (formatted for readability)
+    5. "Customer" as last resort
 
     Args:
         customer_data: Customer data dictionary.
@@ -37,5 +38,10 @@ def get_display_name(customer_data: dict[str, Any]) -> str:
     email = customer_data.get("email", "")
     if email and "@" in email:
         return email
+
+    # Use customer ID as fallback (e.g., "cus_TremsiHkK4YcSS")
+    customer_id = customer_data.get("customer_id", "")
+    if customer_id:
+        return customer_id
 
     return "Customer"

@@ -198,6 +198,7 @@ class EventProcessor:
             "subscription_deleted",
             "checkout_completed",
             "invoice_paid",
+            "trial_started",
             "trial_ending",
             "payment_action_required",
             "order_created",

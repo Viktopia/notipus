@@ -338,6 +338,7 @@ class ChargifySourcePlugin(BaseSourcePlugin):
                 "last_name": self._current_webhook_data.get(
                     "payload[subscription][customer][last_name]", ""
                 ),
+                "customer_id": customer_id,
                 "created_at": self._current_webhook_data.get("created_at", ""),
                 "plan_name": self._current_webhook_data.get(
                     "payload[subscription][product][name]", ""

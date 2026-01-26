@@ -273,9 +273,14 @@ class BaseSourcePlugin(BasePlugin):
             customer_id: The customer's unique identifier.
 
         Returns:
-            Dictionary of customer information.
+            Dictionary of customer information including:
+            - company_name: Company name
+            - email: Customer email
+            - first_name: Customer first name
+            - last_name: Customer last name
+            - customer_id: The customer identifier for fallback display
         """
-        return {}
+        return {"customer_id": customer_id}
 
     def get_related_events(self, customer_id: str) -> list[dict[str, Any]]:
         """Get related events for a customer.

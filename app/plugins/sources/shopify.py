@@ -469,6 +469,7 @@ class ShopifySourcePlugin(BaseSourcePlugin):
             "last_name": customer.get("last_name", ""),
             "orders_count": customer.get("orders_count", 0),
             "total_spent": customer.get("total_spent", "0.00"),
+            "customer_id": customer_id,
             "metadata": {
                 "shop_domain": data.get("shop_domain", ""),
                 "tags": customer.get("tags", []),
