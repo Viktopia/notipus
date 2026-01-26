@@ -614,6 +614,17 @@ class IntegrationService:
                 ).exists(),
                 "category": "Team Communication",
             },
+            {
+                "id": "telegram_notifications",
+                "name": "Telegram",
+                "description": (
+                    "Real-time notifications sent to your Telegram chat or channel"
+                ),
+                "connected": current_integrations.filter(
+                    integration_type="telegram_notifications"
+                ).exists(),
+                "category": "Messaging",
+            },
         ]
 
         return {
