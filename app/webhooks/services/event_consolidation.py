@@ -300,6 +300,49 @@ class EventConsolidationService:
             f"Recorded idempotency key {idempotency_key} for workspace {workspace_id}"
         )
 
+    def try_claim_idempotency_key(
+        self,
+        workspace_id: str,
+        idempotency_key: str | None,
+    ) -> bool:
+        """Atomically claim an idempotency key for processing.
+
+        Uses cache.add() which is atomic - it only sets the key if it doesn't
+        exist. This prevents race conditions where multiple events with the
+        same idempotency key arrive within milliseconds and both pass the
+        duplicate check before either records the key.
+
+        Args:
+            workspace_id: The workspace UUID.
+            idempotency_key: Stripe request idempotency key.
+
+        Returns:
+            True if this process claimed the key (should process the event).
+            False if another process already claimed it (should skip).
+        """
+        if not idempotency_key:
+            # No idempotency key means we can't deduplicate, allow processing
+            return True
+
+        key = f"event_idempotency:{workspace_id}:{idempotency_key}"
+
+        # cache.add() is atomic - returns True only if key didn't exist
+        # and was successfully set. Returns False if key already exists.
+        claimed = cache.add(key, True, timeout=self.IDEMPOTENCY_WINDOW_SECONDS)
+
+        if claimed:
+            logger.debug(
+                f"Claimed idempotency key {idempotency_key} "
+                f"for workspace {workspace_id}"
+            )
+        else:
+            logger.info(
+                f"Idempotency key {idempotency_key} already claimed "
+                f"for workspace {workspace_id}"
+            )
+
+        return claimed
+
 
 # Global instance for convenience
 event_consolidation_service = EventConsolidationService()

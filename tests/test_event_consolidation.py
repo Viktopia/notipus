@@ -610,6 +610,150 @@ class TestIdempotencyDeduplication:
         )
 
 
+class TestAtomicIdempotencyClaim:
+    """Test atomic idempotency key claiming to prevent race conditions.
+
+    When events arrive within milliseconds, the check-then-record pattern
+    can fail. The try_claim_idempotency_key method uses atomic cache.add()
+    to prevent this race condition.
+    """
+
+    @pytest.fixture
+    def service(self) -> EventConsolidationService:
+        """Create a fresh consolidation service for each test.
+
+        Returns:
+            EventConsolidationService instance.
+        """
+        return EventConsolidationService()
+
+    def test_first_claim_succeeds(self, service: EventConsolidationService) -> None:
+        """Test that first claim for an idempotency key succeeds."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.add.return_value = True  # Key didn't exist, successfully set
+
+            result = service.try_claim_idempotency_key(
+                workspace_id="ws_456",
+                idempotency_key="idem_12345",
+            )
+
+            assert result is True
+            mock_cache.add.assert_called_once()
+
+    def test_second_claim_fails(self, service: EventConsolidationService) -> None:
+        """Test that second claim for same idempotency key fails."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.add.return_value = False  # Key already exists
+
+            result = service.try_claim_idempotency_key(
+                workspace_id="ws_456",
+                idempotency_key="idem_12345",
+            )
+
+            assert result is False
+            mock_cache.add.assert_called_once()
+
+    def test_none_idempotency_key_allows_processing(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that None idempotency key allows processing (can't deduplicate)."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            result = service.try_claim_idempotency_key(
+                workspace_id="ws_456",
+                idempotency_key=None,
+            )
+
+            assert result is True
+            mock_cache.add.assert_not_called()
+
+    def test_empty_idempotency_key_allows_processing(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that empty idempotency key allows processing."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            result = service.try_claim_idempotency_key(
+                workspace_id="ws_456",
+                idempotency_key="",
+            )
+
+            assert result is True
+            mock_cache.add.assert_not_called()
+
+    def test_claim_uses_correct_cache_key(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that claim uses the correct cache key format."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.add.return_value = True
+
+            service.try_claim_idempotency_key(
+                workspace_id="ws_456",
+                idempotency_key="idem_12345",
+            )
+
+            expected_key = "event_idempotency:ws_456:idem_12345"
+            mock_cache.add.assert_called_once_with(
+                expected_key,
+                True,
+                timeout=service.IDEMPOTENCY_WINDOW_SECONDS,
+            )
+
+    def test_different_workspaces_can_both_claim(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test that same idempotency key can be claimed by different workspaces."""
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.add.return_value = True
+
+            # First workspace claims
+            result1 = service.try_claim_idempotency_key(
+                workspace_id="ws_1",
+                idempotency_key="idem_12345",
+            )
+
+            # Second workspace also claims (different key)
+            result2 = service.try_claim_idempotency_key(
+                workspace_id="ws_2",
+                idempotency_key="idem_12345",
+            )
+
+            assert result1 is True
+            assert result2 is True
+            assert mock_cache.add.call_count == 2
+
+    def test_realistic_race_condition_scenario(
+        self, service: EventConsolidationService
+    ) -> None:
+        """Test realistic scenario where two events arrive within 1ms.
+
+        Simulates:
+        - subscription.created at 18:59:02.780
+        - invoice.payment_succeeded at 18:59:02.781 (1ms later)
+
+        Both share the same idempotency_key. Only first should process.
+        """
+        call_count = 0
+
+        def mock_add(key, value, timeout=None):
+            """Simulate atomic add - first call succeeds, second fails."""
+            nonlocal call_count
+            call_count += 1
+            return call_count == 1  # Only first call succeeds
+
+        with patch("webhooks.services.event_consolidation.cache") as mock_cache:
+            mock_cache.add = mock_add
+
+            idempotency_key = "dc29f570-4896-4b4a-8xxx"
+
+            # First event (subscription.created) claims successfully
+            result1 = service.try_claim_idempotency_key("ws_456", idempotency_key)
+            assert result1 is True
+
+            # Second event (invoice.payment_succeeded) fails to claim
+            result2 = service.try_claim_idempotency_key("ws_456", idempotency_key)
+            assert result2 is False
+
+
 class TestEventConsolidationConstants:
     """Test EventConsolidationService constants."""
 

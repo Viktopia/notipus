@@ -201,16 +201,17 @@ def _process_webhook_data(
     external_id = event_data.get("external_id", "")
     idempotency_key = event_data.get("idempotency_key")
 
-    # Check for idempotency-based duplicate (same Stripe API request)
-    # This catches multiple events from the same action (e.g., subscription.created
-    # and invoice.paid from the same subscription creation)
-    if event_consolidation_service.is_duplicate_by_idempotency(
+    # Atomically claim the idempotency key BEFORE any processing.
+    # This prevents race conditions where events arrive within milliseconds
+    # and both pass the duplicate check before either records the key.
+    # Uses cache.add() which is atomic (set-if-not-exists).
+    if not event_consolidation_service.try_claim_idempotency_key(
         workspace_id, idempotency_key
     ):
         logger.info(
             f"Skipping event {event_type} with idempotency key {idempotency_key} "
-            f"for workspace {workspace_id} (already processed different event "
-            f"from same action)"
+            f"for workspace {workspace_id} (another event from same action "
+            f"is being processed)"
         )
         return JsonResponse(
             create_success_response(
@@ -242,15 +243,12 @@ def _process_webhook_data(
 
     if not should_notify:
         # Record the event for deduplication, but don't send notification
+        # (idempotency key already claimed atomically above)
         event_consolidation_service.record_event(
             event_type=event_type,
             customer_id=customer_id,
             workspace_id=workspace_id,
             external_id=external_id,
-        )
-        # Also record idempotency key to suppress related events
-        event_consolidation_service.record_idempotency_key(
-            workspace_id, idempotency_key
         )
         return JsonResponse(
             create_success_response(
@@ -281,15 +279,12 @@ def _process_webhook_data(
         try:
             slack_plugin.send(formatted, {"webhook_url": slack_webhook_url})
             # Record the event after successful send
+            # (idempotency key already claimed atomically above)
             event_consolidation_service.record_event(
                 event_type=event_type,
                 customer_id=customer_id,
                 workspace_id=workspace_id,
                 external_id=external_id,
-            )
-            # Record idempotency key to suppress related events from same action
-            event_consolidation_service.record_idempotency_key(
-                workspace_id, idempotency_key
             )
         except Exception as e:
             logger.error(

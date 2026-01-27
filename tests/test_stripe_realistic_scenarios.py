@@ -1040,3 +1040,263 @@ class TestPaymentFailureNotFiltered:
         # Headlines are event-focused (no company name)
         assert "failed" in notification.headline.lower()
         assert "$99.00" in notification.headline
+
+
+class TestStoredWebhookEmailLookup:
+    """Test email lookup from stored webhook payloads.
+
+    When subscription events (which don't have customer_email) arrive before
+    invoice events (which do have customer_email), we need to look up the
+    email from stored webhook payloads in Redis.
+    """
+
+    @pytest.fixture
+    def stripe_plugin(self) -> StripeSourcePlugin:
+        """Create a Stripe plugin instance."""
+        return StripeSourcePlugin()
+
+    def test_lookup_finds_email_from_stored_invoice_webhook(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that email is found from stored invoice webhook."""
+        stored_webhooks = [
+            {
+                "body": {
+                    "type": "invoice.payment_succeeded",
+                    "data": {
+                        "object": {
+                            "customer": "cus_test123",
+                            "customer_email": "found@example.com",
+                        }
+                    },
+                }
+            }
+        ]
+
+        with patch(
+            "webhooks.services.webhook_storage.webhook_storage_service"
+        ) as mock_storage:
+            mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+            with patch("plugins.sources.stripe.cache"):
+                email = stripe_plugin._lookup_email_from_stored_webhooks("cus_test123")
+
+            assert email == "found@example.com"
+
+    def test_lookup_returns_empty_when_no_matching_customer(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that empty string is returned when no matching customer found."""
+        stored_webhooks = [
+            {
+                "body": {
+                    "type": "invoice.payment_succeeded",
+                    "data": {
+                        "object": {
+                            "customer": "cus_different",
+                            "customer_email": "other@example.com",
+                        }
+                    },
+                }
+            }
+        ]
+
+        with patch(
+            "webhooks.services.webhook_storage.webhook_storage_service"
+        ) as mock_storage:
+            mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+            email = stripe_plugin._lookup_email_from_stored_webhooks("cus_test123")
+
+        assert email == ""
+
+    def test_lookup_skips_non_invoice_events(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that non-invoice events are skipped during lookup."""
+        stored_webhooks = [
+            {
+                "body": {
+                    "type": "customer.subscription.created",  # Not an invoice event
+                    "data": {
+                        "object": {
+                            "customer": "cus_test123",
+                            # No customer_email in subscription events
+                        }
+                    },
+                }
+            }
+        ]
+
+        with patch(
+            "webhooks.services.webhook_storage.webhook_storage_service"
+        ) as mock_storage:
+            mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+            email = stripe_plugin._lookup_email_from_stored_webhooks("cus_test123")
+
+        assert email == ""
+
+    def test_lookup_handles_json_string_body(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that JSON string body is properly parsed."""
+        import json
+
+        stored_webhooks = [
+            {
+                "body": json.dumps(
+                    {
+                        "type": "invoice.paid",
+                        "data": {
+                            "object": {
+                                "customer": "cus_test123",
+                                "customer_email": "json_string@example.com",
+                            }
+                        },
+                    }
+                )
+            }
+        ]
+
+        with patch(
+            "webhooks.services.webhook_storage.webhook_storage_service"
+        ) as mock_storage:
+            mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+            with patch("plugins.sources.stripe.cache"):
+                email = stripe_plugin._lookup_email_from_stored_webhooks("cus_test123")
+
+        assert email == "json_string@example.com"
+
+    def test_lookup_returns_empty_for_empty_customer_id(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that empty customer_id returns empty string immediately."""
+        email = stripe_plugin._lookup_email_from_stored_webhooks("")
+        assert email == ""
+
+    def test_lookup_caches_found_email(self, stripe_plugin: StripeSourcePlugin) -> None:
+        """Test that found email is cached for future lookups."""
+        stored_webhooks = [
+            {
+                "body": {
+                    "type": "invoice.payment_succeeded",
+                    "data": {
+                        "object": {
+                            "customer": "cus_test123",
+                            "customer_email": "cached@example.com",
+                        }
+                    },
+                }
+            }
+        ]
+
+        with patch(
+            "webhooks.services.webhook_storage.webhook_storage_service"
+        ) as mock_storage:
+            mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+            with patch("plugins.sources.stripe.cache") as mock_cache:
+                stripe_plugin._lookup_email_from_stored_webhooks("cus_test123")
+
+                # Verify email was cached
+                mock_cache.set.assert_called_once()
+                call_args = mock_cache.set.call_args
+                assert "cus_test123" in call_args[0][0]
+                assert call_args[0][1] == "cached@example.com"
+
+    def test_get_customer_data_uses_webhook_lookup_as_fallback(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test that get_customer_data uses webhook lookup when cache misses.
+
+        This is the key integration test: when a subscription event arrives
+        (without customer_email) before the invoice event, we should look up
+        the email from stored webhooks.
+        """
+        # Simulate subscription webhook data (no customer_email)
+        stripe_plugin._current_webhook_data = {
+            "id": "sub_test123",
+            "customer": "cus_test123",
+            "plan": {"amount": 2660},
+            # Note: no customer_email field
+        }
+
+        stored_webhooks = [
+            {
+                "body": {
+                    "type": "invoice.payment_succeeded",
+                    "data": {
+                        "object": {
+                            "customer": "cus_test123",
+                            "customer_email": "from_webhook_storage@example.com",
+                        }
+                    },
+                }
+            }
+        ]
+
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            # Cache lookup returns nothing
+            mock_cache.get.return_value = None
+
+            with patch(
+                "webhooks.services.webhook_storage.webhook_storage_service"
+            ) as mock_storage:
+                mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+                customer_data = stripe_plugin.get_customer_data("cus_test123")
+
+        assert customer_data["email"] == "from_webhook_storage@example.com"
+
+    def test_realistic_1ms_timing_scenario(
+        self, stripe_plugin: StripeSourcePlugin
+    ) -> None:
+        """Test realistic scenario where events arrive 1ms apart.
+
+        Simulates:
+        - subscription.created at 18:59:02.780 (processing now, no email)
+        - invoice.payment_succeeded at 18:59:02.781 (stored in Redis, has email)
+
+        The subscription event should find the email from the stored invoice.
+        """
+        # We're processing the subscription event
+        stripe_plugin._current_webhook_data = {
+            "id": "sub_1ABC123",
+            "customer": "cus_Ts1WrDkUakFYQW",
+            "status": "trialing",
+            "plan": {"amount": 2660, "interval": "month"},
+            # No customer_email!
+        }
+
+        # The invoice event arrived 1ms later but is already stored in Redis
+        stored_webhooks = [
+            {
+                "timestamp_ms": 1737831542781,  # 1ms after subscription
+                "body": {
+                    "type": "invoice.payment_succeeded",
+                    "data": {
+                        "object": {
+                            "id": "in_1ABC123",
+                            "customer": "cus_Ts1WrDkUakFYQW",
+                            "customer_email": "uupsjiibfhgjbbwxqc@nespj.com",
+                            "amount_paid": 0,
+                        }
+                    },
+                },
+            }
+        ]
+
+        with patch("plugins.sources.stripe.cache") as mock_cache:
+            mock_cache.get.return_value = None  # No cached email
+
+            with patch(
+                "webhooks.services.webhook_storage.webhook_storage_service"
+            ) as mock_storage:
+                mock_storage.get_recent_webhooks.return_value = stored_webhooks
+
+                customer_data = stripe_plugin.get_customer_data("cus_Ts1WrDkUakFYQW")
+
+        # Should find the email from stored webhook
+        assert customer_data["email"] == "uupsjiibfhgjbbwxqc@nespj.com"
