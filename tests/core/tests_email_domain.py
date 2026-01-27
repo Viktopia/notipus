@@ -5,14 +5,18 @@ Tests cover:
 - Domain extraction
 - Free email provider detection
 - Disposable email detection
+- Hosted email domain detection
+- Company domain extraction from hosted domains
 - Combined enrichability check
 """
 
 from core.utils.email_domain import (
+    extract_company_domain,
     extract_domain,
     is_disposable_email,
     is_enrichable_domain,
     is_free_email_provider,
+    is_hosted_email_domain,
     is_valid_email,
     sanitize_email_input,
 )
@@ -222,3 +226,146 @@ class TestIsEnrichableDomain:
         ]
         for email in invalid_emails:
             assert not is_enrichable_domain(email), f"{email} not enrichable"
+
+
+class TestIsHostedEmailDomain:
+    """Tests for is_hosted_email_domain function."""
+
+    def test_detects_onmicrosoft_domains(self) -> None:
+        """Test detection of Azure AD onmicrosoft.com domains."""
+        hosted_domains = [
+            "widgetco.onmicrosoft.com",
+            "acmecorp.onmicrosoft.com",
+            "testorg.mail.onmicrosoft.com",
+            "democorp.mail.onmicrosoft.com",
+        ]
+        for domain in hosted_domains:
+            assert is_hosted_email_domain(domain) is True, f"{domain} should be hosted"
+
+    def test_rejects_regular_domains(self) -> None:
+        """Test rejection of regular company domains."""
+        regular_domains = [
+            "acme.com",
+            "company.io",
+            "enterprise.org",
+            "microsoft.com",
+            "onmicrosoft.com",  # Base domain without subdomain is not hosted
+        ]
+        for domain in regular_domains:
+            assert not is_hosted_email_domain(domain), f"{domain} should not be hosted"
+
+    def test_rejects_free_providers(self) -> None:
+        """Test rejection of free email providers."""
+        free_providers = [
+            "gmail.com",
+            "outlook.com",
+            "yahoo.com",
+        ]
+        for domain in free_providers:
+            assert not is_hosted_email_domain(domain), f"{domain} should not be hosted"
+
+    def test_case_insensitive(self) -> None:
+        """Test case insensitivity."""
+        assert is_hosted_email_domain("WIDGETCO.ONMICROSOFT.COM") is True
+        assert is_hosted_email_domain("Acmecorp.OnMicrosoft.Com") is True
+
+    def test_empty_and_none(self) -> None:
+        """Test handling of empty and None values."""
+        assert is_hosted_email_domain("") is False
+        assert is_hosted_email_domain(None) is False  # type: ignore[arg-type]
+
+
+class TestExtractCompanyDomain:
+    """Tests for extract_company_domain function."""
+
+    def test_extracts_from_onmicrosoft(self) -> None:
+        """Test extraction from onmicrosoft.com domains."""
+        assert extract_company_domain("widgetco.onmicrosoft.com") == "widgetco.com"
+        assert extract_company_domain("acmecorp.onmicrosoft.com") == "acmecorp.com"
+        assert extract_company_domain("testorg.onmicrosoft.com") == "testorg.com"
+
+    def test_extracts_from_mail_onmicrosoft(self) -> None:
+        """Test extraction from mail.onmicrosoft.com domains."""
+        result = extract_company_domain("widgetco.mail.onmicrosoft.com")
+        assert result == "widgetco.com"
+        result = extract_company_domain("acmecorp.mail.onmicrosoft.com")
+        assert result == "acmecorp.com"
+
+    def test_handles_multiple_subdomains(self) -> None:
+        """Test handling of multiple subdomains (uses first/leftmost).
+
+        Note: When there are multiple subdomains like 'sales.widgetco.onmicrosoft.com',
+        we use the leftmost subdomain ('sales') as the tenant name. This is a heuristic
+        that may not always yield the "correct" company domain, but it's a reasonable
+        default when we can't determine the organizational structure.
+        """
+        result = extract_company_domain("sales.widgetco.onmicrosoft.com")
+        assert result == "sales.com"
+        assert extract_company_domain("dept.testorg.onmicrosoft.com") == "dept.com"
+
+    def test_returns_regular_domains_unchanged(self) -> None:
+        """Test that regular domains are returned unchanged."""
+        assert extract_company_domain("acme.com") == "acme.com"
+        assert extract_company_domain("company.io") == "company.io"
+        assert extract_company_domain("enterprise.co.uk") == "enterprise.co.uk"
+
+    def test_case_insensitive(self) -> None:
+        """Test case insensitivity (returns lowercase)."""
+        assert extract_company_domain("WIDGETCO.ONMICROSOFT.COM") == "widgetco.com"
+        assert extract_company_domain("ACMECORP.COM") == "acmecorp.com"
+
+    def test_empty_and_none(self) -> None:
+        """Test handling of empty and None values."""
+        assert extract_company_domain("") is None
+        assert extract_company_domain(None) is None  # type: ignore[arg-type]
+
+    def test_invalid_short_tenant_names(self) -> None:
+        """Test that very short tenant names (less than 2 chars) return None."""
+        # Single character tenant names should fail validation
+        assert extract_company_domain("a.onmicrosoft.com") is None
+
+
+class TestExtractDomainWithDeriveCompanyDomain:
+    """Tests for extract_domain with derive_company_domain parameter."""
+
+    def test_default_behavior_unchanged(self) -> None:
+        """Test that default behavior (derive_company_domain=False) is unchanged."""
+        result = extract_domain("user@widgetco.onmicrosoft.com")
+        assert result == "widgetco.onmicrosoft.com"
+        assert extract_domain("user@acmecorp.com") == "acmecorp.com"
+
+    def test_derives_company_domain_from_onmicrosoft(self) -> None:
+        """Test derivation of company domain from onmicrosoft.com emails."""
+        result = extract_domain(
+            "user@widgetco.onmicrosoft.com", derive_company_domain=True
+        )
+        assert result == "widgetco.com"
+        result = extract_domain(
+            "admin@acmecorp.onmicrosoft.com", derive_company_domain=True
+        )
+        assert result == "acmecorp.com"
+
+    def test_derives_company_domain_from_mail_onmicrosoft(self) -> None:
+        """Test derivation from mail.onmicrosoft.com emails."""
+        result = extract_domain(
+            "user@widgetco.mail.onmicrosoft.com", derive_company_domain=True
+        )
+        assert result == "widgetco.com"
+
+    def test_regular_domains_unchanged_with_derive(self) -> None:
+        """Test that regular domains are unchanged when derive_company_domain=True."""
+        result = extract_domain("user@acmecorp.com", derive_company_domain=True)
+        assert result == "acmecorp.com"
+        result = extract_domain("user@testorg.io", derive_company_domain=True)
+        assert result == "testorg.io"
+
+    def test_invalid_emails_return_none(self) -> None:
+        """Test that invalid emails return None regardless of derive parameter."""
+        assert extract_domain("not-an-email", derive_company_domain=True) is None
+        assert extract_domain("", derive_company_domain=True) is None
+
+    def test_hosted_domain_enrichable(self) -> None:
+        """Test that hosted email domains are considered enrichable."""
+        # Hosted domains should be enrichable since they're business emails
+        assert is_enrichable_domain("user@widgetco.onmicrosoft.com") is True
+        assert is_enrichable_domain("admin@acmecorp.mail.onmicrosoft.com") is True

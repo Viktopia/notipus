@@ -84,6 +84,16 @@ FREE_EMAIL_PROVIDERS: frozenset[str] = frozenset(
     }
 )
 
+# Hosted email domains - cloud providers where the subdomain represents
+# the tenant/company. For these domains, the subdomain should be extracted
+# to derive the company domain (e.g., contoso.onmicrosoft.com -> contoso.com)
+HOSTED_EMAIL_DOMAINS: frozenset[str] = frozenset(
+    {
+        "onmicrosoft.com",  # Azure AD / Microsoft 365
+        "mail.onmicrosoft.com",  # Microsoft 365 mail subdomain
+    }
+)
+
 # Maximum email length per RFC 5321
 MAX_EMAIL_LENGTH = 254
 
@@ -170,11 +180,15 @@ def is_valid_email(email: str) -> bool:
     return True
 
 
-def extract_domain(email: str) -> str | None:
+def extract_domain(email: str, *, derive_company_domain: bool = False) -> str | None:
     """Extract and normalize domain from email address.
 
     Args:
         email: Email address.
+        derive_company_domain: If True, derive company domain from hosted
+            email providers (e.g., contoso.onmicrosoft.com -> contoso.com).
+            This is useful for enrichment where we want the actual company
+            website, not the hosted email provider domain.
 
     Returns:
         Lowercase domain or None if invalid.
@@ -202,6 +216,10 @@ def extract_domain(email: str) -> str | None:
         except (UnicodeError, UnicodeDecodeError):
             pass  # Keep original if conversion fails
 
+        # Optionally derive company domain for hosted email providers
+        if derive_company_domain:
+            return extract_company_domain(domain)
+
         return domain
     except Exception:
         return None
@@ -219,6 +237,96 @@ def is_free_email_provider(domain: str) -> bool:
     if not domain:
         return False
     return domain.lower() in FREE_EMAIL_PROVIDERS
+
+
+def is_hosted_email_domain(domain: str) -> bool:
+    """Check if domain is a hosted email provider with tenant subdomains.
+
+    Hosted email domains are cloud providers (like Microsoft Azure AD) where
+    the subdomain represents the tenant/company name, not the actual company
+    website. For example, 'contoso.onmicrosoft.com' is a hosted domain where
+    'contoso' is the tenant name.
+
+    Args:
+        domain: Domain to check (e.g., 'contoso.onmicrosoft.com').
+
+    Returns:
+        True if domain is a hosted email provider.
+    """
+    if not domain:
+        return False
+
+    domain_lower = domain.lower()
+
+    # Check if domain ends with any hosted email domain suffix
+    for hosted_domain in HOSTED_EMAIL_DOMAINS:
+        if domain_lower.endswith(f".{hosted_domain}"):
+            return True
+
+    return False
+
+
+def extract_company_domain(domain: str) -> str | None:
+    """Extract the likely company domain from a hosted email domain.
+
+    For hosted email domains (like Azure AD's onmicrosoft.com), the subdomain
+    typically represents the tenant/company name. This function extracts that
+    subdomain and derives a likely company domain by appending '.com'.
+
+    For regular domains, returns the domain unchanged.
+
+    Examples:
+        - 'contoso.onmicrosoft.com' -> 'contoso.com'
+        - 'acme.mail.onmicrosoft.com' -> 'acme.com'
+        - 'company.com' -> 'company.com' (unchanged)
+
+    Args:
+        domain: Domain to process.
+
+    Returns:
+        Derived company domain, or None if extraction fails.
+    """
+    if not domain:
+        return None
+
+    domain_lower = domain.lower()
+
+    # If not a hosted email domain, return as-is
+    if not is_hosted_email_domain(domain_lower):
+        return domain_lower
+
+    # Find which hosted domain suffix matches
+    for hosted_domain in HOSTED_EMAIL_DOMAINS:
+        suffix = f".{hosted_domain}"
+        if domain_lower.endswith(suffix):
+            # Extract the subdomain (tenant name)
+            # e.g., 'contoso.onmicrosoft.com' -> 'contoso'
+            # e.g., 'acme.mail.onmicrosoft.com' -> 'acme'
+            subdomain_part = domain_lower[: -len(suffix)]
+
+            # Handle multiple subdomains - take the first part (leftmost)
+            # e.g., 'sales.contoso.onmicrosoft.com' -> 'sales'
+            # This might not always be correct, but it's the best heuristic
+            tenant_name = subdomain_part.split(".")[0]
+
+            # Validate tenant name is not empty and looks like a valid domain part
+            if tenant_name and len(tenant_name) >= 2:
+                derived_domain = f"{tenant_name}.com"
+                logger.debug(
+                    f"Derived company domain '{derived_domain}' "
+                    f"from hosted domain '{domain}'"
+                )
+                return derived_domain
+
+            # If we can't extract a valid tenant name, return None
+            logger.warning(
+                f"Could not extract tenant name from hosted domain: {domain}"
+            )
+            return None
+
+    # This should be unreachable since is_hosted_email_domain() already verified
+    # the domain matches one of HOSTED_EMAIL_DOMAINS, but return None as fallback
+    return None  # pragma: no cover
 
 
 def is_disposable_email(domain: str) -> bool:
