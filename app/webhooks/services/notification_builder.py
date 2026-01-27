@@ -423,14 +423,6 @@ class NotificationBuilder:
             return "Subscription canceled"
 
         elif event_type == "trial_started":
-            trial_days = metadata.get("trial_days")
-            plan_amount = metadata.get("plan_amount")
-            if trial_days and plan_amount:
-                return (
-                    f"Trial started! ({trial_days} days, then ${plan_amount:,.2f}/mo)"
-                )
-            elif trial_days:
-                return f"Trial started! ({trial_days} days)"
             return "Trial started!"
 
         elif event_type == "trial_ending":

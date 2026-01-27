@@ -186,11 +186,17 @@ class InsightDetector:
 
         metadata = event_data.get("metadata", {})
         trial_days = metadata.get("trial_days")
+        plan_amount = metadata.get("plan_amount")
 
-        if trial_days:
+        if trial_days and plan_amount:
             return InsightInfo(
                 icon=self.ICONS["trial_started"],
-                text=f"New {trial_days}-day trial - Welcome aboard!",
+                text=f"{trial_days}-day trial, then ${plan_amount:,.2f}/mo",
+            )
+        elif trial_days:
+            return InsightInfo(
+                icon=self.ICONS["trial_started"],
+                text=f"{trial_days}-day trial - Welcome aboard!",
             )
 
         return InsightInfo(
