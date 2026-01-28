@@ -13,7 +13,7 @@
                     <div class="flex-1 min-w-0">
                         <h2 class="text-3xl font-bold leading-7 text-gray-900 sm:text-4xl flex items-center gap-3">
                             <svg class="w-10 h-10" viewBox="0 0 24 24" fill="#03363D">
-                                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 17.736H6.106L12 6.264l5.894 11.472z"/>
+                                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 17.736H6.106L12 6.264l5.894 11.472z" />
                             </svg>
                             Connect Zendesk
                         </h2>
@@ -174,158 +174,170 @@
                 <div class="mt-4 p-4 bg-blue-50 rounded-lg">
                     <p class="text-sm text-blue-800">
                         <i class="ti ti-info-circle mr-1"></i>
-                        <strong>Tip:</strong> In your trigger's JSON body, include ticket data using placeholders like <code class="bg-blue-100 px-1 rounded">{% raw %}{{ticket.id}}{% endraw %}</code>, <code class="bg-blue-100 px-1 rounded">{% raw %}{{ticket.title}}{% endraw %}</code>, <code class="bg-blue-100 px-1 rounded">{% raw %}{{ticket.requester.email}}{% endraw %}</code>
-                    </p>
+                        <strong>Tip:</strong> In your trigger's JSON body, include ticket data using placeholders like <code class="bg-blue-100 px-1 rounded">
+                            {% raw %}
+                                {{ ticket.id }}
+                            {% endraw %}
+                        </code>, <code class="bg-blue-100 px-1 rounded">
+                        {% raw %}
+                            {{ ticket.title }}
+                        {% endraw %}
+                    </code>, <code class="bg-blue-100 px-1 rounded">
+                    {% raw %}
+                        {{ ticket.requester.email }}
+                    {% endraw %}
+                </code>
+            </p>
+        </div>
+    </div>
+
+    <!-- Webhook URL -->
+    <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <i class="ti ti-webhook text-[#03363D]"></i>
+            Webhook Endpoint URL
+        </h3>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Copy this URL and paste it in Zendesk</label>
+                <div class="flex">
+                    <input type="text"
+                           id="webhook-url"
+                           value="{{ webhook_url }}"
+                           readonly
+                           class="flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-l-lg focus:ring-[#03363D] focus:border-[#03363D] block w-full p-2.5 font-mono">
+                    <button onclick="copyToClipboard('{{ webhook_url }}')"
+                            class="inline-flex items-center px-3 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 focus:ring-2 focus:ring-[#03363D]">
+                        <i class="ti ti-copy mr-1"></i> Copy
+                    </button>
                 </div>
-            </div>
-
-            <!-- Webhook URL -->
-            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="ti ti-webhook text-[#03363D]"></i>
-                    Webhook Endpoint URL
-                </h3>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Copy this URL and paste it in Zendesk</label>
-                        <div class="flex">
-                            <input type="text"
-                                   id="webhook-url"
-                                   value="{{ webhook_url }}"
-                                   readonly
-                                   class="flex-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-l-lg focus:ring-[#03363D] focus:border-[#03363D] block w-full p-2.5 font-mono">
-                            <button onclick="copyToClipboard('{{ webhook_url }}')"
-                                    class="inline-flex items-center px-3 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 focus:ring-2 focus:ring-[#03363D]">
-                                <i class="ti ti-copy mr-1"></i> Copy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Webhook Signing Secret -->
-            <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
-                <div class="flex items-center mb-6">
-                    <div class="h-12 w-12 bg-[#03363D]/10 rounded-xl flex items-center justify-center">
-                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="#03363D">
-                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 17.736H6.106L12 6.264l5.894 11.472z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="text-xl font-semibold text-gray-900">Complete Connection</h3>
-                        <p class="text-gray-600">Enter the signing secret from Zendesk to finish setup</p>
-                    </div>
-                </div>
-
-                <form method="post" class="space-y-6">
-                    {% csrf_token %}
-
-                    <!-- Webhook Secret -->
-                    <div>
-                        <label for="webhook_secret" class="block text-sm font-medium text-gray-700">Webhook Signing Secret</label>
-                        <div class="mt-1">
-                            <input type="password"
-                                   name="webhook_secret"
-                                   id="webhook_secret"
-                                   value="{% if existing_integration %}{{ existing_integration.webhook_secret }}{% endif %}"
-                                   class="shadow-sm focus:ring-[#03363D] focus:border-[#03363D] block w-full sm:text-sm border-gray-300 rounded-md"
-                                   placeholder="Enter your Zendesk webhook signing secret"
-                                   required>
-                        </div>
-                        <p class="mt-2 text-sm text-gray-500">
-                            Find this by clicking on your webhook in Admin Center and selecting "Reveal secret".
-                        </p>
-                    </div>
-
-                    <!-- Submit Button -->
-                    <div class="flex justify-end">
-                        <button type="submit"
-                                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-[#03363D] hover:bg-[#024a52] transition-all duration-200">
-                            <svg class="mr-2 h-5 w-5"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
-                                </path>
-                            </svg>
-                            {% if existing_integration %}
-                                Update
-                            {% else %}
-                                Connect
-                            {% endif %}
-                            Zendesk
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Benefits -->
-            <div class="mt-8 bg-gradient-to-r from-[#03363D]/5 to-teal-50 rounded-xl p-6 border border-[#03363D]/20">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="ti ti-sparkles text-[#03363D]"></i>
-                    What you'll get with Zendesk integration:
-                </h3>
-                <ul class="space-y-2 text-gray-700">
-                    <li class="flex items-center">
-                        <svg class="h-4 w-4 text-[#03363D] mr-2"
-                             fill="currentColor"
-                             viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                            </path>
-                        </svg>
-                        Real-time notifications for new support tickets
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="h-4 w-4 text-[#03363D] mr-2"
-                             fill="currentColor"
-                             viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                            </path>
-                        </svg>
-                        AI-powered sentiment analysis on ticket content
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="h-4 w-4 text-[#03363D] mr-2"
-                             fill="currentColor"
-                             viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                            </path>
-                        </svg>
-                        Threaded Slack updates for ticket conversations
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="h-4 w-4 text-[#03363D] mr-2"
-                             fill="currentColor"
-                             viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                            </path>
-                        </svg>
-                        Company enrichment with logo and business info
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="h-4 w-4 text-[#03363D] mr-2"
-                             fill="currentColor"
-                             viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
-                            </path>
-                        </svg>
-                        Priority and urgency indicators for quick triage
-                    </li>
-                </ul>
             </div>
         </div>
     </div>
 
-    <!-- JavaScript for copy to clipboard -->
-    <script>
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(function() {
-                NotipusUI.toast('Webhook URL copied to clipboard!', 'success');
-            }, function(err) {
-                console.error('Could not copy text: ', err);
-                NotipusUI.toast('Failed to copy to clipboard', 'error');
-            });
-        }
-    </script>
+    <!-- Webhook Signing Secret -->
+    <div class="bg-white shadow-lg rounded-xl border border-gray-100 p-8 mb-8">
+        <div class="flex items-center mb-6">
+            <div class="h-12 w-12 bg-[#03363D]/10 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="#03363D">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 17.736H6.106L12 6.264l5.894 11.472z" />
+                </svg>
+            </div>
+            <div class="ml-4">
+                <h3 class="text-xl font-semibold text-gray-900">Complete Connection</h3>
+                <p class="text-gray-600">Enter the signing secret from Zendesk to finish setup</p>
+            </div>
+        </div>
+
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            <!-- Webhook Secret -->
+            <div>
+                <label for="webhook_secret" class="block text-sm font-medium text-gray-700">Webhook Signing Secret</label>
+                <div class="mt-1">
+                    <input type="password"
+                           name="webhook_secret"
+                           id="webhook_secret"
+                           value="{% if existing_integration %}{{ existing_integration.webhook_secret }}{% endif %}"
+                           class="shadow-sm focus:ring-[#03363D] focus:border-[#03363D] block w-full sm:text-sm border-gray-300 rounded-md"
+                           placeholder="Enter your Zendesk webhook signing secret"
+                           required>
+                </div>
+                <p class="mt-2 text-sm text-gray-500">
+                    Find this by clicking on your webhook in Admin Center and selecting "Reveal secret".
+                </p>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="flex justify-end">
+                <button type="submit"
+                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-[#03363D] hover:bg-[#024a52] transition-all duration-200">
+                    <svg class="mr-2 h-5 w-5"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
+                        </path>
+                    </svg>
+                    {% if existing_integration %}
+                        Update
+                    {% else %}
+                        Connect
+                    {% endif %}
+                    Zendesk
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Benefits -->
+    <div class="mt-8 bg-gradient-to-r from-[#03363D]/5 to-teal-50 rounded-xl p-6 border border-[#03363D]/20">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <i class="ti ti-sparkles text-[#03363D]"></i>
+            What you'll get with Zendesk integration:
+        </h3>
+        <ul class="space-y-2 text-gray-700">
+            <li class="flex items-center">
+                <svg class="h-4 w-4 text-[#03363D] mr-2"
+                     fill="currentColor"
+                     viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                    </path>
+                </svg>
+                Real-time notifications for new support tickets
+            </li>
+            <li class="flex items-center">
+                <svg class="h-4 w-4 text-[#03363D] mr-2"
+                     fill="currentColor"
+                     viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                    </path>
+                </svg>
+                AI-powered sentiment analysis on ticket content
+            </li>
+            <li class="flex items-center">
+                <svg class="h-4 w-4 text-[#03363D] mr-2"
+                     fill="currentColor"
+                     viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                    </path>
+                </svg>
+                Threaded Slack updates for ticket conversations
+            </li>
+            <li class="flex items-center">
+                <svg class="h-4 w-4 text-[#03363D] mr-2"
+                     fill="currentColor"
+                     viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                    </path>
+                </svg>
+                Company enrichment with logo and business info
+            </li>
+            <li class="flex items-center">
+                <svg class="h-4 w-4 text-[#03363D] mr-2"
+                     fill="currentColor"
+                     viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd">
+                    </path>
+                </svg>
+                Priority and urgency indicators for quick triage
+            </li>
+        </ul>
+    </div>
+</div>
+</div>
+
+<!-- JavaScript for copy to clipboard -->
+<script>
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(function() {
+            NotipusUI.toast('Webhook URL copied to clipboard!', 'success');
+        }, function(err) {
+            console.error('Could not copy text: ', err);
+            NotipusUI.toast('Failed to copy to clipboard', 'error');
+        });
+    }
+</script>
 {% endblock content %}

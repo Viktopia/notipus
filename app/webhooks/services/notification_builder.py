@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from core.models import Company
+from core.models import Company, Person
 from webhooks.models.rich_notification import (
     ActionButton,
     CompanyInfo,
@@ -16,7 +16,9 @@ from webhooks.models.rich_notification import (
     NotificationSeverity,
     NotificationType,
     PaymentInfo,
+    PersonInfo,
     RichNotification,
+    SentimentInfo,
     TicketInfo,
 )
 
@@ -193,6 +195,8 @@ class NotificationBuilder:
         event_data: dict[str, Any],
         customer_data: dict[str, Any],
         company: Company | None = None,
+        person: Person | None = None,
+        sentiment: SentimentInfo | None = None,
     ) -> RichNotification:
         """Build a RichNotification from event and customer data.
 
@@ -200,6 +204,8 @@ class NotificationBuilder:
             event_data: Event data dictionary from provider.
             customer_data: Customer data dictionary.
             company: Optional enriched Company model.
+            person: Optional enriched Person model (from Hunter.io).
+            sentiment: Optional sentiment analysis results (from Ollama).
 
         Returns:
             RichNotification ready for formatting.
@@ -225,6 +231,7 @@ class NotificationBuilder:
         payment_info = self._build_payment_info(event_data)
         ticket_info = self._build_ticket_info(event_data)
         company_info = self._build_company_info(company) if company else None
+        person_info = self._build_person_info(person) if person else None
 
         # Detect insights and risk status
         insight = self.insight_detector.detect(event_data, customer_data)
@@ -264,7 +271,9 @@ class NotificationBuilder:
             insight=insight,
             payment=payment_info,
             ticket=ticket_info,
+            sentiment=sentiment,
             company=company_info,
+            person=person_info,
             actions=actions,
             is_recurring=is_recurring,
             billing_interval=billing_interval,
@@ -430,6 +439,28 @@ class NotificationBuilder:
             description=brand_info.get("description"),
             logo_url=logo_url,
             linkedin_url=linkedin_url,
+        )
+
+    def _build_person_info(self, person: Person) -> PersonInfo:
+        """Build PersonInfo from enriched Person model (Hunter.io).
+
+        Args:
+            person: Enriched Person model.
+
+        Returns:
+            PersonInfo dataclass.
+        """
+        return PersonInfo(
+            email=person.email,
+            first_name=person.first_name or None,
+            last_name=person.last_name or None,
+            position=person.position or None,
+            seniority=person.seniority or None,
+            company_domain=person.company_domain or None,
+            linkedin_url=person.linkedin_url or None,
+            twitter_handle=person.twitter_handle or None,
+            github_handle=person.github_handle or None,
+            location=person.location or None,
         )
 
     def _build_headline(  # noqa: C901

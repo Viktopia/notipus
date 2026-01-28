@@ -112,8 +112,15 @@ def _handle_zendesk_connect(
     if zendesk_subdomain.endswith(".zendesk.com"):
         zendesk_subdomain = zendesk_subdomain.replace(".zendesk.com", "")
 
-    # Validate subdomain format (alphanumeric and hyphens only, no path traversal)
-    if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$", zendesk_subdomain):
+    # Validate subdomain format (alphanumeric and hyphens only, min 2 chars)
+    if len(zendesk_subdomain) < 2:
+        messages.error(
+            request,
+            "Subdomain must be at least 2 characters long.",
+        )
+        return redirect("core:integrate_zendesk")
+
+    if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]{2}$", zendesk_subdomain):
         messages.error(
             request,
             "Invalid subdomain format. Use only letters, numbers, and hyphens.",

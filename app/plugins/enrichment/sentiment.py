@@ -236,10 +236,25 @@ Return only valid JSON:"""
             logger.warning(f"Failed to parse sentiment result: {e}")
             return None
 
+    def enrich_domain(self, domain: str) -> dict[str, Any]:
+        """Enrich domain data (not used for sentiment analysis).
+
+        This method satisfies the BaseEnrichmentPlugin interface but
+        sentiment analysis doesn't use domain-based enrichment.
+        Use analyze() directly for sentiment analysis.
+
+        Args:
+            domain: Domain being enriched (not used).
+
+        Returns:
+            Empty dict - sentiment doesn't enrich by domain.
+        """
+        return {}
+
     def enrich(self, domain: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Enrich domain data with sentiment analysis.
 
-        This method satisfies the BaseEnrichmentPlugin interface but
+        This method satisfies a common enrichment pattern but
         sentiment analysis is typically called directly via analyze().
 
         Args:
