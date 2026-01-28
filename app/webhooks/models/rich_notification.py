@@ -162,6 +162,53 @@ class CompanyInfo:
 
 
 @dataclass
+class PersonInfo:
+    """Enriched person information from email enrichment (Hunter.io).
+
+    This data is only available for Pro/Enterprise workspaces with
+    Hunter.io integration configured. Works for all emails including
+    free email providers like Gmail.
+
+    Attributes:
+        email: The enriched email address.
+        first_name: Person's first/given name.
+        last_name: Person's last/family name.
+        full_name: Computed full name (first + last).
+        position: Job title (e.g., "VP of Engineering").
+        seniority: Seniority level (e.g., "senior", "executive").
+        company_domain: Company domain from employment data.
+        linkedin_url: LinkedIn profile URL.
+        twitter_handle: Twitter/X handle (without @).
+        github_handle: GitHub username.
+        location: Location string (e.g., "San Francisco, CA").
+    """
+
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    position: str | None = None
+    seniority: str | None = None
+    company_domain: str | None = None
+    linkedin_url: str | None = None
+    twitter_handle: str | None = None
+    github_handle: str | None = None
+    location: str | None = None
+
+    @property
+    def full_name(self) -> str | None:
+        """Get the person's full name if available."""
+        if self.first_name or self.last_name:
+            parts = [p for p in [self.first_name, self.last_name] if p]
+            return " ".join(parts)
+        return None
+
+    @property
+    def display_name(self) -> str:
+        """Get the best available display name."""
+        return self.full_name or self.email
+
+
+@dataclass
 class PaymentInfo:
     """Payment/order details.
 
@@ -356,6 +403,9 @@ class RichNotification:
 
     # Company enrichment (optional)
     company: CompanyInfo | None = None
+
+    # Person enrichment (optional - requires Pro/Enterprise + Hunter.io)
+    person: PersonInfo | None = None
 
     # Actions (optional)
     actions: list[ActionButton] = field(default_factory=list)

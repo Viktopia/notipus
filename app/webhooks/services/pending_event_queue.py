@@ -550,7 +550,7 @@ class PendingEventQueue:
         # Build and format rich notification
         try:
             formatted = settings.EVENT_PROCESSOR.process_event_rich(
-                event_data, customer_data, target="slack"
+                event_data, customer_data, target="slack", workspace=workspace
             )
         except Exception as e:
             logger.error(f"Failed to build notification: {e}", exc_info=True)

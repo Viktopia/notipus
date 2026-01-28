@@ -28,6 +28,7 @@ from ...models import UserProfile, WorkspaceMember
 
 # Import all integration views for re-export
 from .chargify import integrate_chargify
+from .hunter import disconnect_hunter, integrate_hunter
 from .shopify import (
     disconnect_shopify,
     integrate_shopify,
@@ -74,6 +75,9 @@ __all__ = [
     "update_shopify_events",
     # Chargify
     "integrate_chargify",
+    # Hunter.io
+    "integrate_hunter",
+    "disconnect_hunter",
 ]
 
 
