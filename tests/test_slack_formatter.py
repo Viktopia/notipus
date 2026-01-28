@@ -379,6 +379,72 @@ class TestSlackDestinationPluginCompanySection:
                     return
         pytest.fail("Industry not found in company section")
 
+    def test_company_section_html_description_converted(
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
+    ) -> None:
+        """Test HTML in company description is converted to mrkdwn."""
+        basic_notification.company = CompanyInfo(
+            name="Test Corp",
+            domain="test.com",
+            description=(
+                '<p><a href="https://test.com">Test Corp</a> builds software.</p>'
+            ),
+        )
+        result = formatter.format(basic_notification)
+
+        # Find company section
+        for block in result["blocks"]:
+            if block["type"] == "section" and "Test Corp" in str(block.get("text", {})):
+                text = str(block.get("text", {}).get("text", ""))
+                # Should have Slack link format, not HTML
+                assert "<https://test.com|Test Corp>" in text
+                assert "<p>" not in text
+                assert "<a " not in text
+                return
+        pytest.fail("Company section with converted description not found")
+
+    def test_company_section_html_tags_stripped(
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
+    ) -> None:
+        """Test HTML tags are stripped from company description."""
+        basic_notification.company = CompanyInfo(
+            name="Html Corp",
+            domain="html.com",
+            description="<div><span>A company that makes things.</span></div>",
+        )
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "section" and "Html Corp" in str(block.get("text", {})):
+                text = str(block.get("text", {}).get("text", ""))
+                # Should not contain HTML tags
+                assert "<div>" not in text
+                assert "<span>" not in text
+                assert "A company that makes things" in text
+                return
+        pytest.fail("Company section not found")
+
+    def test_company_section_description_truncated(
+        self, formatter: SlackDestinationPlugin, basic_notification: RichNotification
+    ) -> None:
+        """Test long descriptions are truncated with ellipsis."""
+        basic_notification.company = CompanyInfo(
+            name="Long Corp",
+            domain="long.com",
+            description="A" * 200,  # 200 character description
+        )
+        result = formatter.format(basic_notification)
+
+        for block in result["blocks"]:
+            if block["type"] == "section" and "Long Corp" in str(block.get("text", {})):
+                text = str(block.get("text", {}).get("text", ""))
+                # Description should be truncated with ellipsis
+                assert "..." in text
+                # Should not have full 200 A's
+                assert "A" * 200 not in text
+                return
+        pytest.fail("Company section not found")
+
 
 class TestSlackDestinationPluginCompanyLinks:
     """Test company links formatting."""
