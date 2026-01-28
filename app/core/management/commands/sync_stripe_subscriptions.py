@@ -276,8 +276,7 @@ class Command(BaseCommand):
 
         if results["skipped_no_workspace"]:
             self.stdout.write(
-                f"  Skipped {results['skipped_no_workspace']} "
-                "(no matching workspace)"
+                f"  Skipped {results['skipped_no_workspace']} (no matching workspace)"
             )
 
         if results["errors"]:

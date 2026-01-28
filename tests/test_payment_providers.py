@@ -604,7 +604,7 @@ def test_chargify_payment_success_with_shopify_ref() -> None:
         "payload[transaction][id]": "tr_123",
         "payload[transaction][amount_in_cents]": "10000",
         "payload[transaction][memo]": (
-            "Wire payment received for $100.00\n" "Allocated to Shopify Order 1234"
+            "Wire payment received for $100.00\nAllocated to Shopify Order 1234"
         ),
         "created_at": "2024-03-15T10:00:00Z",
     }
