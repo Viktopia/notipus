@@ -757,3 +757,193 @@ class TestOrphanRecovery:
             # Valid format but no data in cache
             result = queue._recover_single_event("pending_webhook:global:key")
             assert result is False
+
+
+class TestCustomerBasedAggregation:
+    """Test customer-based aggregation for events without idempotency_key.
+
+    When Stripe events arrive without an idempotency_key (common for
+    Stripe-initiated flows), we use customer_id as a fallback aggregation key
+    with a 60-second time bucket.
+    """
+
+    @pytest.fixture
+    def queue(self) -> PendingEventQueue:
+        """Create a fresh queue instance for each test with proper cleanup."""
+        queue = PendingEventQueue()
+        queue.DELAY_SECONDS = 0.1  # Short delay for tests
+        yield queue
+        # Cleanup all timers after test
+        for timer in list(queue._active_timers.values()):
+            timer.cancel()
+        queue._active_timers.clear()
+
+    @pytest.fixture
+    def mock_cache(self):
+        """Mock Django cache."""
+        cache_data: dict = {}
+
+        def mock_get(key, default=None):
+            return cache_data.get(key, default)
+
+        def mock_set(key, value, timeout=None):
+            cache_data[key] = value
+
+        def mock_delete(key):
+            cache_data.pop(key, None)
+
+        with patch("webhooks.services.pending_event_queue.cache") as mock:
+            mock.get = mock_get
+            mock.set = mock_set
+            mock.delete = mock_delete
+            yield mock
+
+    def test_customer_key_adds_time_bucket(
+        self, queue: PendingEventQueue, mock_cache
+    ) -> None:
+        """Test that customer-based keys get a time bucket appended."""
+        import time
+
+        event_data = {"type": "trial_started", "customer_id": "cus_123"}
+        customer_data = {"email": ""}
+
+        # Calculate expected time bucket
+        expected_bucket = int(time.time() // 60)
+
+        with patch.object(queue, "_process_events"):
+            queue.queue_event(
+                idempotency_key="customer:cus_123",
+                workspace_id="ws_456",
+                event_data=event_data,
+                customer_data=customer_data,
+                provider_name="stripe",
+                workspace=None,
+            )
+
+        # Check that key includes time bucket
+        expected_key = f"pending_webhook:ws_456:customer:cus_123:t{expected_bucket}"
+        stored = mock_cache.get(expected_key)
+        assert stored is not None
+        assert len(stored) == 1
+
+    def test_regular_idempotency_key_unchanged(
+        self, queue: PendingEventQueue, mock_cache
+    ) -> None:
+        """Test that regular idempotency keys are not modified."""
+        event_data = {"type": "subscription_created", "customer_id": "cus_123"}
+        customer_data = {"email": "test@example.com"}
+
+        with patch.object(queue, "_process_events"):
+            queue.queue_event(
+                idempotency_key="req_abc123",  # Regular Stripe key
+                workspace_id="ws_456",
+                event_data=event_data,
+                customer_data=customer_data,
+                provider_name="stripe",
+                workspace=None,
+            )
+
+        # Check that key is unchanged (no time bucket)
+        expected_key = "pending_webhook:ws_456:req_abc123"
+        stored = mock_cache.get(expected_key)
+        assert stored is not None
+        assert len(stored) == 1
+
+    def test_customer_based_events_aggregate_within_time_bucket(
+        self, queue: PendingEventQueue, mock_cache
+    ) -> None:
+        """Test that customer-based events aggregate within the same time bucket."""
+        import time
+
+        # Get current time bucket
+        time_bucket = int(time.time() // 60)
+
+        with patch.object(queue, "_process_events"):
+            # First event (subscription - no email)
+            queue.queue_event(
+                idempotency_key="customer:cus_123",
+                workspace_id="ws_456",
+                event_data={
+                    "type": "trial_started",
+                    "customer_id": "cus_123",
+                },
+                customer_data={"email": ""},
+                provider_name="stripe",
+                workspace=None,
+            )
+
+            # Second event (invoice - has email)
+            queue.queue_event(
+                idempotency_key="customer:cus_123",
+                workspace_id="ws_456",
+                event_data={
+                    "type": "invoice_paid",
+                    "customer_id": "cus_123",
+                    "customer_email": "test@example.com",
+                },
+                customer_data={"email": "test@example.com"},
+                provider_name="stripe",
+                workspace=None,
+            )
+
+        # Both events should be stored under the same key
+        expected_key = f"pending_webhook:ws_456:customer:cus_123:t{time_bucket}"
+        stored = mock_cache.get(expected_key)
+        assert stored is not None
+        assert len(stored) == 2
+
+        # Aggregate and verify email is found
+        event, customer = queue._aggregate_events(stored)
+        assert customer["email"] == "test@example.com"
+        assert event["type"] == "trial_started"  # Higher priority
+
+    def test_customer_based_events_aggregate_across_bucket_boundary(
+        self, queue: PendingEventQueue, mock_cache
+    ) -> None:
+        """Test that events aggregate even when second arrives after bucket boundary.
+
+        Simulates: subscription arrives at T=59s (bucket N), invoice at T=61s
+        (bucket N+1). The invoice should join the subscription's bucket.
+        """
+        import time
+
+        # Get current time bucket
+        current_bucket = int(time.time() // 60)
+        previous_bucket = current_bucket - 1
+
+        # Pre-populate cache with an event in the previous bucket
+        # (simulating subscription that arrived just before bucket boundary)
+        prev_key = f"pending_webhook:ws_456:customer:cus_123:t{previous_bucket}"
+        mock_cache.set(
+            prev_key,
+            [
+                {
+                    "event_data": {"type": "trial_started", "customer_id": "cus_123"},
+                    "customer_data": {"email": ""},
+                }
+            ],
+        )
+
+        with patch.object(queue, "_process_events"):
+            # Second event arrives in "current" bucket but should join previous
+            queue.queue_event(
+                idempotency_key="customer:cus_123",
+                workspace_id="ws_456",
+                event_data={
+                    "type": "invoice_paid",
+                    "customer_id": "cus_123",
+                    "customer_email": "test@example.com",
+                },
+                customer_data={"email": "test@example.com"},
+                provider_name="stripe",
+                workspace=None,
+            )
+
+        # Event should have been added to the PREVIOUS bucket (not current)
+        stored = mock_cache.get(prev_key)
+        assert stored is not None
+        assert len(stored) == 2  # Original + new event
+
+        # Current bucket should NOT have been created
+        curr_key = f"pending_webhook:ws_456:customer:cus_123:t{current_bucket}"
+        assert mock_cache.get(curr_key) is None

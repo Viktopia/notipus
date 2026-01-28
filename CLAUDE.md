@@ -2,89 +2,110 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Build & Development Commands
 
-Notipus is a multi-tenant SaaS webhook notification service that sends enriched payment and subscription events from Shopify, Stripe, and Chargify to Slack. Built with Django 5.x and Python 3.12+.
-
-## Common Commands
-
-### Package Management (uv)
 ```bash
-uv sync --all-groups          # Install all dependencies
+# Package management (uses uv)
+uv sync --all-groups                    # Install all dependencies
 uv lock --upgrade && uv sync --all-groups  # Update dependencies
-```
 
-### Testing
-```bash
-uv run pytest                              # Run all tests
-uv run pytest tests/test_webhooks.py       # Run specific test file
-uv run pytest -k "test_shopify"            # Run tests matching pattern
-uv run pytest --cov=app --cov-report=term-missing  # With coverage
-```
+# Testing
+uv run pytest                           # Run all tests
+uv run pytest tests/path/test_file.py   # Run specific file
+uv run pytest -k "test_name"            # Run by pattern
+uv run pytest --cov=app                 # With coverage
 
-### Code Quality
-```bash
-uv run ruff format .           # Format code
-uv run ruff check .            # Run linter
-uv run ruff check --fix .      # Auto-fix linting issues
-uv run mypy app/               # Type checking
-```
+# Code quality
+uv run ruff check --fix .               # Lint and auto-fix
+uv run ruff format .                    # Format code
+uv run mypy app/                        # Type checking
+uv run pre-commit run --all-files       # Run all pre-commit hooks
 
-### Django Migrations (use test settings to avoid needing PostgreSQL)
-```bash
-# From project root:
-PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py makemigrations core --name your_migration_name
+# Django
+uv run python app/manage.py migrate     # Run migrations
+uv run python app/manage.py runserver   # Start dev server
 
-# Show migration status:
+# Generate migrations (uses SQLite to avoid needing PostgreSQL)
+PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py makemigrations core --name migration_name
 PYTHONPATH=app DJANGO_SETTINGS_MODULE=django_notipus.test_settings uv run python app/manage.py showmigrations
-```
 
-### Django Server
-```bash
-uv run python app/manage.py runserver      # Start dev server
-uv run python app/manage.py migrate        # Apply migrations
-```
-
-### Frontend Assets (Tailwind CSS)
-```bash
-bun run build        # Build CSS and copy fonts
-bun run dev          # Watch mode for CSS
+# Frontend (Tailwind CSS)
+bun run build                           # Build CSS and fonts
+bun run dev                             # Watch mode
 ```
 
 ## Architecture
 
-### Directory Structure
-- `app/` - Django application root (PYTHONPATH includes this)
-  - `core/` - Core app: users, workspaces, billing, integrations
-  - `webhooks/` - Webhook routing and event processing
-  - `plugins/` - Plugin architecture for sources, destinations, enrichment
-  - `django_notipus/` - Django project settings
+**Multi-tenant SaaS** for processing payment webhooks (Stripe, Shopify, Chargify, Zendesk) and delivering enriched Slack notifications.
 
-### Plugin System (ADR-001)
-Three plugin types with auto-discovery from `app/plugins/`:
-- **Sources** (`plugins/sources/`): Webhook receivers - Stripe, Shopify, Chargify
-- **Destinations** (`plugins/destinations/`): Notification delivery - Slack
-- **Enrichment** (`plugins/enrichment/`): Data enhancement - Brandfetch
+### Core Flow
+```
+Webhook → Validation (HMAC) → Parsing → Enrichment (Brandfetch) → Formatting → Slack Delivery
+```
 
 ### Multi-Tenant Webhooks
 - Customer webhooks: `POST /webhook/customer/{org_uuid}/{provider}/`
 - Billing webhooks: `POST /webhook/billing/stripe/`
 
-### Key Models (in `core/models.py`)
-- `Workspace` - Tenant container
-- `Integration` - Per-workspace provider connections
-- `Company` - Enriched company data with cached logos
-- `WorkspaceMember` - User-workspace relationships
-- `Plan`, `Subscription` - Billing
+### Plugin System (ADR-001)
+
+Unified architecture in `app/plugins/` with auto-discovery. Adding a new plugin is just creating a file in the right directory.
+
+**Type Hierarchy:**
+```
+BasePlugin (abstract)
+├── BaseEnrichmentPlugin    → enrich_domain(domain) -> dict
+├── BaseSourcePlugin        → validate_webhook(request), parse_webhook(request)
+└── BaseDestinationPlugin   → format(notification), send(formatted, credentials)
+```
+
+**Plugin Types:**
+- **Sources** (`plugins/sources/`): Webhook providers - validate signatures, parse into normalized events
+- **Destinations** (`plugins/destinations/`): Notification targets - format and deliver
+- **Enrichment** (`plugins/enrichment/`): Domain data enrichment
+
+**Configuration:** Global enablement via `PLUGINS` setting in Django settings. Source and destination plugins also have per-workspace credentials stored in the `Integration` model.
+
+**Registry:** `PluginRegistry.instance()` singleton with `register()`, `get()`, `get_all()`, and `discover()` methods.
+
+### Key Directories
+- `app/core/` - Users, workspaces, integrations, billing, dashboard
+- `app/webhooks/` - Event processing, insight detection, notification models
+- `app/plugins/` - Extensible plugin architecture
+- `app/django_notipus/` - Django settings and URL routing
+- `tests/` - pytest test suite
+
+### Models
+- **Workspace**: Multi-tenant isolation unit
+- **Integration**: Webhook source/destination configs per workspace
+- **RichNotification**: Processed notifications with company enrichment
+- **Company**: Enriched company data from Brandfetch
+- **WorkspaceMember**: User-workspace relationships
+- **Plan**, **Subscription**: Billing
 
 ### Services Layer
 - `app/core/services/` - Business logic (Stripe, Shopify, enrichment)
 - `app/webhooks/services/` - Event processing, notifications, rate limiting
 
-## Code Style
+## Code Standards
 
-- Use `ruff` for linting and formatting (always run after changes)
-- Use modern Python 3.12+ features: type hints, f-strings, dataclasses
-- Django templates use `.html.j2` extension
-- Tests use pytest exclusively (not unittest)
-- Never edit migration files after creation; use test settings to create migrations without PostgreSQL
+- **Python 3.12+** with type hints on all functions
+- **Django 5.x** with Class-Based Views for complex logic, FBVs for simple
+- **pytest only** (never unittest), all tests need type hints and docstrings
+- **Ruff** for linting/formatting (line length: 88, double quotes)
+- **Templates** use `.html.j2` extension (Jinja2)
+- **Never edit existing migrations** - always create new ones
+
+## Testing
+
+Tests run against SQLite via `django_notipus.test_settings`. Run `uv run pytest` frequently. Pre-commit hooks require all tests to pass before commit.
+
+Key test fixtures are in `tests/conftest.py`.
+
+## External Services
+
+- **PostgreSQL 17**: Primary database
+- **Redis 7**: Rate limiting, caching, session storage
+- **Slack OAuth**: Authentication and notification delivery
+- **Stripe Connect**: Payment provider OAuth
+- **Brandfetch**: Company data enrichment

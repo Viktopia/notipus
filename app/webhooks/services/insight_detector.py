@@ -44,6 +44,7 @@ class InsightDetector:
     ICONS = {
         "first_payment": "new",
         "trial_started": "rocket",
+        "trial_converted": "celebration",
         "ltv_milestone": "celebration",
         "anniversary": "celebration",
         "payment_growth": "chart",
@@ -78,6 +79,7 @@ class InsightDetector:
         # Priority order for milestone detection
         detectors = [
             self._detect_trial_started,
+            self._detect_trial_converted,
             self._detect_first_payment,
             self._detect_ltv_milestone,
             self._detect_anniversary,
@@ -203,6 +205,42 @@ class InsightDetector:
             icon=self.ICONS["trial_started"],
             text="New trial - Welcome aboard!",
         )
+
+    def _detect_trial_converted(
+        self, event_data: dict[str, Any], customer_data: dict[str, Any]
+    ) -> InsightInfo | None:
+        """Detect if this payment converted a trial.
+
+        When a payment arrives and there was a pending trial_ending event
+        for the same customer, show "Trial converted" instead of separate
+        notifications.
+
+        Args:
+            event_data: Event data dictionary.
+            customer_data: Customer data dictionary (unused but required for interface).
+
+        Returns:
+            InsightInfo for trial converted or None.
+        """
+        _ = customer_data  # unused
+        # Late import to avoid circular dependency
+        from webhooks.services.event_consolidation import event_consolidation_service
+
+        event_type = event_data.get("type", "")
+        if event_type not in ("payment_success", "invoice_paid"):
+            return None
+
+        # Check if there's a pending trial_ending for this customer
+        workspace_id = event_data.get("workspace_id", "")
+        customer_id = event_data.get("customer_id", "")
+
+        if event_consolidation_service.has_pending_trial(workspace_id, customer_id):
+            return InsightInfo(
+                icon=self.ICONS["trial_converted"],
+                text="Trial converted to paid subscription",
+            )
+
+        return None
 
     def _detect_ltv_milestone(
         self, event_data: dict[str, Any], customer_data: dict[str, Any]

@@ -291,9 +291,13 @@ class NotificationBuilder:
         tenure_display = self._format_tenure(customer_data)
 
         # Calculate LTV display
-        total_spent = customer_data.get("total_spent") or customer_data.get(
+        total_spent_raw = customer_data.get("total_spent") or customer_data.get(
             "lifetime_value", 0
         )
+        try:
+            total_spent = float(total_spent_raw) if total_spent_raw else 0.0
+        except (ValueError, TypeError):
+            total_spent = 0.0
         ltv_display = self._format_ltv(total_spent) if total_spent else None
 
         return CustomerInfo(
