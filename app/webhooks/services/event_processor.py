@@ -294,9 +294,7 @@ class EventProcessor:
             return None
 
         # Extract domain and enrich
-        # Use derive_company_domain=True to handle hosted email domains like
-        # onmicrosoft.com where the subdomain represents the tenant name
-        domain = extract_domain(customer_email, derive_company_domain=True)
+        domain = extract_domain(customer_email)
         if not domain:
             return None
 
