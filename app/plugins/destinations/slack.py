@@ -529,7 +529,8 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
     def _format_company_links(self, company: CompanyInfo) -> dict[str, Any] | None:
         """Format company LinkedIn link as context block.
 
-        Website link is omitted since it's shown inline above with the domain.
+        Shows LinkedIn if available. Website link is omitted since it's
+        redundant with the domain shown inline above.
 
         Args:
             company: CompanyInfo object.
