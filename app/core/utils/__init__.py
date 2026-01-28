@@ -1,7 +1,6 @@
 """Core utility modules."""
 
 from .email_domain import (
-    extract_company_domain,
     extract_domain,
     is_disposable_email,
     is_enrichable_domain,
@@ -10,7 +9,6 @@ from .email_domain import (
 )
 
 __all__ = [
-    "extract_company_domain",
     "extract_domain",
     "is_disposable_email",
     "is_enrichable_domain",
