@@ -56,24 +56,25 @@ def integrate_hunter(request: HttpRequest) -> HttpResponse | HttpResponseRedirec
         )
         return redirect("core:integrations")
 
-    # Check if Hunter is already connected
+    # Check if Hunter integration exists (active or inactive)
     existing_integration = Integration.objects.filter(
-        workspace=workspace, integration_type=INTEGRATION_TYPE, is_active=True
+        workspace=workspace, integration_type=INTEGRATION_TYPE
     ).first()
 
     if request.method == "POST":
         return _handle_hunter_connect(request, workspace, existing_integration)
 
-    # Check if API key is configured
-    has_api_key = bool(
+    # Check if actively connected with API key
+    is_connected = bool(
         existing_integration
+        and existing_integration.is_active
         and existing_integration.integration_settings.get("api_key")
     )
 
     context: dict[str, Any] = {
         "workspace": workspace,
-        "existing_integration": existing_integration,
-        "has_api_key": has_api_key,
+        "existing_integration": existing_integration if is_connected else None,
+        "has_api_key": is_connected,
     }
     return render(request, "core/integrate_hunter.html.j2", context)
 
@@ -116,11 +117,12 @@ def _handle_hunter_connect(
         return redirect("core:integrate_hunter")
 
     if existing_integration:
-        # Update existing integration
+        # Update existing integration (reactivate if needed)
         existing_integration.integration_settings["api_key"] = api_key
+        existing_integration.is_active = True
         existing_integration.save()
         logger.info(f"Hunter integration updated for workspace {workspace.name}")
-        messages.success(request, "Hunter.io integration updated successfully!")
+        messages.success(request, "Hunter.io integration connected successfully!")
     else:
         # Create new integration
         Integration.objects.create(
