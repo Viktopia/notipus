@@ -322,6 +322,8 @@ class Integration(models.Model):
         ("chargify", "Chargify / Maxio Advanced Billing"),
         # Notification integrations (workspace-specific)
         ("slack_notifications", "Slack Notifications"),
+        # Enrichment integrations (workspace-specific, user-provided API keys)
+        ("hunter_enrichment", "Hunter.io Email Enrichment"),
     )
 
     workspace = models.ForeignKey(
@@ -570,6 +572,81 @@ class Company(models.Model):
                 return f"{base_url}{url}"
 
         return url
+
+
+class Person(models.Model):
+    """Person model for storing enriched contact/person data from Hunter.io.
+
+    Used by EmailEnrichmentService to cache person information
+    retrieved from Hunter.io's email enrichment API.
+
+    This data is only collected when:
+    1. The workspace is on Pro or Enterprise plan
+    2. The workspace has configured their own Hunter.io API key
+    3. Hunter.io returns data for the email address
+
+    Note: Hunter.io respects GDPR - emails where the person has requested
+    data removal return a 451 status and are not enriched.
+
+    Attributes:
+        email: Unique email identifier (indexed for lookups).
+        first_name: Person's first/given name.
+        last_name: Person's last/family name.
+        position: Job title (e.g., "VP of Engineering").
+        seniority: Seniority level (e.g., "senior", "executive").
+        company_domain: Company domain from employment data.
+        linkedin_url: LinkedIn profile URL.
+        twitter_handle: Twitter/X handle (without @).
+        github_handle: GitHub username.
+        location: Location string (e.g., "San Francisco, CA").
+        hunter_data: Full Hunter.io API response for reference.
+        created_at: When the record was created.
+        updated_at: When the record was last updated.
+    """
+
+    email = models.EmailField(unique=True, db_index=True)
+    first_name = models.CharField(max_length=100, blank=True, default="")
+    last_name = models.CharField(max_length=100, blank=True, default="")
+    position = models.CharField(max_length=255, blank=True, default="")
+    seniority = models.CharField(max_length=50, blank=True, default="")
+    company_domain = models.CharField(max_length=255, blank=True, default="")
+    linkedin_url = models.URLField(max_length=500, blank=True, default="")
+    twitter_handle = models.CharField(max_length=100, blank=True, default="")
+    github_handle = models.CharField(max_length=100, blank=True, default="")
+    location = models.CharField(max_length=255, blank=True, default="")
+    hunter_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "core"
+        verbose_name_plural = "People"
+        indexes = [
+            models.Index(fields=["created_at"], name="person_created_at_idx"),
+            models.Index(fields=["-updated_at"], name="person_updated_at_idx"),
+        ]
+
+    def __str__(self) -> str:
+        """Return string representation of the person.
+
+        Returns:
+            Person's full name or email.
+        """
+        if self.first_name or self.last_name:
+            return f"{self.first_name} {self.last_name}".strip()
+        return self.email
+
+    @property
+    def full_name(self) -> str | None:
+        """Get the person's full name if available."""
+        if self.first_name or self.last_name:
+            return f"{self.first_name} {self.last_name}".strip()
+        return None
+
+    @property
+    def has_enrichment(self) -> bool:
+        """Check if person has enrichment data from Hunter.io."""
+        return bool(self.hunter_data.get("_enriched_at"))
 
 
 class UsageLimit(models.Model):

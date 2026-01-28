@@ -20,6 +20,7 @@ from webhooks.models.rich_notification import (
     NotificationSeverity,
     NotificationType,
     PaymentInfo,
+    PersonInfo,
     RichNotification,
 )
 
@@ -200,6 +201,11 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             links_block = self._format_company_links(n.company)
             if links_block:
                 blocks.append(links_block)
+
+        # Person section (if enriched via Hunter.io)
+        if n.person:
+            person_blocks = self._format_person_section(n.person)
+            blocks.extend(person_blocks)
 
         # Customer footer (optional - only shown when there's meaningful data)
         if n.customer:
@@ -554,6 +560,70 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             "type": "context",
             "elements": [{"type": "mrkdwn", "text": " • ".join(elements)}],
         }
+
+    def _format_person_section(self, person: PersonInfo) -> list[dict[str, Any]]:
+        """Format person enrichment section (from Hunter.io).
+
+        Displays person information from email enrichment, including
+        name, job title, seniority, location, and social links.
+
+        Args:
+            person: PersonInfo object from Hunter.io enrichment.
+
+        Returns:
+            List of Slack blocks (section and optional context block).
+        """
+        blocks: list[dict[str, Any]] = []
+
+        # Build main text content
+        text_parts: list[str] = []
+
+        # Person name with icon
+        display_name = person.full_name or person.email
+        text_parts.append(f":bust_in_silhouette: *{display_name}*")
+
+        # Job info line (title + seniority)
+        job_parts: list[str] = []
+        if person.position:
+            job_parts.append(person.position)
+        if person.seniority:
+            # Capitalize seniority for display (e.g., "senior" -> "Senior")
+            job_parts.append(person.seniority.title())
+        if job_parts:
+            text_parts.append(f"_{' • '.join(job_parts)}_")
+
+        # Location line
+        if person.location:
+            text_parts.append(f":round_pushpin: {person.location}")
+
+        # Main section block
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "\n".join(text_parts)},
+            }
+        )
+
+        # Social links as context block
+        links: list[str] = []
+        if person.linkedin_url:
+            links.append(f":briefcase: <{person.linkedin_url}|LinkedIn>")
+        if person.twitter_handle:
+            twitter_url = f"https://twitter.com/{person.twitter_handle}"
+            links.append(f":bird: <{twitter_url}|Twitter>")
+        if person.github_handle:
+            github_url = f"https://github.com/{person.github_handle}"
+            links.append(f":octocat: <{github_url}|GitHub>")
+
+        if links:
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [{"type": "mrkdwn", "text": " | ".join(links)}],
+                }
+            )
+
+        return blocks
 
     def _format_customer_footer(self, customer: CustomerInfo) -> dict[str, Any] | None:
         """Format customer info footer.
