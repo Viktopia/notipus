@@ -63,7 +63,9 @@
                     <div class="ml-3">
                         <h3 class="text-sm font-medium text-amber-800">Privacy Notice</h3>
                         <div class="mt-2 text-sm text-amber-700">
-                            <p>By enabling this integration, customer email addresses from your webhooks will be sent to Hunter.io for enrichment. Hunter.io is GDPR compliant and will not return data for individuals who have opted out.</p>
+                            <p>
+                                By enabling this integration, customer email addresses from your webhooks will be sent to Hunter.io for enrichment. Hunter.io is GDPR compliant and will not return data for individuals who have opted out.
+                            </p>
                             <p class="mt-2">Please ensure your privacy policy reflects this data processing activity.</p>
                         </div>
                     </div>
@@ -132,7 +134,10 @@
                         <div class="ml-3">
                             <h4 class="text-sm font-medium text-gray-900">Create a Hunter.io account</h4>
                             <p class="text-sm text-gray-500">
-                                Go to <a href="https://hunter.io/users/sign_up" target="_blank" rel="noopener" class="text-[#ff5722] hover:underline">hunter.io/users/sign_up</a> to create a free account.
+                                Go to <a href="https://hunter.io/users/sign_up"
+    target="_blank"
+    rel="noopener"
+    class="text-[#ff5722] hover:underline">hunter.io/users/sign_up</a> to create a free account.
                             </p>
                         </div>
                     </div>
@@ -146,7 +151,10 @@
                         <div class="ml-3">
                             <h4 class="text-sm font-medium text-gray-900">Navigate to API section</h4>
                             <p class="text-sm text-gray-500">
-                                Go to <a href="https://hunter.io/api_keys" target="_blank" rel="noopener" class="text-[#ff5722] hover:underline">hunter.io/api_keys</a> to find your API key.
+                                Go to <a href="https://hunter.io/api_keys"
+    target="_blank"
+    rel="noopener"
+    class="text-[#ff5722] hover:underline">hunter.io/api_keys</a> to find your API key.
                             </p>
                         </div>
                     </div>
@@ -159,9 +167,7 @@
                         </div>
                         <div class="ml-3">
                             <h4 class="text-sm font-medium text-gray-900">Copy your API key</h4>
-                            <p class="text-sm text-gray-500">
-                                Copy the API key and paste it in the form below.
-                            </p>
+                            <p class="text-sm text-gray-500">Copy the API key and paste it in the form below.</p>
                         </div>
                     </div>
                 </div>
@@ -180,7 +186,14 @@
                         <i class="ti ti-mail-search text-[#ff5722] text-2xl"></i>
                     </div>
                     <div class="ml-4">
-                        <h3 class="text-xl font-semibold text-gray-900">{% if existing_integration %}Update{% else %}Connect{% endif %} Hunter.io</h3>
+                        <h3 class="text-xl font-semibold text-gray-900">
+                            {% if existing_integration %}
+                                Update
+                            {% else %}
+                                Connect
+                            {% endif %}
+                            Hunter.io
+                        </h3>
                         <p class="text-gray-600">Enter your Hunter.io API key to enable email enrichment</p>
                     </div>
                 </div>
@@ -201,7 +214,10 @@
                                    required>
                         </div>
                         <p class="mt-2 text-sm text-gray-500">
-                            Find this at <a href="https://hunter.io/api_keys" target="_blank" rel="noopener" class="text-[#ff5722] hover:underline">hunter.io/api_keys</a>
+                            Find this at <a href="https://hunter.io/api_keys"
+    target="_blank"
+    rel="noopener"
+    class="text-[#ff5722] hover:underline">hunter.io/api_keys</a>
                         </p>
                     </div>
 
