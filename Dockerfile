@@ -54,4 +54,6 @@ RUN uv run --no-dev python manage.py collectstatic --noinput
 EXPOSE 8080
 
 # Command to start the server
-CMD ["uv", "run", "--no-dev", "uvicorn", "--host", "0.0.0.0", "--port", "8080", "--lifespan", "off", "django_notipus.asgi:application"]
+# --proxy-headers: Use X-Forwarded-* headers for client IP (from Fly.io/Cloudflare)
+# --forwarded-allow-ips='*': Trust proxy headers from any IP (we're behind Fly.io)
+CMD ["uv", "run", "--no-dev", "uvicorn", "--host", "0.0.0.0", "--port", "8080", "--lifespan", "off", "--proxy-headers", "--forwarded-allow-ips", "*", "django_notipus.asgi:application"]
