@@ -506,11 +506,9 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
         if details:
             text_parts.append(f"_{' • '.join(details)}_")
 
-        # Description as blockquote (truncated)
+        # Description as blockquote
         if company.description:
             desc = html_to_slack_mrkdwn(company.description)
-            if len(desc) > 100:
-                desc = desc[:100] + "..."
             text_parts.append(f">{desc}")
 
         block: dict[str, Any] = {
@@ -526,39 +524,27 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
                 "alt_text": company.name,
             }
 
-        # Make section collapsible if it has description (shows "see more")
-        if company.description:
-            block["expand"] = False
-
         return block
 
     def _format_company_links(self, company: CompanyInfo) -> dict[str, Any] | None:
-        """Format company website and LinkedIn as context block.
+        """Format company LinkedIn link as context block.
+
+        Website link is omitted since it's shown inline above with the domain.
 
         Args:
             company: CompanyInfo object.
 
         Returns:
-            Slack context block dict, or None if no links available.
+            Slack context block dict, or None if no LinkedIn available.
         """
-        elements: list[str] = []
-
-        # Website link
-        if company.domain:
-            elements.append(
-                f":globe_with_meridians: <https://{company.domain}|Website>"
-            )
-
-        # LinkedIn link (most valuable for sales)
-        if company.linkedin_url:
-            elements.append(f":briefcase: <{company.linkedin_url}|LinkedIn>")
-
-        if not elements:
+        if not company.linkedin_url:
             return None
 
         return {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": " • ".join(elements)}],
+            "elements": [
+                {"type": "mrkdwn", "text": f":briefcase: <{company.linkedin_url}|LinkedIn>"}
+            ],
         }
 
     def _format_person_section(self, person: PersonInfo) -> list[dict[str, Any]]:
