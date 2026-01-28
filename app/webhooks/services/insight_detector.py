@@ -11,6 +11,26 @@ from typing import Any
 from webhooks.models.rich_notification import InsightInfo
 
 
+def _to_float(value: Any, default: float = 0.0) -> float:
+    """Safely convert a value to float.
+
+    Handles strings like "0.00" from Shopify and other providers.
+
+    Args:
+        value: The value to convert (string, int, float, or None).
+        default: Default value if conversion fails.
+
+    Returns:
+        The converted float value or default.
+    """
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 @dataclass
 class MilestoneConfig:
     """Configuration for milestone detection.
@@ -111,8 +131,8 @@ class InsightDetector:
         flags: list[str] = []
 
         # Check for VIP status
-        ltv = customer_data.get("total_spent", 0) or customer_data.get(
-            "lifetime_value", 0
+        ltv = _to_float(customer_data.get("total_spent")) or _to_float(
+            customer_data.get("lifetime_value")
         )
         if ltv >= self.config.vip_ltv_threshold:
             flags.append("vip")
@@ -258,9 +278,9 @@ class InsightDetector:
         if event_type != "payment_success":
             return None
 
-        current_amount = event_data.get("amount", 0)
-        previous_ltv = customer_data.get("total_spent", 0) or customer_data.get(
-            "lifetime_value", 0
+        current_amount = _to_float(event_data.get("amount"))
+        previous_ltv = _to_float(customer_data.get("total_spent")) or _to_float(
+            customer_data.get("lifetime_value")
         )
         new_ltv = previous_ltv + current_amount
 
@@ -361,16 +381,16 @@ class InsightDetector:
         if event_type != "payment_success":
             return None
 
-        current_amount = event_data.get("amount", 0)
+        current_amount = _to_float(event_data.get("amount"))
         if current_amount <= 0:
             return None
 
         # Calculate average payment from history
         payment_history = customer_data.get("payment_history", [])
         successful_payments = [
-            p.get("amount", 0)
+            _to_float(p.get("amount"))
             for p in payment_history
-            if p.get("status") == "success" and p.get("amount", 0) > 0
+            if p.get("status") == "success" and _to_float(p.get("amount")) > 0
         ]
 
         if len(successful_payments) < 3:  # Need enough history
@@ -406,8 +426,8 @@ class InsightDetector:
         if event_type != "payment_success":
             return None
 
-        ltv = customer_data.get("total_spent", 0) or customer_data.get(
-            "lifetime_value", 0
+        ltv = _to_float(customer_data.get("total_spent")) or _to_float(
+            customer_data.get("lifetime_value")
         )
 
         if ltv >= self.config.vip_ltv_threshold:
@@ -474,7 +494,7 @@ class InsightDetector:
         if event_type != "payment_success":
             return None
 
-        amount = event_data.get("amount", 0)
+        amount = _to_float(event_data.get("amount"))
 
         # Use configurable threshold for large payment detection
         if amount >= self.config.large_payment_threshold:

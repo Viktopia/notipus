@@ -415,6 +415,65 @@ class TestMilestoneConfigDefaults:
         assert config.large_payment_threshold == 500
 
 
+class TestStringLTVHandling:
+    """Test handling of string LTV values from providers like Shopify."""
+
+    def test_string_total_spent_in_risk_status(
+        self, detector: InsightDetector, payment_success_event: dict
+    ) -> None:
+        """Test that string total_spent doesn't crash detect_risk_status."""
+        # Shopify sends total_spent as string "0.00"
+        customer = {
+            "total_spent": "0.00",  # String, not float
+            "payment_history": [],
+        }
+
+        # Should not raise TypeError
+        flags = detector.detect_risk_status(payment_success_event, customer)
+        assert isinstance(flags, list)
+        assert "vip" not in flags  # 0.00 is not VIP
+
+    def test_string_total_spent_vip_detection(
+        self, detector: InsightDetector, payment_success_event: dict
+    ) -> None:
+        """Test VIP detection works with string total_spent."""
+        customer = {
+            "total_spent": "15000.00",  # String over VIP threshold
+            "payment_history": [],
+        }
+
+        flags = detector.detect_risk_status(payment_success_event, customer)
+        assert "vip" in flags
+
+    def test_string_ltv_milestone_detection(self, detector: InsightDetector) -> None:
+        """Test LTV milestone detection with string total_spent."""
+        event = {"type": "payment_success", "amount": 200.00}
+        customer = {
+            "orders_count": 5,
+            "total_spent": "900.00",  # String that will cross $1000
+            "payment_history": [{"status": "success", "amount": 300}] * 3,
+        }
+
+        result = detector.detect(event, customer)
+
+        assert result is not None
+        assert "1,000" in result.text
+
+    def test_string_amount_in_event(self, detector: InsightDetector) -> None:
+        """Test that string amount in event data is handled."""
+        event = {"type": "payment_success", "amount": "200.00"}  # String amount
+        customer = {
+            "orders_count": 5,
+            "total_spent": 900.00,
+            "payment_history": [{"status": "success", "amount": 300}] * 3,
+        }
+
+        result = detector.detect(event, customer)
+
+        assert result is not None
+        assert "1,000" in result.text
+
+
 class TestInsightPriority:
     """Test insight detection priority."""
 
