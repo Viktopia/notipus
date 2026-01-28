@@ -10,6 +10,7 @@ from typing import Any
 import requests
 from plugins.base import PluginCapability, PluginMetadata, PluginType
 from plugins.destinations.base import BaseDestinationPlugin
+from plugins.destinations.slack_utils import html_to_slack_mrkdwn
 from webhooks.models.rich_notification import (
     ActionButton,
     CompanyInfo,
@@ -501,9 +502,9 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
 
         # Description as blockquote (truncated)
         if company.description:
-            desc = company.description[:100]
-            if len(company.description) > 100:
-                desc += "..."
+            desc = html_to_slack_mrkdwn(company.description)
+            if len(desc) > 100:
+                desc = desc[:100] + "..."
             text_parts.append(f">{desc}")
 
         block: dict[str, Any] = {
