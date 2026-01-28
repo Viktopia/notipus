@@ -243,7 +243,7 @@ class ZendeskSourcePlugin(BaseSourcePlugin):
         if "event" in data:
             event_info = data.get("event", {})
             if isinstance(event_info, dict):
-                return event_info.get("type", "ticket.updated")
+                return str(event_info.get("type", "ticket.updated"))
             return str(event_info)
 
         # Trigger/automation format - infer from ticket status changes
