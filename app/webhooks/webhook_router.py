@@ -265,6 +265,9 @@ def _process_immediately(
     customer_id = event_data.get("customer_id", "")
     workspace_id = str(workspace.uuid) if workspace else ""
 
+    # Add workspace_id to event_data for insight detection
+    event_data["workspace_id"] = workspace_id
+
     # Check if this event should be suppressed due to consolidation
     should_notify = event_consolidation_service.should_send_notification(
         event_type=event_type,
