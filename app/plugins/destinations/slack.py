@@ -540,11 +540,10 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
         if not company.linkedin_url:
             return None
 
+        link_text = f":briefcase: <{company.linkedin_url}|LinkedIn>"
         return {
             "type": "context",
-            "elements": [
-                {"type": "mrkdwn", "text": f":briefcase: <{company.linkedin_url}|LinkedIn>"}
-            ],
+            "elements": [{"type": "mrkdwn", "text": link_text}],
         }
 
     def _format_person_section(self, person: PersonInfo) -> list[dict[str, Any]]:
