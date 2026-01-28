@@ -326,52 +326,110 @@
                 </div>
             </div>
 
-            <!-- Webhook Information (Collapsible) -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
-                <button type="button"
-                        id="webhook-config-toggle"
-                        onclick="toggleWebhookConfig()"
-                        aria-expanded="false"
-                        aria-controls="webhook-config-content"
-                        class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
-                    <div class="flex items-center gap-3">
-                        <div class="h-10 w-10 bg-gray-100 rounded-xl flex items-center justify-center">
-                            <i class="ti ti-code text-gray-600 text-xl"></i>
-                        </div>
-                        <div class="text-left">
-                            <h2 class="text-base font-semibold text-gray-900">Webhook Configuration</h2>
-                            <p class="text-sm text-gray-500">Technical details for setting up your webhook endpoints</p>
-                        </div>
-                    </div>
-                    <i id="webhook-config-chevron"
-                       class="ti ti-chevron-down text-gray-400 text-xl transition-transform duration-200"></i>
-                </button>
-                <div id="webhook-config-content" class="hidden border-t border-gray-100">
-                    <div class="px-6 py-5">
-                        <div class="space-y-4">
+            <!-- Enrichment Services Section -->
+            {% if enrichment_services %}
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
+                    <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-orange-50/80 to-amber-50/50">
+                        <div class="flex items-center gap-3">
+                            <div class="h-10 w-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                                <i class="ti ti-sparkles text-orange-600 text-xl"></i>
+                            </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Organization Webhook Token</label>
-                                <div class="flex rounded-lg overflow-hidden border border-gray-200">
-                                    <input type="text"
-                                           readonly
-                                           value="{{ organization.uuid }}"
-                                           class="flex-1 px-3 py-2 bg-gray-50 text-sm text-gray-600 font-mono border-0 focus:ring-0">
-                                    <button type="button"
-                                            onclick="event.stopPropagation(); copyToClipboard('{{ organization.uuid }}')"
-                                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 border-l border-gray-200 transition-colors flex items-center gap-2">
-                                        <i class="ti ti-copy"></i>
-                                        Copy
-                                    </button>
-                                </div>
-                                <p class="mt-2 text-sm text-gray-500">
-                                    Use this token in your webhook URLs:
-                                    <code class="text-xs bg-gray-100 px-2 py-1 rounded font-mono">/webhook/customer/{{ organization.uuid }}/&lt;provider&gt;/</code>
-                                </p>
+                                <h2 class="text-lg font-semibold text-gray-900">Enrichment Services</h2>
+                                <p class="text-sm text-gray-500">Enhance customer data with additional context</p>
                             </div>
                         </div>
                     </div>
+
+                    <div class="divide-y divide-gray-100">
+                        {% for integration in enrichment_services %}
+                            <div class="px-6 py-5 hover:bg-gray-50/50 transition-colors">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="flex items-start gap-4">
+                                        <!-- Integration Icon -->
+                                        <div class="flex-shrink-0">
+                                            {% if integration.id == 'hunter' %}
+                                                <!-- Hunter.io Icon -->
+                                                <div class="w-12 h-12 bg-[#ff5722]/10 rounded-xl flex items-center justify-center">
+                                                    <i class="ti ti-mail-search text-[#ff5722] text-2xl"></i>
+                                                </div>
+                                            {% else %}
+                                                <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                                                    <i class="ti ti-sparkles text-gray-500 text-2xl"></i>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+
+                                        <!-- Integration Details -->
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <h3 class="text-base font-semibold text-gray-900">{{ integration.name }}</h3>
+                                                {% if integration.connected %}
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                                        <i class="ti ti-circle-check text-xs"></i>
+                                                        Connected
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-orange-50 text-orange-700 mb-2">
+                                                {{ integration.category }}
+                                            </span>
+                                            <p class="text-sm text-gray-500">{{ integration.description }}</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Button -->
+                                    <div class="flex-shrink-0">
+                                        {% if integration.connected %}
+                                            {% if integration.id == "hunter" %}
+                                                <div class="flex flex-col items-end gap-2">
+                                                    <a href="{% url 'core:integrate_hunter' %}"
+                                                       class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                                                        <i class="ti ti-settings"></i>
+                                                        Configure
+                                                    </a>
+                                                    <form method="post"
+                                                          action="{% url 'core:disconnect_hunter' %}"
+                                                          class="inline"
+                                                          id="disconnect-hunter-form">
+                                                        {% csrf_token %}
+                                                        <button type="button"
+                                                                onclick="confirmDisconnectHunter()"
+                                                                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                                                            <i class="ti ti-unlink"></i>
+                                                            Disconnect
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            {% else %}
+                                                <button type="button"
+                                                        class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                                                    <i class="ti ti-settings"></i>
+                                                    Manage
+                                                </button>
+                                            {% endif %}
+                                        {% else %}
+                                            {% if integration.id == "hunter" %}
+                                                <a href="{% url 'core:integrate_hunter' %}"
+                                                   class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#ff5722] hover:bg-[#e64a19] rounded-lg transition-colors shadow-sm">
+                                                    <i class="ti ti-plug-connected"></i>
+                                                    Connect
+                                                </a>
+                                            {% else %}
+                                                <button type="button"
+                                                        disabled
+                                                        class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed">
+                                                    Coming Soon
+                                                </button>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
+            {% endif %}
 
             <!-- Help Section -->
             <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-6">
@@ -482,20 +540,6 @@
     </div>
 
     <script>
-        function copyToClipboard(text) {
-            NotipusUI.copyToClipboard(text);
-        }
-
-        function toggleWebhookConfig() {
-            const content = document.getElementById('webhook-config-content');
-            const chevron = document.getElementById('webhook-config-chevron');
-            const toggle = document.getElementById('webhook-config-toggle');
-            const isExpanded = content.classList.contains('hidden');
-            content.classList.toggle('hidden');
-            chevron.classList.toggle('rotate-180');
-            toggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
-        }
-
         async function confirmDisconnectSlack() {
             const confirmed = await NotipusUI.confirmDisconnect(
                 'Slack',
@@ -523,6 +567,16 @@
             );
             if (confirmed) {
                 document.getElementById('disconnect-shopify-form').submit();
+            }
+        }
+
+        async function confirmDisconnectHunter() {
+            const confirmed = await NotipusUI.confirmDisconnect(
+                'Hunter.io',
+                'Customer emails will no longer be enriched with person data. You can reconnect at any time.'
+            );
+            if (confirmed) {
+                document.getElementById('disconnect-hunter-form').submit();
             }
         }
 

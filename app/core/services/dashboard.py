@@ -616,9 +616,25 @@ class IntegrationService:
             },
         ]
 
+        # Enrichment Services - Services that enhance customer data
+        enrichment_services: list[dict[str, Any]] = [
+            {
+                "id": "hunter",
+                "name": "Hunter.io",
+                "description": (
+                    "Enrich customer data with person info (name, job title, LinkedIn)"
+                ),
+                "connected": current_integrations.filter(
+                    integration_type="hunter"
+                ).exists(),
+                "category": "Email Enrichment",
+            },
+        ]
+
         return {
             "workspace": workspace,
             "event_sources": event_sources,
             "notification_channels": notification_destinations,
+            "enrichment_services": enrichment_services,
             "current_integrations": current_integrations,
         }
