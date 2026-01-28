@@ -87,6 +87,55 @@ class HunterPlugin(BaseEmailEnrichmentPlugin):
         """
         return True
 
+    def verify_api_key(self, api_key: str) -> tuple[bool, str]:
+        """Verify a Hunter.io API key is valid.
+
+        Calls the /account endpoint to check if the API key works.
+
+        Args:
+            api_key: The Hunter.io API key to verify.
+
+        Returns:
+            Tuple of (is_valid, message). If valid, message contains
+            account info. If invalid, message contains error details.
+        """
+        if not api_key:
+            return False, "API key is required"
+
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/account",
+                params={"api_key": api_key},
+                timeout=self.timeout,
+            )
+
+            if response.status_code == 401:
+                return False, "Invalid API key"
+
+            if response.status_code == 429:
+                return False, "Rate limit exceeded. Please try again later."
+
+            response.raise_for_status()
+            data = response.json().get("data", {})
+
+            # Return success with account info
+            email = data.get("email", "")
+            plan = data.get("plan_name", "Unknown")
+            requests_remaining = (
+                data.get("requests", {}).get("searches", {}).get("available", "N/A")
+            )
+
+            return True, (
+                f"Connected as {email} "
+                f"({plan} plan, {requests_remaining} searches remaining)"
+            )
+
+        except requests.exceptions.Timeout:
+            return False, "Connection timed out. Please try again."
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error verifying Hunter.io API key: {e!s}")
+            return False, f"Connection error: {e!s}"
+
     def enrich_email(self, email: str, api_key: str) -> dict[str, Any]:
         """Enrich email with person data from Hunter.io People Find API.
 

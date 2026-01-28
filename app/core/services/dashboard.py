@@ -625,7 +625,7 @@ class IntegrationService:
                     "Enrich customer data with person info (name, job title, LinkedIn)"
                 ),
                 "connected": current_integrations.filter(
-                    integration_type="hunter"
+                    integration_type="hunter_enrichment"
                 ).exists(),
                 "category": "Email Enrichment",
             },

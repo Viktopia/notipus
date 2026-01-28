@@ -16,6 +16,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
+from plugins.enrichment.hunter import HunterPlugin
 
 from ...models import Integration, Workspace
 from .base import require_admin_role, require_post_method
@@ -104,6 +105,14 @@ def _handle_hunter_connect(
             request,
             "Invalid API key format. Please check your Hunter.io API key.",
         )
+        return redirect("core:integrate_hunter")
+
+    # Verify API key with Hunter.io
+    hunter = HunterPlugin()
+    is_valid, message = hunter.verify_api_key(api_key)
+
+    if not is_valid:
+        messages.error(request, f"Could not verify API key: {message}")
         return redirect("core:integrate_hunter")
 
     if existing_integration:
