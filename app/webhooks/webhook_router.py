@@ -55,6 +55,7 @@ def _log_webhook_payload(
             "X-Shopify-Hmac-SHA256",
             "Stripe-Signature",
             "X-Chargify-Webhook-Signature-Hmac-Sha-256",
+            "X-Zendesk-Webhook-Signature",
         ]
         for header in signature_headers:
             if header in request.headers:
@@ -523,6 +524,54 @@ def customer_stripe_webhook(
 
     except Exception as e:
         logger.error(f"Error in customer Stripe webhook: {str(e)}", exc_info=True)
+        error_response = create_error_response(e, 500)
+        return JsonResponse(error_response, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def customer_zendesk_webhook(
+    request: HttpRequest, organization_uuid: str
+) -> JsonResponse:
+    """Handle customer-specific Zendesk webhook requests with rate limiting"""
+    # Log raw webhook payload before any processing
+    _log_webhook_payload(request, "zendesk", organization_uuid)
+
+    logger.info(
+        f"Processing customer Zendesk webhook for workspace {organization_uuid}",
+        extra={
+            "content_type": request.content_type,
+            "workspace_uuid": organization_uuid,
+        },
+    )
+
+    try:
+        # Get workspace for rate limiting
+        workspace = get_object_or_404(Workspace, uuid=organization_uuid)
+
+        # Get workspace's Zendesk integration
+        integration = get_object_or_404(
+            Integration,
+            workspace=workspace,
+            integration_type="zendesk",
+            is_active=True,
+        )
+
+        from plugins.sources.zendesk import ZendeskSourcePlugin
+
+        # Get Zendesk subdomain from integration settings
+        integration_settings = integration.settings or {}
+        zendesk_subdomain = integration_settings.get("zendesk_subdomain", "")
+
+        provider = ZendeskSourcePlugin(
+            webhook_secret=integration.webhook_secret,
+            zendesk_subdomain=zendesk_subdomain,
+        )
+
+        return _process_webhook(request, provider, "customer_zendesk", workspace)
+
+    except Exception as e:
+        logger.error(f"Error in customer Zendesk webhook: {str(e)}", exc_info=True)
         error_response = create_error_response(e, 500)
         return JsonResponse(error_response, status=500)
 

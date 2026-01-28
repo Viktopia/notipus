@@ -48,6 +48,10 @@ from .stripe import (
     disconnect_stripe,
     integrate_stripe,
 )
+from .zendesk import (
+    disconnect_zendesk,
+    integrate_zendesk,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +78,9 @@ __all__ = [
     "update_shopify_events",
     # Chargify
     "integrate_chargify",
+    # Zendesk
+    "integrate_zendesk",
+    "disconnect_zendesk",
 ]
 
 
