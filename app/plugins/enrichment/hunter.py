@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 import requests
+from core.utils.email_domain import is_enrichable_domain
 from plugins.base import PluginCapability, PluginMetadata, PluginType
 from plugins.enrichment.base_email import (
     BaseEmailEnrichmentPlugin,
@@ -141,6 +142,10 @@ class HunterPlugin(BaseEmailEnrichmentPlugin):
 
         API Endpoint: GET https://api.hunter.io/v2/people/find?email=...
 
+        Note: Hunter.io only supports business email domains. Free email
+        providers (Gmail, Yahoo, etc.) and disposable domains are filtered
+        out before making the API call.
+
         Args:
             email: The email address to enrich.
             api_key: The workspace's Hunter.io API key.
@@ -157,6 +162,12 @@ class HunterPlugin(BaseEmailEnrichmentPlugin):
             logger.error("Hunter.io API key not provided")
             return {}
 
+        # Skip non-business emails (Gmail, Yahoo, disposable, etc.)
+        # Hunter.io only supports business email domains
+        if not is_enrichable_domain(email):
+            logger.debug(f"Skipping Hunter.io lookup for non-business email: {email}")
+            raise EmailNotFoundError(email)
+
         try:
             response = requests.get(
                 f"{self.BASE_URL}/people/find",
@@ -165,6 +176,12 @@ class HunterPlugin(BaseEmailEnrichmentPlugin):
             )
 
             # Handle specific error codes
+            if response.status_code == 400:
+                # 400 = Bad Request, typically for unsupported email domains
+                # (free providers like Gmail, Yahoo, etc.)
+                logger.debug(f"Hunter.io: Unsupported email domain for {email}")
+                raise EmailNotFoundError(email)
+
             if response.status_code == 404:
                 raise EmailNotFoundError(email)
 

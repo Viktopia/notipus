@@ -256,6 +256,44 @@ class TestHunterPluginAPICall:
         result = hunter_plugin.enrich_email("test@example.com", "")
         assert result == {}
 
+    @patch("plugins.enrichment.hunter.requests.get")
+    def test_enrich_email_free_email_provider(
+        self, mock_get: MagicMock, hunter_plugin: HunterPlugin
+    ) -> None:
+        """Test that free email providers (Gmail) are filtered out before API call."""
+        with pytest.raises(EmailNotFoundError):
+            hunter_plugin.enrich_email("user@gmail.com", "test-api-key")
+        mock_get.assert_not_called()
+
+    @patch("plugins.enrichment.hunter.requests.get")
+    def test_enrich_email_yahoo_filtered(
+        self, mock_get: MagicMock, hunter_plugin: HunterPlugin
+    ) -> None:
+        """Test that Yahoo emails are filtered out before API call."""
+        with pytest.raises(EmailNotFoundError):
+            hunter_plugin.enrich_email("user@yahoo.com", "test-api-key")
+        mock_get.assert_not_called()
+
+    @patch("plugins.enrichment.hunter.requests.get")
+    def test_enrich_email_disposable_filtered(
+        self, mock_get: MagicMock, hunter_plugin: HunterPlugin
+    ) -> None:
+        """Test that disposable emails are filtered out before API call."""
+        with pytest.raises(EmailNotFoundError):
+            hunter_plugin.enrich_email("user@mailinator.com", "test-api-key")
+        mock_get.assert_not_called()
+
+    @patch("plugins.enrichment.hunter.requests.get")
+    def test_enrich_email_400_bad_request(
+        self, mock_get: MagicMock, hunter_plugin: HunterPlugin
+    ) -> None:
+        """Test 400 response (unsupported domain) raises EmailNotFoundError."""
+        mock_get.return_value.status_code = 400
+
+        # Business email that passes filter but Hunter.io rejects
+        with pytest.raises(EmailNotFoundError):
+            hunter_plugin.enrich_email("user@some-company.com", "test-api-key")
+
 
 # ============================================================================
 # PersonInfo Dataclass Tests

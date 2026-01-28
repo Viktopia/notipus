@@ -5,7 +5,7 @@ information from Hunter.io. Unlike domain enrichment (which returns company data
 email enrichment returns person-specific data.
 
 Features:
-- Works for ALL emails (including Gmail/free providers)
+- Works for business email domains only (Gmail, Yahoo, etc. are filtered out)
 - Requires Pro or Enterprise plan
 - Uses per-workspace API keys (not global configuration)
 - Caches results in the Person model
