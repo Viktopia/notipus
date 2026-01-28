@@ -17,6 +17,17 @@ from .services.webhook_storage import webhook_storage_service
 
 logger = logging.getLogger(__name__)
 
+# Event types that benefit from aggregation even without idempotency_key.
+# Subscription events need invoice events for customer email.
+_AGGREGATABLE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "subscription_created",
+        "trial_started",
+        "invoice_paid",
+        "payment_success",
+    }
+)
+
 
 def _log_webhook_payload(
     request: HttpRequest, provider_name: str, workspace_uuid: Optional[str] = None
@@ -219,12 +230,19 @@ def _process_webhook_data(
         external_id=external_id,
     )
 
-    # Events WITH idempotency_key: queue for delayed processing
-    # This allows related events (subscription.created + invoice.paid) to
-    # be aggregated into ONE notification with complete data
-    if idempotency_key:
+    # Queue for delayed processing if:
+    # 1. Has idempotency_key (Stripe API-triggered events share this key)
+    # 2. Or is an aggregatable event type (use customer_id as fallback key)
+    should_aggregate = event_type in _AGGREGATABLE_EVENT_TYPES
+    customer_id = event_data.get("customer_id", "")
+
+    if idempotency_key or (should_aggregate and customer_id):
+        # Use idempotency_key if available, otherwise customer_id-based key
+        # (workspace_id is already prefixed by pending_event_queue)
+        aggregation_key = idempotency_key or f"customer:{customer_id}"
+
         pending_event_queue.queue_event(
-            idempotency_key=idempotency_key,
+            idempotency_key=aggregation_key,
             workspace_id=workspace_id,
             event_data=event_data,
             customer_data=customer_data,
@@ -232,17 +250,19 @@ def _process_webhook_data(
             workspace=workspace,
         )
 
-        logger.info(
-            f"Queued {event_type} for delayed processing "
-            f"(idempotency_key: {idempotency_key[:8]}...)"
-        )
+        # Log with truncated key for readability
+        if len(aggregation_key) > 20:
+            key_preview = f"{aggregation_key[:20]}..."
+        else:
+            key_preview = aggregation_key
+        logger.info(f"Queued {event_type} for delayed processing (key: {key_preview})")
 
         return JsonResponse(
             create_success_response(f"{provider_name} webhook queued for processing"),
             status=200,
         )
 
-    # Events WITHOUT idempotency_key: process immediately (fallback)
+    # Events WITHOUT idempotency_key that don't benefit from aggregation
     return _process_immediately(event_data, customer_data, provider_name, workspace)
 
 
@@ -458,8 +478,7 @@ def customer_chargify_webhook(
     _log_webhook_payload(request, "chargify", organization_uuid)
 
     logger.info(
-        f"Processing customer Chargify/Maxio webhook "
-        f"for workspace {organization_uuid}",
+        f"Processing customer Chargify/Maxio webhook for workspace {organization_uuid}",
         extra={
             "workspace_uuid": organization_uuid,
             "content_type": request.content_type,

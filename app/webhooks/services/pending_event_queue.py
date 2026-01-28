@@ -74,25 +74,62 @@ class PendingEventQueue:
         """Store event and schedule processing after delay.
 
         Args:
-            idempotency_key: Stripe idempotency key shared by related events.
+            idempotency_key: Stripe idempotency key shared by related events,
+                or customer-based key (format: "customer:{customer_id}").
             workspace_id: Workspace UUID string.
             event_data: Parsed event data from the webhook.
             customer_data: Customer data extracted from webhook.
             provider_name: Name of the provider (e.g., "stripe").
             workspace: Workspace model instance (can be None for global).
         """
+        # For customer-based keys (without Stripe idempotency key), add time bucket
+        # to group related events within a 60-second window
+        is_customer_key = idempotency_key.startswith("customer:")
+        if is_customer_key:
+            storage_key = self._get_customer_storage_key(idempotency_key, workspace_id)
+        else:
+            storage_key = idempotency_key
+
         # Store event in Redis
-        self._store_event(idempotency_key, workspace_id, event_data, customer_data)
+        self._store_event(storage_key, workspace_id, event_data, customer_data)
 
         # Schedule processing (only if not already scheduled)
-        self._schedule_processing(
-            idempotency_key, workspace_id, provider_name, workspace
-        )
+        self._schedule_processing(storage_key, workspace_id, provider_name, workspace)
 
         logger.debug(
-            f"Queued event {event_data.get('type')} for idempotency_key "
-            f"{idempotency_key} in workspace {workspace_id}"
+            f"Queued event {event_data.get('type')} for key "
+            f"{storage_key} in workspace {workspace_id}"
         )
+
+    def _get_customer_storage_key(self, idempotency_key: str, workspace_id: str) -> str:
+        """Get storage key for customer-based aggregation.
+
+        Uses 60-second time buckets to group related events. To handle events
+        arriving at bucket boundaries (e.g., subscription at T=59s, invoice at
+        T=61s), we check if there's an existing key in the previous bucket and
+        use that if found.
+
+        Args:
+            idempotency_key: Customer-based key (format: "customer:{customer_id}").
+            workspace_id: Workspace UUID string.
+
+        Returns:
+            Storage key with time bucket suffix.
+        """
+        current_bucket = int(time.time() // 60)
+        previous_bucket = current_bucket - 1
+
+        # Check if there's an existing aggregation in the previous bucket
+        # (handles events arriving at bucket boundaries)
+        prev_key = f"{idempotency_key}:t{previous_bucket}"
+        prev_redis_key = f"pending_webhook:{workspace_id}:{prev_key}"
+
+        if cache.get(prev_redis_key):
+            logger.debug(f"Found existing events in previous bucket, using {prev_key}")
+            return prev_key
+
+        # No existing events in previous bucket, use current bucket
+        return f"{idempotency_key}:t{current_bucket}"
 
     def _store_event(
         self,
@@ -319,8 +356,7 @@ class PendingEventQueue:
             else:
                 # Leave events for retry (orphan recovery will pick them up)
                 logger.warning(
-                    f"Notification failed for {idempotency_key}, "
-                    f"events left for retry"
+                    f"Notification failed for {idempotency_key}, events left for retry"
                 )
         finally:
             # Always release the lock
@@ -422,10 +458,43 @@ class PendingEventQueue:
 
         logger.info(
             f"Aggregated {len(stored_items)} events: type={result_event.get('type')}, "
-            f"email={result_customer.get('email')}"
+            f"email={result_customer.get('email') or 'MISSING'}"
         )
 
+        self._warn_if_missing_email(result_event, result_customer, stored_items)
+
         return result_event, result_customer
+
+    def _warn_if_missing_email(
+        self,
+        result_event: dict[str, Any],
+        result_customer: dict[str, Any],
+        stored_items: list[dict[str, Any]],
+    ) -> None:
+        """Log warning if subscription/trial event has no email after aggregation.
+
+        Args:
+            result_event: Aggregated event data.
+            result_customer: Aggregated customer data.
+            stored_items: Original list of stored items for diagnostic info.
+        """
+        if result_customer.get("email"):
+            return
+
+        event_type = result_event.get("type", "")
+        if event_type not in ("trial_started", "subscription_created"):
+            return
+
+        event_types = [item["event_data"].get("type") for item in stored_items]
+        emails_found = [
+            item["customer_data"].get("email", "none") or "none"
+            for item in stored_items
+        ]
+        logger.warning(
+            f"No customer email found for {event_type} after aggregating "
+            f"{len(stored_items)} events. Event types: {event_types}, "
+            f"Emails checked: {emails_found}"
+        )
 
     def _send_notification(
         self,
