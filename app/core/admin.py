@@ -124,7 +124,7 @@ class CompanyAdmin(admin.ModelAdmin):
         blended_at = obj.brand_info.get("_blended_at", "Unknown")
 
         return format_html(
-            "<strong>Sources:</strong> {}<br>" "<strong>Last blended:</strong> {}",
+            "<strong>Sources:</strong> {}<br><strong>Last blended:</strong> {}",
             ", ".join(source_names),
             blended_at,
         )

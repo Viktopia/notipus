@@ -405,9 +405,9 @@ class AllTemplatesValidationTests(TestCase):
             assert expected in template_names, f"Expected template {expected} not found"
 
         # Should have found a reasonable number of templates
-        assert (
-            len(template_names) >= 10
-        ), f"Only found {len(template_names)} templates, expected more"
+        assert len(template_names) >= 10, (
+            f"Only found {len(template_names)} templates, expected more"
+        )
 
     def test_standalone_templates_render_with_empty_context(self) -> None:
         """Test standalone templates render with empty context.

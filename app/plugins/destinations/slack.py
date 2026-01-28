@@ -643,9 +643,7 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             badges.append(f"{emoji} {ticket.priority.title()}")
         return " • ".join(badges)
 
-    def _add_ticket_content_lines(
-        self, lines: list[str], ticket: TicketInfo
-    ) -> None:
+    def _add_ticket_content_lines(self, lines: list[str], ticket: TicketInfo) -> None:
         """Add subject, description, and comment lines to ticket output."""
         if ticket.subject:
             lines.append(f"*Subject:* {ticket.subject}")
@@ -657,9 +655,7 @@ class SlackDestinationPlugin(BaseDestinationPlugin):
             comment = self._truncate_text(ticket.latest_comment, 200)
             lines.append(f"\n:speech_balloon: *Latest Comment:*\n>{comment}")
 
-    def _add_ticket_metadata_lines(
-        self, lines: list[str], ticket: TicketInfo
-    ) -> None:
+    def _add_ticket_metadata_lines(self, lines: list[str], ticket: TicketInfo) -> None:
         """Add requester, assignee, channel, and tags lines to ticket output."""
         requester = ticket.requester_name or ticket.requester_email
         if requester:

@@ -202,8 +202,7 @@ class StripeAPI:
             workspace.save(update_fields=["stripe_customer_id"])
 
             logger.info(
-                f"Created Stripe customer {customer.id} "
-                f"for workspace {workspace.id}"
+                f"Created Stripe customer {customer.id} for workspace {workspace.id}"
             )
             return customer.to_dict()
 

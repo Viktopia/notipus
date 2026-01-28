@@ -674,9 +674,7 @@ class NotificationBuilder:
 
         return actions
 
-    def _build_provider_action(
-        self, event_data: dict[str, Any]
-    ) -> ActionButton | None:
+    def _build_provider_action(self, event_data: dict[str, Any]) -> ActionButton | None:
         """Build provider-specific action button.
 
         Args:

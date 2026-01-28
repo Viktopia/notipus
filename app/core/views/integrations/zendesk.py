@@ -95,8 +95,7 @@ def _handle_zendesk_connect(
     if len(webhook_secret) < 16:
         messages.error(
             request,
-            "Invalid webhook secret. "
-            "The secret should be at least 16 characters long.",
+            "Invalid webhook secret. The secret should be at least 16 characters long.",
         )
         return redirect("core:integrate_zendesk")
 

@@ -510,8 +510,7 @@ def _normalize_shop_domain(shop_url: str) -> tuple[str | None, str | None]:
     # Validate the shop name
     if not shop or not shop.replace("-", "").replace("_", "").isalnum():
         return None, (
-            "Invalid store name. "
-            "Use only letters, numbers, hyphens, and underscores."
+            "Invalid store name. Use only letters, numbers, hyphens, and underscores."
         )
 
     return f"{shop}.myshopify.com", None

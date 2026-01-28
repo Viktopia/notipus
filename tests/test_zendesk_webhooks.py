@@ -394,9 +394,7 @@ class TestZendeskEventBasedWebhooks:
             zendesk_subdomain="testcompany",
         )
 
-    def _create_signed_request(
-        self, plugin: ZendeskSourcePlugin, data: dict
-    ) -> Mock:
+    def _create_signed_request(self, plugin: ZendeskSourcePlugin, data: dict) -> Mock:
         """Create a mock request with valid signature."""
         timestamp = "1705320600"
         body = json.dumps(data)

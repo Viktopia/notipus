@@ -329,8 +329,7 @@ class RateLimiter:
 
         except Exception as e:
             logger.error(
-                f"Error checking rate limit for organization "
-                f"{organization.uuid}: {e!s}"
+                f"Error checking rate limit for organization {organization.uuid}: {e!s}"
             )
             # Fail open - allow request if rate limiting fails completely
             return True, {
@@ -370,8 +369,7 @@ class RateLimiter:
 
         except Exception as e:
             logger.error(
-                f"Error incrementing usage for organization "
-                f"{organization.uuid}: {e!s}"
+                f"Error incrementing usage for organization {organization.uuid}: {e!s}"
             )
             # Return 1 to indicate at least this request was processed
             return 1
