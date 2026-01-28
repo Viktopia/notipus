@@ -306,7 +306,7 @@ def _process_immediately(
 
     # Build and format rich notification
     formatted = settings.EVENT_PROCESSOR.process_event_rich(
-        event_data, customer_data, target="slack"
+        event_data, customer_data, target="slack", workspace=workspace
     )
 
     # Send to Slack using workspace-specific integration

@@ -256,3 +256,47 @@ def get_remaining_seats(workspace: "Workspace") -> int:
         max_users = 1
 
     return max(0, max_users - current_count)
+
+
+# Billing tier hierarchy for feature gating
+# Higher number = higher tier
+TIER_ORDER: dict[str, int] = {
+    "free": 0,
+    "trial": 0,
+    "basic": 1,
+    "pro": 2,
+    "enterprise": 3,
+}
+
+
+def has_plan_or_higher(workspace: "Workspace", min_plan: str) -> bool:
+    """Check if a workspace has at least the specified plan tier.
+
+    Used for feature gating based on subscription plan.
+
+    Args:
+        workspace: The workspace to check.
+        min_plan: The minimum required plan (e.g., "pro").
+
+    Returns:
+        True if workspace plan is at or above the minimum tier.
+
+    Example:
+        if has_plan_or_higher(workspace, "pro"):
+            # Enable Pro-only feature
+    """
+    workspace_tier = TIER_ORDER.get(workspace.subscription_plan, 0)
+    required_tier = TIER_ORDER.get(min_plan, 0)
+    return workspace_tier >= required_tier
+
+
+def get_plan_tier(workspace: "Workspace") -> int:
+    """Get the numeric tier level for a workspace's plan.
+
+    Args:
+        workspace: The workspace to check.
+
+    Returns:
+        Numeric tier level (0 = free/trial, 1 = basic, 2 = pro, 3 = enterprise).
+    """
+    return TIER_ORDER.get(workspace.subscription_plan, 0)

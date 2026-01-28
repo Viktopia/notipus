@@ -60,6 +60,7 @@ urlpatterns = [
     path("integrate/shopify/", views.integrate_shopify, name="integrate_shopify"),
     path("integrate/chargify/", views.integrate_chargify, name="integrate_chargify"),
     path("integrate/stripe/", views.integrate_stripe, name="integrate_stripe"),
+    path("integrate/hunter/", views.integrate_hunter, name="integrate_hunter"),
     # Legacy API endpoints (working views)
     path("api/auth/slack/", views.slack_auth, name="slack_auth"),
     path(
@@ -97,6 +98,11 @@ urlpatterns = [
         "api/disconnect/stripe/",
         views.disconnect_stripe,
         name="disconnect_stripe",
+    ),
+    path(
+        "api/disconnect/hunter/",
+        views.disconnect_hunter,
+        name="disconnect_hunter",
     ),
     path("api/connect/shopify/", views.shopify_connect, name="shopify_connect"),
     path(
