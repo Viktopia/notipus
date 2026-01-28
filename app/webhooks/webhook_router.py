@@ -11,6 +11,7 @@ from django.views.decorators.http import require_http_methods
 
 from .exceptions import WebhookError, WebhookSignatureError
 from .services.event_consolidation import event_consolidation_service
+from .services.pending_event_queue import pending_event_queue
 from .services.rate_limiter import RateLimitException, rate_limiter
 from .services.webhook_storage import webhook_storage_service
 
@@ -183,44 +184,22 @@ def _process_webhook_data(
 ) -> JsonResponse:
     """Process webhook data and return success response.
 
-    Includes event consolidation to prevent notification spam when
-    multiple related events fire in quick succession.
+    For events with an idempotency_key (Stripe), queues the event for
+    delayed processing to allow related events to arrive first.
+    Events without idempotency_key are processed immediately.
+
+    The delayed processing ensures we have complete data (like customer
+    email from invoice events) before sending notifications.
     """
-    from plugins.base import PluginType
-    from plugins.destinations.base import BaseDestinationPlugin
-    from plugins.registry import PluginRegistry
-
     # Get customer data from webhook payload
-    # (We can't call provider APIs - we only have the webhook data)
-    customer_data = provider.get_customer_data(event_data["customer_id"])
+    customer_data = provider.get_customer_data(event_data.get("customer_id", ""))
 
-    # Check event consolidation - should we send a notification?
     event_type = event_data.get("type", "")
-    customer_id = event_data.get("customer_id", "")
-    workspace_id = str(workspace.uuid) if workspace else ""
+    workspace_id = str(workspace.uuid) if workspace else "global"
     external_id = event_data.get("external_id", "")
     idempotency_key = event_data.get("idempotency_key")
 
-    # Atomically claim the idempotency key BEFORE any processing.
-    # This prevents race conditions where events arrive within milliseconds
-    # and both pass the duplicate check before either records the key.
-    # Uses cache.add() which is atomic (set-if-not-exists).
-    if not event_consolidation_service.try_claim_idempotency_key(
-        workspace_id, idempotency_key
-    ):
-        logger.info(
-            f"Skipping event {event_type} with idempotency key {idempotency_key} "
-            f"for workspace {workspace_id} (another event from same action "
-            f"is being processed)"
-        )
-        return JsonResponse(
-            create_success_response(
-                f"{provider_name} webhook processed (idempotency duplicate)"
-            ),
-            status=200,
-        )
-
-    # Check for exact duplicate (same external_id)
+    # Check for exact duplicate (same external_id) - applies to all events
     if event_consolidation_service.is_duplicate(workspace_id, external_id):
         logger.info(
             f"Skipping duplicate event {external_id} for workspace {workspace_id}"
@@ -232,8 +211,61 @@ def _process_webhook_data(
             status=200,
         )
 
+    # Record event ID to prevent exact duplicates
+    event_consolidation_service.record_event(
+        event_type=event_type,
+        customer_id=event_data.get("customer_id", ""),
+        workspace_id=workspace_id,
+        external_id=external_id,
+    )
+
+    # Events WITH idempotency_key: queue for delayed processing
+    # This allows related events (subscription.created + invoice.paid) to
+    # be aggregated into ONE notification with complete data
+    if idempotency_key:
+        pending_event_queue.queue_event(
+            idempotency_key=idempotency_key,
+            workspace_id=workspace_id,
+            event_data=event_data,
+            customer_data=customer_data,
+            provider_name=provider_name,
+            workspace=workspace,
+        )
+
+        logger.info(
+            f"Queued {event_type} for delayed processing "
+            f"(idempotency_key: {idempotency_key[:8]}...)"
+        )
+
+        return JsonResponse(
+            create_success_response(f"{provider_name} webhook queued for processing"),
+            status=200,
+        )
+
+    # Events WITHOUT idempotency_key: process immediately (fallback)
+    return _process_immediately(event_data, customer_data, provider_name, workspace)
+
+
+def _process_immediately(
+    event_data: Dict[str, Any],
+    customer_data: Dict[str, Any],
+    provider_name: str,
+    workspace: Optional[Workspace] = None,
+) -> JsonResponse:
+    """Process webhook immediately (for events without idempotency_key).
+
+    This is the fallback for non-Stripe webhooks or Stripe events
+    that don't have an idempotency_key.
+    """
+    from plugins.base import PluginType
+    from plugins.destinations.base import BaseDestinationPlugin
+    from plugins.registry import PluginRegistry
+
+    event_type = event_data.get("type", "")
+    customer_id = event_data.get("customer_id", "")
+    workspace_id = str(workspace.uuid) if workspace else ""
+
     # Check if this event should be suppressed due to consolidation
-    # Pass amount to filter out $0 payment events (trial invoices)
     should_notify = event_consolidation_service.should_send_notification(
         event_type=event_type,
         customer_id=customer_id,
@@ -242,14 +274,6 @@ def _process_webhook_data(
     )
 
     if not should_notify:
-        # Record the event for deduplication, but don't send notification
-        # (idempotency key already claimed atomically above)
-        event_consolidation_service.record_event(
-            event_type=event_type,
-            customer_id=customer_id,
-            workspace_id=workspace_id,
-            external_id=external_id,
-        )
         return JsonResponse(
             create_success_response(
                 f"{provider_name} webhook processed (consolidated)"
@@ -278,20 +302,11 @@ def _process_webhook_data(
             )
         try:
             slack_plugin.send(formatted, {"webhook_url": slack_webhook_url})
-            # Record the event after successful send
-            # (idempotency key already claimed atomically above)
-            event_consolidation_service.record_event(
-                event_type=event_type,
-                customer_id=customer_id,
-                workspace_id=workspace_id,
-                external_id=external_id,
-            )
         except Exception as e:
             logger.error(
                 f"Failed to send Slack notification for workspace "
                 f"{workspace.uuid if workspace else 'unknown'}: {str(e)}"
             )
-            # Continue processing even if Slack notification fails
     else:
         logger.warning(
             f"No Slack webhook URL configured for workspace "

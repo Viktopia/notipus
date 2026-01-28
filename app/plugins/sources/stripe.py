@@ -5,7 +5,6 @@ handling webhook validation, parsing, and customer data retrieval
 using the official Stripe SDK.
 """
 
-import json
 import logging
 from typing import Any, ClassVar
 
@@ -633,8 +632,11 @@ class StripeSourcePlugin(BaseSourcePlugin):
         from the webhook payload itself.
 
         For subscription events that lack customer_email, we look up the
-        email from cache (populated by invoice events for the same customer),
-        then from stored webhook payloads as a fallback.
+        email from cache (populated by invoice events for the same customer).
+
+        Note: The pending event queue aggregates related events (subscription
+        + invoice) and will have the email from invoice events by the time
+        this is called for the final notification.
 
         Args:
             customer_id: The Stripe customer identifier, used for cache lookup.
@@ -642,7 +644,7 @@ class StripeSourcePlugin(BaseSourcePlugin):
         Returns:
             Dictionary with customer data including:
             - company_name: Empty (not in webhook payload)
-            - email: Customer email from webhook, cache, or stored webhooks
+            - email: Customer email from webhook or cache
             - first_name: First part of customer name
             - last_name: Last part of customer name
             - customer_id: The Stripe customer ID for fallback display
@@ -660,13 +662,6 @@ class StripeSourcePlugin(BaseSourcePlugin):
         # (cached from invoice events for the same customer)
         if not email and customer_id:
             email = self._get_cached_customer_email(customer_id)
-
-        # If still no email, look up from stored webhook payloads.
-        # This handles the case where subscription and invoice events arrive
-        # within milliseconds of each other - the invoice webhook body may
-        # already be stored in Redis even if we haven't processed it yet.
-        if not email and customer_id:
-            email = self._lookup_email_from_stored_webhooks(customer_id)
 
         # Extract name - often null in Stripe but check anyway
         name = data.get("customer_name") or ""
@@ -755,75 +750,4 @@ class StripeSourcePlugin(BaseSourcePlugin):
                 return str(email)
         except Exception as e:
             logger.warning(f"Failed to get cached customer email: {e}")
-        return ""
-
-    def _lookup_email_from_stored_webhooks(self, customer_id: str) -> str:
-        """Look up customer email from stored webhook payloads.
-
-        Since webhooks are stored in Redis BEFORE processing begins (in
-        _log_webhook_payload), invoice webhook data may already be available
-        even when processing a subscription event that arrived 1ms earlier.
-
-        This method queries stored webhooks for invoice events with the same
-        customer_id and extracts the customer_email from the payload.
-
-        Args:
-            customer_id: Stripe customer ID (e.g., cus_xxx).
-
-        Returns:
-            Customer email from stored webhooks, or empty string if not found.
-        """
-        if not customer_id:
-            return ""
-
-        try:
-            from webhooks.services.webhook_storage import webhook_storage_service
-
-            # Query recent webhooks (last 1 day, limit 100)
-            webhooks = webhook_storage_service.get_recent_webhooks(
-                days=1, limit=100, provider="stripe"
-            )
-
-            for webhook in webhooks:
-                try:
-                    # Parse the stored webhook body
-                    body = webhook.get("body", "")
-                    if isinstance(body, str):
-                        body = json.loads(body)
-
-                    # Check if this is an invoice event
-                    event_type = body.get("type", "")
-                    if not event_type.startswith("invoice."):
-                        continue
-
-                    # Get the data object
-                    data_obj = body.get("data", {}).get("object", {})
-                    if not data_obj:
-                        continue
-
-                    # Check if this is for the same customer
-                    webhook_customer_id = data_obj.get("customer")
-                    if webhook_customer_id != customer_id:
-                        continue
-
-                    # Extract customer_email
-                    customer_email = data_obj.get("customer_email")
-                    if customer_email:
-                        logger.info(
-                            f"Found email for {customer_id} from stored "
-                            f"{event_type} webhook: {customer_email}"
-                        )
-                        # Cache it for future lookups
-                        self._cache_customer_email(customer_id, customer_email)
-                        return customer_email
-
-                except (json.JSONDecodeError, KeyError, TypeError) as e:
-                    # Skip malformed webhook records
-                    logger.debug(f"Skipping malformed webhook record: {e}")
-                    continue
-
-        except Exception as e:
-            # Don't fail webhook processing if lookup fails
-            logger.warning(f"Failed to lookup email from stored webhooks: {e}")
-
         return ""
