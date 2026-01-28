@@ -113,23 +113,21 @@ class TestEventConsolidationService:
 
         assert result is True
 
-    def test_trial_ending_never_suppressed(
+    def test_trial_ending_always_suppressed_and_tracked(
         self, service: EventConsolidationService, mock_cache
     ) -> None:
-        """Test that trial_ending is never suppressed."""
-        service.should_send_notification(
-            event_type="subscription_created",
-            customer_id="cus_123",
-            workspace_id="ws_456",
-        )
-
+        """Test that trial_ending is suppressed and tracked for merging with payment."""
+        # Trial ending should be suppressed (it merges with payment notification)
         result = service.should_send_notification(
             event_type="trial_ending",
             customer_id="cus_123",
             workspace_id="ws_456",
         )
 
-        assert result is True
+        assert result is False
+
+        # Check that it's tracked as pending for insight enrichment
+        assert service.has_pending_trial("ws_456", "cus_123") is True
 
     def test_different_customer_not_affected(
         self, service: EventConsolidationService, mock_cache
@@ -472,7 +470,8 @@ class TestEventConsolidationConstants:
 
         assert "payment_failure" in never_suppress
         assert "payment_action_required" in never_suppress
-        assert "trial_ending" in never_suppress
+        # Note: trial_ending is NOT in NEVER_SUPPRESS anymore
+        # It's suppressed and merged with payment notifications as "Trial converted"
 
     def test_primary_events_defined(self) -> None:
         """Test that primary events are properly defined."""

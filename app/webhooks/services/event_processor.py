@@ -35,6 +35,7 @@ class EventProcessor:
         "payment_success",
         "payment_failure",
         "refund_issued",
+        "invoice_paid",
         # Subscription events
         "subscription_created",
         "subscription_updated",

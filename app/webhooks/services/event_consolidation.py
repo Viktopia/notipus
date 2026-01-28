@@ -61,12 +61,22 @@ class EventConsolidationService:
         "checkout_completed": {"payment_success", "invoice_paid"},
         # Shopify: Order creation suppresses the payment notification that follows
         "order_created": {"payment_success"},
+        # Trial conversion: payment suppresses trial_ending warning
+        # (trial_ending will be shown as "Trial converted" insight on payment)
+        "payment_success": {"trial_ending"},
+        "invoice_paid": {"trial_ending"},
     }
 
     # Events that should never be suppressed (always important)
     NEVER_SUPPRESS: ClassVar[set[str]] = {
         "payment_failure",
         "payment_action_required",
+    }
+
+    # Events that are suppressed but tracked for insight enrichment
+    # When these events are suppressed, we record them so that the
+    # suppressing event can show a richer insight (e.g., "Trial converted")
+    TRACK_WHEN_SUPPRESSED: ClassVar[set[str]] = {
         "trial_ending",
     }
 
@@ -156,9 +166,22 @@ class EventConsolidationService:
         suppressed_events = cache.get(suppression_key) or set()
 
         if event_type in suppressed_events:
+            # Track suppressed events that should enrich other notifications
+            if event_type in self.TRACK_WHEN_SUPPRESSED:
+                self._mark_event_pending(workspace_id, customer_id, event_type)
             logger.info(
                 f"Suppressing {event_type} notification for customer {customer_id} "
                 f"in workspace {workspace_id} (consolidation with primary event)"
+            )
+            return False
+
+        # Special handling for trial_ending: always suppress and track
+        # The payment notification will show "Trial converted" instead
+        if event_type == "trial_ending":
+            self._mark_event_pending(workspace_id, customer_id, event_type)
+            logger.info(
+                f"Suppressing {event_type} notification for customer {customer_id} "
+                f"in workspace {workspace_id} (will merge with payment notification)"
             )
             return False
 
@@ -200,6 +223,71 @@ class EventConsolidationService:
             updated,
             timeout=self.CONSOLIDATION_WINDOW_SECONDS,
         )
+
+    def _get_pending_key(self, workspace_id: str, customer_id: str) -> str:
+        """Generate cache key for pending events.
+
+        Args:
+            workspace_id: The workspace UUID.
+            customer_id: The customer identifier.
+
+        Returns:
+            Cache key string for pending events.
+        """
+        return f"event_pending:{workspace_id}:{customer_id}"
+
+    def _mark_event_pending(
+        self,
+        workspace_id: str,
+        customer_id: str,
+        event_type: str,
+    ) -> None:
+        """Mark an event as pending for insight enrichment.
+
+        When certain events are suppressed (e.g., trial_ending), we track them
+        so that the primary event can show a richer insight (e.g., "Trial converted").
+
+        Args:
+            workspace_id: The workspace UUID.
+            customer_id: The customer identifier.
+            event_type: The event type being tracked.
+        """
+        pending_key = self._get_pending_key(workspace_id, customer_id)
+
+        # Get existing pending events and add this one
+        existing = cache.get(pending_key) or set()
+        updated = existing | {event_type}
+
+        # Store with TTL
+        cache.set(
+            pending_key,
+            updated,
+            timeout=self.CONSOLIDATION_WINDOW_SECONDS,
+        )
+        logger.debug(
+            f"Marked {event_type} as pending for customer {customer_id} "
+            f"in workspace {workspace_id}"
+        )
+
+    def has_pending_trial(self, workspace_id: str, customer_id: str) -> bool:
+        """Check if there's a pending trial_ending event for this customer.
+
+        Used by insight detection to show "Trial converted" when a payment
+        arrives after a trial_ending event.
+
+        Args:
+            workspace_id: The workspace UUID.
+            customer_id: The customer identifier.
+
+        Returns:
+            True if a trial_ending event is pending.
+        """
+        if not workspace_id or not customer_id:
+            return False
+
+        pending_key = self._get_pending_key(workspace_id, customer_id)
+        pending_events = cache.get(pending_key) or set()
+        return "trial_ending" in pending_events
 
     def record_event(
         self,
