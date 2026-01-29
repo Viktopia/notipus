@@ -125,6 +125,20 @@ class BrandfetchPlugin(BaseEnrichmentPlugin):
                 headers=headers,
                 timeout=self.timeout,
             )
+
+            # Handle 404 specifically - domain not found is expected, not an error
+            if response.status_code == 404:
+                logger.debug(f"Brandfetch: No brand data found for domain {domain}")
+                return {}
+
+            # Handle rate limiting before raise_for_status
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After", "60")
+                logger.warning(
+                    f"Brandfetch rate limit exceeded. Retry after {retry_after} seconds"
+                )
+                return {}
+
             response.raise_for_status()
             brand_data = response.json()
 
@@ -146,19 +160,11 @@ class BrandfetchPlugin(BaseEnrichmentPlugin):
                     "colors": brand_data.get("colors", []),
                 },
             }
+        except requests.exceptions.Timeout:
+            logger.warning(f"Brandfetch API timeout for domain {domain}")
+            return {}
         except requests.exceptions.RequestException as e:
-            # Handle rate limiting specifically
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and e.response.status_code == 429
-            ):
-                retry_after = e.response.headers.get("Retry-After", "60")
-                logger.warning(
-                    f"Brandfetch rate limit exceeded. Retry after {retry_after} seconds"
-                )
-            else:
-                logger.error(f"Error fetching data from Brandfetch: {e!s}")
+            logger.error(f"Error fetching data from Brandfetch: {e!s}")
             return {}
 
     def _get_primary_logo(self, logos_data: list[dict[str, Any]]) -> str | None:
