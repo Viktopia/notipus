@@ -28,6 +28,18 @@ _AGGREGATABLE_EVENT_TYPES: frozenset[str] = frozenset(
     }
 )
 
+# Providers that should use external_id (order ID) as aggregation key.
+# These providers don't have Stripe-style idempotency keys but do have
+# stable order IDs that remain consistent across webhook retries.
+# Using order ID instead of time-bucketed customer ID ensures that:
+# 1. Retried webhooks use the same key and can recover lost timers
+# 2. Multiple events for the same order are properly deduplicated
+_ORDER_BASED_AGGREGATION_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "customer_shopify",  # Shopify order ID is stable across retries
+    }
+)
+
 
 def _log_webhook_payload(
     request: HttpRequest, provider_name: str, workspace_uuid: Optional[str] = None
@@ -237,9 +249,17 @@ def _process_webhook_data(
     customer_id = event_data.get("customer_id", "")
 
     if idempotency_key or (should_aggregate and customer_id):
-        # Use idempotency_key if available, otherwise customer_id-based key
-        # (workspace_id is already prefixed by pending_event_queue)
-        aggregation_key = idempotency_key or f"customer:{customer_id}"
+        # Use idempotency_key if available, otherwise build a stable key.
+        # For Shopify/Chargify, use external_id (order ID) which is stable
+        # across retries. This ensures retried webhooks use the same key
+        # and can schedule new timers if previous ones were lost.
+        if idempotency_key:
+            aggregation_key = idempotency_key
+        elif external_id and provider_name in _ORDER_BASED_AGGREGATION_PROVIDERS:
+            # Use order ID as stable key for providers with retry patterns
+            aggregation_key = f"order:{external_id}"
+        else:
+            aggregation_key = f"customer:{customer_id}"
 
         pending_event_queue.queue_event(
             idempotency_key=aggregation_key,
