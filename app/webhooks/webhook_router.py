@@ -28,15 +28,13 @@ _AGGREGATABLE_EVENT_TYPES: frozenset[str] = frozenset(
     }
 )
 
-# Providers that should use external_id (order ID) as aggregation key.
-# These providers don't have Stripe-style idempotency keys but do have
-# stable order IDs that remain consistent across webhook retries.
-# Using order ID instead of time-bucketed customer ID ensures that:
-# 1. Retried webhooks use the same key and can recover lost timers
-# 2. Multiple events for the same order are properly deduplicated
-_ORDER_BASED_AGGREGATION_PROVIDERS: frozenset[str] = frozenset(
+# Providers that send complete data in one webhook and don't need aggregation.
+# Process these immediately instead of queuing with in-memory timers that
+# die on worker recycling.
+_IMMEDIATE_PROCESSING_PROVIDERS: frozenset[str] = frozenset(
     {
-        "customer_shopify",  # Shopify order ID is stable across retries
+        "customer_shopify",
+        "customer_chargify",
     }
 )
 
@@ -242,22 +240,17 @@ def _process_webhook_data(
         external_id=external_id,
     )
 
-    # Queue for delayed processing if:
-    # 1. Has idempotency_key (Stripe API-triggered events share this key)
-    # 2. Or is an aggregatable event type (use customer_id as fallback key)
+    # Providers with complete data in one webhook - process immediately
+    if provider_name in _IMMEDIATE_PROCESSING_PROVIDERS:
+        return _process_immediately(event_data, customer_data, provider_name, workspace)
+
+    # Queue Stripe for delayed processing (needs invoice + subscription aggregation)
     should_aggregate = event_type in _AGGREGATABLE_EVENT_TYPES
     customer_id = event_data.get("customer_id", "")
 
     if idempotency_key or (should_aggregate and customer_id):
-        # Use idempotency_key if available, otherwise build a stable key.
-        # For Shopify/Chargify, use external_id (order ID) which is stable
-        # across retries. This ensures retried webhooks use the same key
-        # and can schedule new timers if previous ones were lost.
         if idempotency_key:
             aggregation_key = idempotency_key
-        elif external_id and provider_name in _ORDER_BASED_AGGREGATION_PROVIDERS:
-            # Use order ID as stable key for providers with retry patterns
-            aggregation_key = f"order:{external_id}"
         else:
             aggregation_key = f"customer:{customer_id}"
 

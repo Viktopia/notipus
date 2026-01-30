@@ -104,6 +104,7 @@ class Command(BaseCommand):
     def _get_slack_plugin(self) -> BaseDestinationPlugin:
         """Get Slack destination plugin."""
         registry = PluginRegistry.instance()
+        registry.discover()
         plugin = registry.get(PluginType.DESTINATION, "slack")
         if plugin is None or not isinstance(plugin, BaseDestinationPlugin):
             raise CommandError("Slack plugin not available")

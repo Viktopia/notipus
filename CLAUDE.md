@@ -84,6 +84,7 @@ BasePlugin (abstract)
 - **Ruff** for linting/formatting (line length: 88, double quotes)
 - **Templates** use `.html.j2` extension (Jinja2)
 - **Never edit existing migrations** - always create new ones
+- **DRY**: When a pattern is shared across plugins/modules, extract it into a utility function rather than duplicating code
 
 ## Testing
 
